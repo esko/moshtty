@@ -147,18 +147,12 @@ func (s *server) handlePTY(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.CloseNow()
 
-	size, err := readStartMessage(r.Context(), conn)
-	if err != nil {
-		log.Printf("pty start rejected: %v", err)
-		return
-	}
-
-	if err := s.runPTY(r.Context(), conn, size); err != nil {
+	if err := s.runPTY(r.Context(), conn); err != nil {
 		log.Printf("pty session ended: %v", err)
 	}
 }
 
-func (s *server) runPTY(ctx context.Context, conn *websocket.Conn, size pty.Winsize) error {
+func (s *server) runPTY(ctx context.Context, conn *websocket.Conn) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -172,7 +166,7 @@ func (s *server) runPTY(ctx context.Context, conn *websocket.Conn, size pty.Wins
 		"TERM_PROGRAM_VERSION=0.1.0",
 	)
 
-	ptmx, err := pty.StartWithSize(cmd, &size)
+	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: 100, Rows: 30})
 	if err != nil {
 		sendServerMessage(ctx, conn, serverMessage{Type: "error", Message: "failed to start shell", Errors: []string{err.Error()}})
 		return err
@@ -248,8 +242,6 @@ func handleClientMessage(ptmx *os.File, payload []byte) error {
 		return err
 	}
 	switch msg.Type {
-	case "start":
-		return nil
 	case "input":
 		if msg.Data == "" {
 			return nil
@@ -264,35 +256,6 @@ func handleClientMessage(ptmx *os.File, payload []byte) error {
 		return pty.Setsize(ptmx, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
 	default:
 		return fmt.Errorf("unknown message type %q", msg.Type)
-	}
-}
-
-func readStartMessage(ctx context.Context, conn *websocket.Conn) (pty.Winsize, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	for {
-		msgType, payload, err := conn.Read(ctx)
-		if err != nil {
-			return pty.Winsize{}, err
-		}
-		if msgType != websocket.MessageText {
-			continue
-		}
-
-		var msg clientMessage
-		if err := json.Unmarshal(payload, &msg); err != nil {
-			return pty.Winsize{}, err
-		}
-		if msg.Type != "start" {
-			continue
-		}
-
-		cols, rows, err := sanitizeSize(msg.Cols, msg.Rows)
-		if err != nil {
-			return pty.Winsize{}, err
-		}
-		return pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)}, nil
 	}
 }
 
