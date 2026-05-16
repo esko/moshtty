@@ -56,10 +56,6 @@ const pendingWrites: Array<string | Uint8Array> = [];
 let pendingWheelFrame: number | undefined;
 let pendingWheelLines = 0;
 let pendingFitFrame: number | undefined;
-let startupResizeTimer: number | undefined;
-let startupResizeRestoreTimer: number | undefined;
-let startupResizePending = false;
-let startupResizeState = "idle";
 let titleLabel = "Terminal";
 let settings = loadSettings();
 
@@ -80,7 +76,6 @@ window.addEventListener("beforeunload", () => {
   if (pendingWriteFrame !== undefined) cancelAnimationFrame(pendingWriteFrame);
   if (pendingWheelFrame !== undefined) cancelAnimationFrame(pendingWheelFrame);
   if (pendingFitFrame !== undefined) cancelAnimationFrame(pendingFitFrame);
-  cancelStartupResizePulse();
   if (diagnosticsTimer !== undefined) window.clearInterval(diagnosticsTimer);
   window.removeEventListener("resize", scheduleFit);
   socket?.close();
@@ -105,7 +100,6 @@ async function boot(): Promise<void> {
   term.loadAddon(fitAddon);
   installWheelHandler(term);
   term.onData((data) => {
-    cancelStartupResizePulse();
     sendAgentMessage({ type: "input", data });
   });
   term.onResize(({ cols, rows }) => {
@@ -158,7 +152,6 @@ async function connect(): Promise<void> {
   setStatus("connecting", "Connecting");
   setTitle("Terminal");
   offlineEl.hidden = true;
-  armStartupResizePulse();
   socket?.close();
 
   try {
@@ -207,12 +200,10 @@ function handleSocketMessage(data: string | ArrayBuffer | Blob): void {
   }
   if (data instanceof ArrayBuffer) {
     enqueueTerminalWrite(new Uint8Array(data));
-    scheduleStartupResizePulse();
     return;
   }
   void data.arrayBuffer().then((buffer) => {
     enqueueTerminalWrite(new Uint8Array(buffer));
-    scheduleStartupResizePulse();
   });
 }
 
@@ -237,59 +228,6 @@ function handleAgentText(data: string): void {
 
 function clearTerminal(): void {
   term?.clear();
-}
-
-function armStartupResizePulse(): void {
-  cancelStartupResizePulse();
-  startupResizePending = true;
-  startupResizeState = "armed";
-}
-
-function scheduleStartupResizePulse(): void {
-  if (!startupResizePending) return;
-  if (startupResizeTimer !== undefined) {
-    window.clearTimeout(startupResizeTimer);
-  }
-  startupResizeTimer = window.setTimeout(runStartupResizePulse, 80);
-  startupResizeState = "waiting for idle output";
-}
-
-function runStartupResizePulse(): void {
-  startupResizeTimer = undefined;
-  if (!startupResizePending || !term) return;
-
-  fitAddon?.fit();
-  const cols = term.cols || lastCols;
-  const rows = term.rows || lastRows;
-  if (cols < 2 || rows < 3) {
-    startupResizePending = false;
-    startupResizeState = `skipped (${cols}x${rows})`;
-    renderDiagnostics();
-    return;
-  }
-
-  startupResizeState = `${cols}x${rows - 1} -> ${cols}x${rows}`;
-  sendAgentMessage({ type: "resize", cols, rows: rows - 1 });
-  startupResizeRestoreTimer = window.setTimeout(() => {
-    startupResizeRestoreTimer = undefined;
-    sendAgentMessage({ type: "resize", cols, rows });
-    startupResizePending = false;
-    renderDiagnostics();
-  }, 30);
-  renderDiagnostics();
-}
-
-function cancelStartupResizePulse(): void {
-  startupResizePending = false;
-  if (startupResizeTimer !== undefined) {
-    window.clearTimeout(startupResizeTimer);
-    startupResizeTimer = undefined;
-  }
-  if (startupResizeRestoreTimer !== undefined) {
-    window.clearTimeout(startupResizeRestoreTimer);
-    startupResizeRestoreTimer = undefined;
-  }
-  startupResizeState = "cancelled";
 }
 
 function enqueueTerminalWrite(data: string | Uint8Array): void {
@@ -419,7 +357,6 @@ function renderDiagnostics(): void {
     ["CSS", `${formatNumber(rect.width)} x ${formatNumber(rect.height)}`],
     ["Grid", `${(term?.cols ?? lastCols) || "?"} x ${(term?.rows ?? lastRows) || "?"}`],
     ["Transport", socketState(socket)],
-    ["Startup resize", startupResizeState],
   ]) {
     const termEl = document.createElement("dt");
     termEl.textContent = label;
