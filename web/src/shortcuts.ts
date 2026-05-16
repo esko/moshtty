@@ -6,6 +6,8 @@ const CTRL_BROWSER_CODES = new Set([
   "BracketRight",
   "KeyN",
   "KeyR",
+  "KeyT",
+  "KeyW",
   "PageDown",
   "PageUp",
   "Tab",

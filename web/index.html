@@ -11,8 +11,7 @@
   <body>
     <div id="app">
       <header class="topbar">
-        <nav id="tabList" class="tab-list" role="tablist" aria-label="Terminal tabs"></nav>
-        <button id="newTab" class="toolbar-button" type="button" title="New tab" aria-label="New tab"></button>
+        <div class="brand">Crostini Ghostty</div>
         <div id="status" class="status" data-state="connecting">Connecting</div>
         <button id="diagnosticsToggle" class="toolbar-button" type="button" title="Diagnostics" aria-label="Diagnostics">
           <span aria-hidden="true">i</span>
@@ -21,6 +20,7 @@
           <span aria-hidden="true">↻</span>
         </button>
       </header>
+      <main id="settings" class="settings-page" hidden aria-label="Settings"></main>
       <main id="terminal" class="terminal-root" aria-label="Terminal"></main>
       <aside id="diagnostics" class="diagnostics" hidden aria-label="Diagnostics">
         <div class="diagnostics-title">Diagnostics</div>

@@ -1,5 +1,5 @@
-const CACHE_NAME = "crostini-ghostty-terminal-v2";
-const APP_SHELL = ["/", "/index.html", "/manifest.webmanifest", "/icon.svg"];
+const CACHE_NAME = "crostini-ghostty-terminal-v4";
+const APP_SHELL = ["/", "/terminal.html", "/index.html", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

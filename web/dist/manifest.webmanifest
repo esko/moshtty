@@ -2,18 +2,52 @@
   "name": "Crostini Ghostty Terminal",
   "short_name": "Ghostty",
   "description": "A Crostini terminal PWA powered by ghostty-web.",
-  "start_url": "/",
-  "scope": "/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "display_override": ["tabbed"],
   "tab_strip": {
+    "home_tab": {
+      "scope_patterns": [
+        { "pathname": "./" },
+        { "pathname": "./index.html" }
+      ]
+    },
     "new_tab_button": {
-      "url": "/"
+      "url": "terminal.html"
     }
   },
   "launch_handler": {
     "client_mode": "navigate-new"
   },
+  "shortcuts": [
+    {
+      "name": "App menu",
+      "short_name": "Menu",
+      "description": "Open terminal settings and quick actions.",
+      "url": "./",
+      "icons": [
+        {
+          "src": "/icon.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
+        }
+      ]
+    },
+    {
+      "name": "New terminal",
+      "short_name": "Terminal",
+      "description": "Open a new Crostini terminal tab.",
+      "url": "terminal.html",
+      "icons": [
+        {
+          "src": "/icon.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
+        }
+      ]
+    }
+  ],
   "background_color": "#101820",
   "theme_color": "#101820",
   "icons": [

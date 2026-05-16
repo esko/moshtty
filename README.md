@@ -93,5 +93,5 @@ Agent to browser:
 
 - `web/scripts/patch-ghostty-web.ts` applies local renderer/input patches to the pinned `ghostty-web` dependency after install.
 - `web/visual/glyph-gap.html` and `bun run test:visual:glyphs` cover the fractional-DPR glyph gap regression.
-- The PWA opts into ChromeOS tabbed application mode and also provides in-app terminal tabs. Use `Ctrl+T` for a new terminal tab and `Ctrl+W` to close the active tab.
+- The PWA opts into ChromeOS tabbed application mode. Use ChromeOS's native tab strip or `Ctrl+T` and `Ctrl+W` for terminal tabs.
 - See `docs/architecture.md`, `docs/fonts.md`, and `docs/systemd-user.md` for implementation details.

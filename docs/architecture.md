@@ -32,6 +32,6 @@ PTY output is batched once per animation frame before calling `Terminal.write`, 
 
 ## Tabs
 
-The PWA opts into ChromeOS tabbed application mode with `display_override: ["tabbed"]` and a manifest `tab_strip.new_tab_button.url` of `/`. The app also implements its own terminal tab strip so tab behavior is available in normal standalone/browser display modes.
+The PWA opts into ChromeOS tabbed application mode with `display_override: ["tabbed"]` and a manifest `tab_strip.new_tab_button.url` of `/terminal`. In native tabbed mode the in-app fallback toolbar is hidden so only the ChromeOS-integrated tab strip is visible.
 
-Each in-app terminal tab owns an independent `Terminal`, `FitAddon`, WebSocket, PTY session, write queue, and wheel-scroll queue. `Ctrl+T` creates a new terminal tab and `Ctrl+W` closes the active terminal tab before those shortcuts reach the shell.
+There is no in-app tab fallback. Each native ChromeOS app tab is a separate app context with its own `Terminal`, `FitAddon`, WebSocket, PTY session, write queue, and wheel-scroll queue. `Ctrl+T` and `Ctrl+W` pass through to the native tab strip so ChromeOS controls new-tab focus and previous-tab focus on close.

@@ -18,52 +18,51 @@ type AgentMessage = {
   code?: number;
 };
 
-type TerminalTab = {
-  id: number;
-  title: string;
-  panel: HTMLElement;
-  tabButton: HTMLElement;
-  closeButton: HTMLButtonElement;
-  socket: WebSocket | null;
-  term: Terminal;
-  fitAddon: FitAddon;
-  lastCols: number;
-  lastRows: number;
-  pendingWrites: Array<string | Uint8Array>;
-  pendingWriteFrame: number | undefined;
-  pendingWheelFrame: number | undefined;
-  pendingWheelLines: number;
-  pendingFitFrame: number | undefined;
-  status: "connecting" | "connected" | "offline";
-  statusLabel: string;
+type TerminalSettings = {
+  fontSize: number;
+  scrollback: number;
+  cursorBlink: boolean;
+  theme: "dark" | "highContrast" | "soft";
+  scrollSensitivity: number;
 };
 
+const APP_TITLE = "Crostini Ghostty";
+const SETTINGS_KEY = "crostini-ghostty-terminal-settings";
+const DEFAULT_SETTINGS: TerminalSettings = {
+  fontSize: 15,
+  scrollback: 5000,
+  cursorBlink: true,
+  theme: "dark",
+  scrollSensitivity: 1,
+};
+
+const settingsRoot = requiredElement<HTMLElement>("#settings");
 const terminalRoot = requiredElement<HTMLElement>("#terminal");
-const tabList = requiredElement<HTMLElement>("#tabList");
 const statusEl = requiredElement<HTMLElement>("#status");
 const offlineEl = requiredElement<HTMLElement>("#offline");
 const reconnectButton = requiredElement<HTMLButtonElement>("#reconnect");
-const newTabButton = requiredElement<HTMLButtonElement>("#newTab");
 const diagnosticsToggle = requiredElement<HTMLButtonElement>("#diagnosticsToggle");
 const diagnosticsPanel = requiredElement<HTMLElement>("#diagnostics");
 const diagnosticsList = requiredElement<HTMLElement>("#diagnosticsList");
 
-const tabs = new Map<number, TerminalTab>();
-let activeTabId = 0;
-let nextTabId = 1;
+let socket: WebSocket | null = null;
+let term: Terminal | null = null;
+let fitAddon: FitAddon | null = null;
+let lastCols = 0;
+let lastRows = 0;
 let diagnosticsTimer: number | undefined;
+let pendingWriteFrame: number | undefined;
+const pendingWrites: Array<string | Uint8Array> = [];
+let pendingWheelFrame: number | undefined;
+let pendingWheelLines = 0;
+let pendingFitFrame: number | undefined;
+let titleLabel = "Terminal";
+let settings = loadSettings();
 
 void boot();
 
-newTabButton.addEventListener("click", () => {
-  void createTab();
-});
-
 reconnectButton.addEventListener("click", () => {
-  const tab = activeTab();
-  if (tab) {
-    void connect(tab);
-  }
+  void connect();
 });
 
 diagnosticsToggle.addEventListener("click", () => {
@@ -71,163 +70,89 @@ diagnosticsToggle.addEventListener("click", () => {
   updateDiagnosticsTimer();
 });
 
-window.addEventListener("resize", scheduleActiveFit);
+window.addEventListener("resize", scheduleFit);
 
 window.addEventListener("beforeunload", () => {
-  if (diagnosticsTimer !== undefined) {
-    window.clearInterval(diagnosticsTimer);
-  }
-  window.removeEventListener("resize", scheduleActiveFit);
-  for (const tab of tabs.values()) {
-    disposeTab(tab);
-  }
+  if (pendingWriteFrame !== undefined) cancelAnimationFrame(pendingWriteFrame);
+  if (pendingWheelFrame !== undefined) cancelAnimationFrame(pendingWheelFrame);
+  if (pendingFitFrame !== undefined) cancelAnimationFrame(pendingFitFrame);
+  if (diagnosticsTimer !== undefined) window.clearInterval(diagnosticsTimer);
+  window.removeEventListener("resize", scheduleFit);
+  socket?.close();
+  term?.dispose();
 });
 
 async function boot(): Promise<void> {
-  await init("/ghostty-vt.wasm");
   await registerServiceWorker();
-  await createTab();
+
+  if (isSettingsRoute()) {
+    renderSettingsPage();
+    return;
+  }
+
+  settingsRoot.hidden = true;
+  terminalRoot.hidden = false;
+  document.title = `Terminal - ${APP_TITLE}`;
+  await init("/ghostty-vt.wasm");
+
+  term = createTerminal();
+  fitAddon = new FitAddon();
+  term.loadAddon(fitAddon);
+  installWheelHandler(term);
+  term.onData((data) => {
+    sendAgentMessage({ type: "input", data });
+  });
+  term.onResize(({ cols, rows }) => {
+    lastCols = cols;
+    lastRows = rows;
+    sendAgentMessage({ type: "resize", cols, rows });
+    renderDiagnostics();
+  });
+  term.open(terminalRoot);
+  fitAddon.fit();
+  fitAddon.observeResize();
+  term.focus();
+
+  await connect();
   updateDiagnosticsTimer();
 }
 
-async function createTab(): Promise<void> {
-  const id = nextTabId++;
-  const panel = document.createElement("section");
-  panel.className = "terminal-pane";
-  panel.setAttribute("role", "tabpanel");
-  panel.id = `terminal-${id}`;
-  panel.hidden = true;
-  terminalRoot.append(panel);
-
-  const tabButton = document.createElement("div");
-  tabButton.className = "tab";
-  tabButton.setAttribute("role", "tab");
-  tabButton.setAttribute("aria-controls", panel.id);
-  tabButton.tabIndex = -1;
-
-  const title = document.createElement("span");
-  title.className = "tab-title";
-  title.textContent = `Terminal ${id}`;
-
-  const closeButton = document.createElement("button");
-  closeButton.className = "tab-close";
-  closeButton.type = "button";
-  closeButton.title = "Close tab";
-  closeButton.setAttribute("aria-label", `Close Terminal ${id}`);
-  closeButton.innerHTML = closeIcon();
-
-  tabButton.append(title, closeButton);
-  tabButton.addEventListener("click", () => {
-    activateTab(id);
-  });
-  closeButton.addEventListener("click", (event) => {
-    event.stopPropagation();
-    closeTab(id);
-  });
-  tabList.append(tabButton);
-
-  const term = createTerminal();
-  const fitAddon = new FitAddon();
-  term.loadAddon(fitAddon);
-
-  const tab: TerminalTab = {
-    id,
-    title: `Terminal ${id}`,
-    panel,
-    tabButton,
-    closeButton,
-    socket: null,
-    term,
-    fitAddon,
-    lastCols: 0,
-    lastRows: 0,
-    pendingWrites: [],
-    pendingWriteFrame: undefined,
-    pendingWheelFrame: undefined,
-    pendingWheelLines: 0,
-    pendingFitFrame: undefined,
-    status: "connecting",
-    statusLabel: "Connecting",
-  };
-  tabs.set(id, tab);
-
-  installWheelHandler(tab);
-  term.onData((data) => {
-    sendAgentMessage(tab, { type: "input", data });
-  });
-  term.onResize(({ cols, rows }) => {
-    tab.lastCols = cols;
-    tab.lastRows = rows;
-    sendAgentMessage(tab, { type: "resize", cols, rows });
-    renderDiagnostics();
-  });
-
-  term.open(panel);
-  fitAddon.fit();
-  fitAddon.observeResize();
-
-  activateTab(id);
-  await connect(tab);
-}
-
 function createTerminal(): Terminal {
-  const term = new Terminal({
+  const nextTerm = new Terminal({
     cols: 80,
     rows: 24,
-    cursorBlink: true,
+    cursorBlink: settings.cursorBlink,
     cursorStyle: "block",
     fontFamily: "JetBrains Mono, Noto Sans Mono, monospace",
-    fontSize: 15,
-    scrollback: 5000,
+    fontSize: settings.fontSize,
+    scrollback: settings.scrollback,
     smoothScrollDuration: 0,
     scrollbarWidth: 0,
-    theme: {
-      background: "#000000",
-      foreground: "#d7e0ea",
-      cursor: "#d7e0ea",
-      selectionBackground: "#2f5f91",
-      black: "#101820",
-      red: "#ff6b7a",
-      green: "#7bd88f",
-      yellow: "#f7c76b",
-      blue: "#6ccff6",
-      magenta: "#c792ea",
-      cyan: "#5de4c7",
-      white: "#d7e0ea",
-      brightBlack: "#52677a",
-      brightRed: "#ff8fa0",
-      brightGreen: "#a5f3b1",
-      brightYellow: "#ffe08a",
-      brightBlue: "#9adfff",
-      brightMagenta: "#d6a9ff",
-      brightCyan: "#8df2dc",
-      brightWhite: "#f0f4f8",
-    },
+    theme: terminalTheme(settings.theme),
   });
 
-  term.attachCustomKeyEventHandler(
-    ((event: KeyboardEvent) => {
-      if (event.ctrlKey && !event.altKey && !event.metaKey && event.code === "KeyT") {
-        void createTab();
-        return true;
-      }
-      if (event.ctrlKey && !event.altKey && !event.metaKey && event.code === "KeyW") {
-        closeActiveTab();
-        return true;
-      }
-      return shouldPassThroughSystemShortcut(event) ? false : undefined;
-    }) as (event: KeyboardEvent) => boolean,
+  nextTerm.attachCustomKeyEventHandler(
+    ((event: KeyboardEvent) => shouldPassThroughSystemShortcut(event) ? false : undefined) as (
+      event: KeyboardEvent,
+    ) => boolean,
   );
 
-  return term;
+  return nextTerm;
 }
 
-async function connect(tab: TerminalTab): Promise<void> {
-  setTabStatus(tab, "connecting", "Connecting");
-  if (tab.id === activeTabId) {
-    offlineEl.hidden = true;
-  }
-  tab.socket?.close();
+function scheduleFit(): void {
+  if (pendingFitFrame !== undefined) return;
+  pendingFitFrame = requestAnimationFrame(() => {
+    pendingFitFrame = undefined;
+    fitAddon?.fit();
+  });
+}
+
+async function connect(): Promise<void> {
+  setStatus("connecting", "Connecting");
+  setTitle("Terminal");
+  offlineEl.hidden = true;
+  socket?.close();
 
   try {
     const health = await getJSON<Health>("/api/health");
@@ -239,190 +164,110 @@ async function connect(tab: TerminalTab): Promise<void> {
       throw new Error("Agent did not provide a session token");
     }
 
-    const socket = new WebSocket(ptyURL(session.token));
-    tab.socket = socket;
+    socket = new WebSocket(ptyURL(session.token));
     socket.binaryType = "arraybuffer";
     socket.addEventListener("open", () => {
-      if (tab.socket !== socket) return;
-      setTabStatus(tab, "connected", health.version);
-      tab.fitAddon.fit();
-      if (tab.lastCols > 0 && tab.lastRows > 0) {
-        sendAgentMessage(tab, { type: "resize", cols: tab.lastCols, rows: tab.lastRows });
+      setStatus("connected", health.version);
+      fitAddon?.fit();
+      if (lastCols > 0 && lastRows > 0) {
+        sendAgentMessage({ type: "resize", cols: lastCols, rows: lastRows });
       }
-      if (tab.id === activeTabId) {
-        tab.term.focus();
-      }
+      term?.focus();
     });
     socket.addEventListener("message", (event) => {
-      if (tab.socket === socket) {
-        handleSocketMessage(tab, event.data);
-      }
+      handleSocketMessage(event.data);
     });
     socket.addEventListener("close", () => {
-      if (tab.socket === socket && tab.status === "connected") {
-        setTabStatus(tab, "offline", "Closed");
+      if (statusEl.dataset.state === "connected") {
+        setStatus("offline", "Closed");
       }
     });
     socket.addEventListener("error", () => {
-      if (tab.socket === socket) {
-        setTabStatus(tab, "offline", "Offline");
-      }
+      setStatus("offline", "Offline");
+      offlineEl.hidden = false;
     });
   } catch (error) {
     console.error(error);
-    setTabStatus(tab, "offline", "Offline");
+    offlineEl.hidden = false;
+    setStatus("offline", "Offline");
   }
 }
 
-function activateTab(id: number): void {
-  const selected = tabs.get(id);
-  if (!selected) return;
-
-  activeTabId = id;
-  for (const tab of tabs.values()) {
-    const active = tab.id === id;
-    tab.panel.hidden = !active;
-    tab.tabButton.dataset.active = String(active);
-    tab.tabButton.setAttribute("aria-selected", String(active));
-    tab.tabButton.tabIndex = active ? 0 : -1;
-  }
-
-  updateActiveStatus();
-  selected.fitAddon.fit();
-  selected.term.focus();
-  renderDiagnostics();
-}
-
-function closeActiveTab(): void {
-  if (activeTabId > 0) {
-    closeTab(activeTabId);
-  }
-}
-
-function closeTab(id: number): void {
-  const tab = tabs.get(id);
-  if (!tab) return;
-
-  const wasActive = id === activeTabId;
-  disposeTab(tab);
-  tabs.delete(id);
-  tab.panel.remove();
-  tab.tabButton.remove();
-
-  if (tabs.size === 0) {
-    void createTab();
-    return;
-  }
-
-  if (wasActive) {
-    activateTab(tabs.keys().next().value as number);
-  }
-}
-
-function disposeTab(tab: TerminalTab): void {
-  if (tab.pendingWriteFrame !== undefined) {
-    cancelAnimationFrame(tab.pendingWriteFrame);
-  }
-  if (tab.pendingWheelFrame !== undefined) {
-    cancelAnimationFrame(tab.pendingWheelFrame);
-  }
-  if (tab.pendingFitFrame !== undefined) {
-    cancelAnimationFrame(tab.pendingFitFrame);
-  }
-  tab.socket?.close();
-  tab.term.dispose();
-}
-
-function scheduleActiveFit(): void {
-  const tab = activeTab();
-  if (!tab || tab.pendingFitFrame !== undefined) {
-    return;
-  }
-  tab.pendingFitFrame = requestAnimationFrame(() => {
-    tab.pendingFitFrame = undefined;
-    if (tab.id === activeTabId) {
-      tab.fitAddon.fit();
-    }
-  });
-}
-
-function handleSocketMessage(tab: TerminalTab, data: string | ArrayBuffer | Blob): void {
+function handleSocketMessage(data: string | ArrayBuffer | Blob): void {
   if (typeof data === "string") {
-    handleAgentText(tab, data);
+    handleAgentText(data);
     return;
   }
   if (data instanceof ArrayBuffer) {
-    enqueueTerminalWrite(tab, new Uint8Array(data));
+    enqueueTerminalWrite(new Uint8Array(data));
     return;
   }
   void data.arrayBuffer().then((buffer) => {
-    enqueueTerminalWrite(tab, new Uint8Array(buffer));
+    enqueueTerminalWrite(new Uint8Array(buffer));
   });
 }
 
-function handleAgentText(tab: TerminalTab, data: string): void {
+function handleAgentText(data: string): void {
   try {
     const message = JSON.parse(data) as AgentMessage;
     if (message.type === "status" && message.shell) {
-      const title = pathBaseName(message.shell);
-      setTabTitle(tab, title);
-      setTabStatus(tab, "connected", title);
+      const shell = pathBaseName(message.shell);
+      setTitle(shell);
+      setStatus("connected", shell);
+      clearTerminal();
     } else if (message.type === "exit") {
-      enqueueTerminalWrite(tab, `\r\n[process exited ${message.code ?? 0}]\r\n`);
-      setTabStatus(tab, "offline", "Exited");
+      enqueueTerminalWrite(`\r\n[process exited ${message.code ?? 0}]\r\n`);
+      setStatus("offline", "Exited");
     } else if (message.type === "error") {
-      enqueueTerminalWrite(tab, `\r\n[agent error] ${message.message ?? data}\r\n`);
+      enqueueTerminalWrite(`\r\n[agent error] ${message.message ?? data}\r\n`);
     }
   } catch {
-    enqueueTerminalWrite(tab, data);
+    enqueueTerminalWrite(data);
   }
 }
 
-function enqueueTerminalWrite(tab: TerminalTab, data: string | Uint8Array): void {
-  tab.pendingWrites.push(data);
-  if (tab.pendingWriteFrame !== undefined) {
-    return;
-  }
-  tab.pendingWriteFrame = requestAnimationFrame(() => flushTerminalWrites(tab));
+function clearTerminal(): void {
+  term?.clear();
 }
 
-function flushTerminalWrites(tab: TerminalTab): void {
-  tab.pendingWriteFrame = undefined;
-  if (tab.pendingWrites.length === 0) {
+function enqueueTerminalWrite(data: string | Uint8Array): void {
+  pendingWrites.push(data);
+  if (pendingWriteFrame !== undefined) return;
+  pendingWriteFrame = requestAnimationFrame(flushTerminalWrites);
+}
+
+function flushTerminalWrites(): void {
+  pendingWriteFrame = undefined;
+  if (!term || pendingWrites.length === 0) {
+    pendingWrites.length = 0;
     return;
   }
 
-  const writes = tab.pendingWrites.splice(0);
+  const writes = pendingWrites.splice(0);
   let text = "";
   let bytes: Uint8Array[] = [];
   for (const write of writes) {
     if (typeof write === "string") {
       if (bytes.length > 0) {
-        tab.term.write(concatBytes(bytes));
+        term.write(concatBytes(bytes));
         bytes = [];
       }
       text += write;
     } else {
       if (text) {
-        tab.term.write(text);
+        term.write(text);
         text = "";
       }
       bytes.push(write);
     }
   }
 
-  if (text) {
-    tab.term.write(text);
-  }
-  if (bytes.length > 0) {
-    tab.term.write(concatBytes(bytes));
-  }
+  if (text) term.write(text);
+  if (bytes.length > 0) term.write(concatBytes(bytes));
 }
 
 function concatBytes(chunks: Uint8Array[]): Uint8Array {
-  if (chunks.length === 1) {
-    return chunks[0];
-  }
+  if (chunks.length === 1) return chunks[0];
   const totalLength = chunks.reduce((total, chunk) => total + chunk.length, 0);
   const merged = new Uint8Array(totalLength);
   let offset = 0;
@@ -433,30 +278,30 @@ function concatBytes(chunks: Uint8Array[]): Uint8Array {
   return merged;
 }
 
-function installWheelHandler(tab: TerminalTab): void {
-  tab.term.attachCustomWheelEventHandler((event) => {
-    if (tab.term.wasmTerm?.isAlternateScreen()) {
+function installWheelHandler(target: Terminal): void {
+  target.attachCustomWheelEventHandler((event) => {
+    if (target.wasmTerm?.isAlternateScreen()) {
       return false;
     }
 
-    const lineHeight = tab.term.renderer?.getMetrics().height ?? 20;
+    const lineHeight = target.renderer?.getMetrics().height ?? 20;
     let deltaLines: number;
     if (event.deltaMode === WheelEvent.DOM_DELTA_PIXEL) {
-      deltaLines = event.deltaY / lineHeight;
+      deltaLines = (event.deltaY / lineHeight) * settings.scrollSensitivity;
     } else if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
       deltaLines = event.deltaY;
     } else {
-      deltaLines = event.deltaY * tab.term.rows;
+      deltaLines = event.deltaY * target.rows;
     }
 
-    tab.pendingWheelLines += deltaLines;
-    if (tab.pendingWheelFrame === undefined) {
-      tab.pendingWheelFrame = requestAnimationFrame(() => {
-        tab.pendingWheelFrame = undefined;
-        const lines = tab.pendingWheelLines;
-        tab.pendingWheelLines = 0;
+    pendingWheelLines += deltaLines;
+    if (pendingWheelFrame === undefined) {
+      pendingWheelFrame = requestAnimationFrame(() => {
+        pendingWheelFrame = undefined;
+        const lines = pendingWheelLines;
+        pendingWheelLines = 0;
         if (lines !== 0) {
-          tab.term.scrollLines(lines);
+          target.scrollLines(lines);
         }
       });
     }
@@ -464,11 +309,9 @@ function installWheelHandler(tab: TerminalTab): void {
   });
 }
 
-function sendAgentMessage(tab: TerminalTab, message: Record<string, unknown>): void {
-  if (!tab.socket || tab.socket.readyState !== WebSocket.OPEN) {
-    return;
-  }
-  tab.socket.send(JSON.stringify(message));
+function sendAgentMessage(message: Record<string, unknown>): void {
+  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  socket.send(JSON.stringify(message));
 }
 
 async function getJSON<T>(url: string): Promise<T> {
@@ -489,54 +332,31 @@ function ptyURL(token: string): string {
   return url.toString();
 }
 
-function setTabTitle(tab: TerminalTab, title: string): void {
-  tab.title = title;
-  const label = tab.tabButton.querySelector<HTMLElement>(".tab-title");
-  if (label) {
-    label.textContent = title;
-  }
-  tab.closeButton.setAttribute("aria-label", `Close ${title}`);
+function setStatus(state: "connecting" | "connected" | "offline", label: string): void {
+  statusEl.dataset.state = state;
+  statusEl.textContent = label;
 }
 
-function setTabStatus(
-  tab: TerminalTab,
-  state: "connecting" | "connected" | "offline",
-  label: string,
-): void {
-  tab.status = state;
-  tab.statusLabel = label;
-  tab.tabButton.dataset.state = state;
-  if (tab.id === activeTabId) {
-    updateActiveStatus();
-  }
-}
-
-function updateActiveStatus(): void {
-  const tab = activeTab();
-  if (!tab) return;
-  statusEl.dataset.state = tab.status;
-  statusEl.textContent = tab.statusLabel;
-  offlineEl.hidden = tab.status !== "offline";
+function setTitle(label: string): void {
+  titleLabel = label;
+  document.title = `${label} - ${APP_TITLE}`;
 }
 
 function renderDiagnostics(): void {
-  if (diagnosticsPanel.hidden) {
-    return;
-  }
+  if (diagnosticsPanel.hidden) return;
 
-  const tab = activeTab();
-  const canvas = tab?.panel.querySelector("canvas");
-  const rect = canvas?.getBoundingClientRect() ?? tab?.panel.getBoundingClientRect();
+  const canvas = terminalRoot.querySelector("canvas");
+  const rect = canvas?.getBoundingClientRect() ?? terminalRoot.getBoundingClientRect();
   diagnosticsList.innerHTML = "";
   for (const [label, value] of [
     ["Renderer", "ghostty-web/canvas"],
     ["Core", "ghostty-vt"],
-    ["Tab", tab ? `${tab.id} (${tab.title})` : "?"],
+    ["Title", titleLabel],
     ["DPR", formatNumber(window.devicePixelRatio || 1)],
     ["Canvas", canvas ? `${canvas.width} x ${canvas.height}` : "?"],
-    ["CSS", rect ? `${formatNumber(rect.width)} x ${formatNumber(rect.height)}` : "?"],
-    ["Grid", tab ? `${tab.term.cols || tab.lastCols} x ${tab.term.rows || tab.lastRows}` : "?"],
-    ["Transport", socketState(tab?.socket ?? null)],
+    ["CSS", `${formatNumber(rect.width)} x ${formatNumber(rect.height)}`],
+    ["Grid", `${(term?.cols ?? lastCols) || "?"} x ${(term?.rows ?? lastRows) || "?"}`],
+    ["Transport", socketState(socket)],
   ]) {
     const termEl = document.createElement("dt");
     termEl.textContent = label;
@@ -544,6 +364,256 @@ function renderDiagnostics(): void {
     description.textContent = String(value);
     diagnosticsList.append(termEl, description);
   }
+}
+
+function renderSettingsPage(): void {
+  document.title = `Menu - ${APP_TITLE}`;
+  terminalRoot.hidden = true;
+  offlineEl.hidden = true;
+  settingsRoot.hidden = false;
+  setStatus("connected", "Menu");
+
+  settingsRoot.innerHTML = `
+    <section class="settings-hero">
+      <div>
+        <p class="settings-eyebrow">Pinned Home Tab</p>
+        <h1>App Menu</h1>
+        <p class="settings-intro">Open terminal tabs and tune defaults for new Crostini shell sessions.</p>
+      </div>
+      <div class="menu-actions">
+        <a class="primary-link" href="/terminal.html">New terminal</a>
+        <button class="secondary-button" type="button" id="focusSettings">Settings</button>
+      </div>
+    </section>
+
+    <section class="quick-grid" aria-label="Quick actions">
+      <a class="quick-action" href="/terminal.html">
+        <strong>New terminal</strong>
+        <span>Start a fresh Crostini shell tab.</span>
+      </a>
+      <button class="quick-action" type="button" id="copyLaunchCommand">
+        <strong>Agent command</strong>
+        <span>Copy the local launch command.</span>
+      </button>
+      <button class="quick-action" type="button" id="resetSettingsQuick">
+        <strong>Reset profile</strong>
+        <span>Restore terminal defaults.</span>
+      </button>
+    </section>
+
+    <form id="settingsForm" class="settings-form">
+      <section class="settings-section">
+        <h2>Display</h2>
+        <label class="setting-row">
+          <span>
+            <strong>Font size</strong>
+            <small>Controls terminal grid density and readability.</small>
+          </span>
+          <input id="fontSize" name="fontSize" type="number" min="12" max="22" step="1" value="${settings.fontSize}" />
+        </label>
+        <label class="setting-row">
+          <span>
+            <strong>Theme</strong>
+            <small>Choose the terminal color palette used by new tabs.</small>
+          </span>
+          <select id="theme" name="theme">
+            <option value="dark">Dark</option>
+            <option value="highContrast">High contrast</option>
+            <option value="soft">Soft</option>
+          </select>
+        </label>
+        <label class="setting-row">
+          <span>
+            <strong>Blinking cursor</strong>
+            <small>Disable this if cursor blinking is distracting.</small>
+          </span>
+          <input id="cursorBlink" name="cursorBlink" type="checkbox" />
+        </label>
+      </section>
+
+      <section class="settings-section">
+        <h2>History and Input</h2>
+        <label class="setting-row">
+          <span>
+            <strong>Scrollback lines</strong>
+            <small>Higher values keep more history and use more memory.</small>
+          </span>
+          <select id="scrollback" name="scrollback">
+            <option value="1000">1,000</option>
+            <option value="5000">5,000</option>
+            <option value="10000">10,000</option>
+            <option value="20000">20,000</option>
+          </select>
+        </label>
+        <label class="setting-row">
+          <span>
+            <strong>Scroll sensitivity</strong>
+            <small>Adjust trackpad and mouse-wheel scroll speed.</small>
+          </span>
+          <input id="scrollSensitivity" name="scrollSensitivity" type="range" min="0.5" max="2" step="0.25" value="${settings.scrollSensitivity}" />
+        </label>
+      </section>
+
+      <div id="settingsActions" class="settings-actions">
+        <button class="secondary-button" type="button" id="resetSettings">Reset defaults</button>
+        <button class="primary-button" type="submit">Save settings</button>
+      </div>
+    </form>
+  `;
+
+  const form = requiredElement<HTMLFormElement>("#settingsForm");
+  const theme = requiredElement<HTMLSelectElement>("#theme");
+  const scrollback = requiredElement<HTMLSelectElement>("#scrollback");
+  const cursorBlink = requiredElement<HTMLInputElement>("#cursorBlink");
+  theme.value = settings.theme;
+  scrollback.value = String(settings.scrollback);
+  cursorBlink.checked = settings.cursorBlink;
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    settings = readSettingsForm();
+    saveSettings(settings);
+  });
+
+  const reset = () => {
+    settings = { ...DEFAULT_SETTINGS };
+    saveSettings(settings);
+    renderSettingsPage();
+  };
+  requiredElement<HTMLButtonElement>("#resetSettings").addEventListener("click", reset);
+  requiredElement<HTMLButtonElement>("#resetSettingsQuick").addEventListener("click", reset);
+  requiredElement<HTMLButtonElement>("#focusSettings").addEventListener("click", () => {
+    requiredElement<HTMLElement>("#settingsActions").scrollIntoView({ behavior: "smooth", block: "end" });
+  });
+  requiredElement<HTMLButtonElement>("#copyLaunchCommand").addEventListener("click", async () => {
+    await navigator.clipboard?.writeText(
+      "cd ~/crostini-ghostty-terminal/agent && go run . -web-dir ../web/dist",
+    );
+  });
+}
+
+function readSettingsForm(): TerminalSettings {
+  return normalizeSettings({
+    fontSize: Number(requiredElement<HTMLInputElement>("#fontSize").value),
+    scrollback: Number(requiredElement<HTMLSelectElement>("#scrollback").value),
+    cursorBlink: requiredElement<HTMLInputElement>("#cursorBlink").checked,
+    theme: requiredElement<HTMLSelectElement>("#theme").value,
+    scrollSensitivity: Number(requiredElement<HTMLInputElement>("#scrollSensitivity").value),
+  });
+}
+
+function loadSettings(): TerminalSettings {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    return normalizeSettings(raw ? JSON.parse(raw) : {});
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+function saveSettings(nextSettings: TerminalSettings): void {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(nextSettings));
+}
+
+function normalizeSettings(value: Partial<TerminalSettings> | Record<string, unknown>): TerminalSettings {
+  const fontSize = Number(value.fontSize);
+  const scrollback = Number(value.scrollback);
+  const scrollSensitivity = Number(value.scrollSensitivity);
+  const theme = value.theme === "highContrast" || value.theme === "soft" ? value.theme : "dark";
+
+  return {
+    fontSize: Number.isFinite(fontSize) ? clamp(Math.round(fontSize), 12, 22) : DEFAULT_SETTINGS.fontSize,
+    scrollback: [1000, 5000, 10000, 20000].includes(scrollback)
+      ? scrollback
+      : DEFAULT_SETTINGS.scrollback,
+    cursorBlink:
+      typeof value.cursorBlink === "boolean" ? value.cursorBlink : DEFAULT_SETTINGS.cursorBlink,
+    theme,
+    scrollSensitivity: Number.isFinite(scrollSensitivity)
+      ? clamp(scrollSensitivity, 0.5, 2)
+      : DEFAULT_SETTINGS.scrollSensitivity,
+  };
+}
+
+function terminalTheme(theme: TerminalSettings["theme"]) {
+  if (theme === "highContrast") {
+    return {
+      background: "#000000",
+      foreground: "#ffffff",
+      cursor: "#ffffff",
+      selectionBackground: "#345f9f",
+      black: "#000000",
+      red: "#ff5c57",
+      green: "#5af78e",
+      yellow: "#f3f99d",
+      blue: "#57c7ff",
+      magenta: "#ff6ac1",
+      cyan: "#9aedfe",
+      white: "#f1f1f0",
+      brightBlack: "#686868",
+      brightRed: "#ff5c57",
+      brightGreen: "#5af78e",
+      brightYellow: "#f3f99d",
+      brightBlue: "#57c7ff",
+      brightMagenta: "#ff6ac1",
+      brightCyan: "#9aedfe",
+      brightWhite: "#ffffff",
+    };
+  }
+  if (theme === "soft") {
+    return {
+      background: "#080d12",
+      foreground: "#d8dee9",
+      cursor: "#e5edf5",
+      selectionBackground: "#334b5f",
+      black: "#1b2632",
+      red: "#e06c75",
+      green: "#98c379",
+      yellow: "#d19a66",
+      blue: "#61afef",
+      magenta: "#c678dd",
+      cyan: "#56b6c2",
+      white: "#d8dee9",
+      brightBlack: "#607080",
+      brightRed: "#ef7b84",
+      brightGreen: "#a7d388",
+      brightYellow: "#e0aa75",
+      brightBlue: "#70befd",
+      brightMagenta: "#d587ec",
+      brightCyan: "#65c5d1",
+      brightWhite: "#eef4fb",
+    };
+  }
+  return {
+    background: "#000000",
+    foreground: "#d7e0ea",
+    cursor: "#d7e0ea",
+    selectionBackground: "#2f5f91",
+    black: "#101820",
+    red: "#ff6b7a",
+    green: "#7bd88f",
+    yellow: "#f7c76b",
+    blue: "#6ccff6",
+    magenta: "#c792ea",
+    cyan: "#5de4c7",
+    white: "#d7e0ea",
+    brightBlack: "#52677a",
+    brightRed: "#ff8fa0",
+    brightGreen: "#a5f3b1",
+    brightYellow: "#ffe08a",
+    brightBlue: "#9adfff",
+    brightMagenta: "#d6a9ff",
+    brightCyan: "#8df2dc",
+    brightWhite: "#f0f4f8",
+  };
+}
+
+function isSettingsRoute(): boolean {
+  return window.location.pathname === "/" || window.location.pathname === "/index.html";
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 function updateDiagnosticsTimer(): void {
@@ -557,10 +627,6 @@ function updateDiagnosticsTimer(): void {
 
   renderDiagnostics();
   diagnosticsTimer ??= window.setInterval(renderDiagnostics, 1000);
-}
-
-function activeTab(): TerminalTab | undefined {
-  return tabs.get(activeTabId);
 }
 
 function socketState(ws: WebSocket | null): string {
@@ -579,23 +645,13 @@ function socketState(ws: WebSocket | null): string {
 }
 
 function formatNumber(value: number): string {
-  if (!Number.isFinite(value)) {
-    return "0";
-  }
+  if (!Number.isFinite(value)) return "0";
   return value.toFixed(2).replace(/\.00$/, "");
 }
 
 function pathBaseName(path: string): string {
   const parts = path.split("/");
   return parts[parts.length - 1] || path;
-}
-
-function newTabIcon(): string {
-  return `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 3.25a.75.75 0 0 1 .75.75v3.25H12a.75.75 0 0 1 0 1.5H8.75V12a.75.75 0 0 1-1.5 0V8.75H4a.75.75 0 0 1 0-1.5h3.25V4A.75.75 0 0 1 8 3.25Z"/></svg>`;
-}
-
-function closeIcon(): string {
-  return `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4.22 4.22a.75.75 0 0 1 1.06 0L8 6.94l2.72-2.72a.75.75 0 1 1 1.06 1.06L9.06 8l2.72 2.72a.75.75 0 1 1-1.06 1.06L8 9.06l-2.72 2.72a.75.75 0 0 1-1.06-1.06L6.94 8 4.22 5.28a.75.75 0 0 1 0-1.06Z"/></svg>`;
 }
 
 function requiredElement<T extends Element>(selector: string): T {
@@ -607,14 +663,10 @@ function requiredElement<T extends Element>(selector: string): T {
 }
 
 async function registerServiceWorker(): Promise<void> {
-  if (!("serviceWorker" in navigator)) {
-    return;
-  }
+  if (!("serviceWorker" in navigator)) return;
   try {
     await navigator.serviceWorker.register("/sw.js");
   } catch (error) {
     console.warn("service worker registration failed", error);
   }
 }
-
-newTabButton.innerHTML = newTabIcon();
