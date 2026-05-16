@@ -1,0 +1,14 @@
+{
+  "name": "crostini-ghostty-terminal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun run --cwd web build",
+    "dev": "bun run --cwd web dev",
+    "test": "bun run --cwd web test && cd agent && go test ./...",
+    "test:visual": "bun run --cwd web test:visual:glyphs",
+    "agent": "cd agent && go run . -web-dir ../web/dist"
+  },
+  "packageManager": "bun@1.3.14"
+}

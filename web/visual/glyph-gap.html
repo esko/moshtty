@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Glyph Gap Visual Test</title>
+    <style>
+      @font-face {
+        font-family: "JetBrains Mono";
+        src: url("../public/fonts/JetBrainsMono-Regular.ttf") format("truetype");
+      }
+
+      body {
+        margin: 0;
+        background: #101820;
+        color: #d7e0ea;
+        font-family: system-ui, sans-serif;
+      }
+
+      #fixture {
+        padding: 16px;
+      }
+
+      canvas {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="fixture">
+      <canvas id="terminal"></canvas>
+    </div>
+
+    <script type="module">
+      import { CanvasRenderer } from "../node_modules/ghostty-web/dist/ghostty-web.js";
+
+      const foreground = { r: 215, g: 224, b: 234 };
+      const black = { r: 0, g: 0, b: 0 };
+      const green = { r: 123, g: 216, b: 143 };
+      const blue = { r: 108, g: 207, b: 246 };
+      const magenta = { r: 199, g: 146, b: 234 };
+
+      function cell(char, fg = foreground, bg = black) {
+        return {
+          codepoint: char.codePointAt(0) ?? 32,
+          width: 1,
+          fg_r: fg.r,
+          fg_g: fg.g,
+          fg_b: fg.b,
+          bg_r: bg.r,
+          bg_g: bg.g,
+          bg_b: bg.b,
+          flags: 0,
+          fgIsDefault: false,
+          bgIsDefault: false,
+          hyperlink_id: 0,
+          grapheme_len: 0,
+        };
+      }
+
+      function padded(cells, cols) {
+        while (cells.length < cols) cells.push(cell(" "));
+        return cells.slice(0, cols);
+      }
+
+      function mockBuffer(lines) {
+        return {
+          getLine: (row) => lines[row] ?? null,
+          getCursor: () => ({ x: 0, y: 0, visible: false, style: "block" }),
+          getDimensions: () => ({ cols: lines[0].length, rows: lines.length }),
+          isRowDirty: () => true,
+          needsFullRedraw: () => true,
+          clearDirty: () => {},
+        };
+      }
+
+      function scanBlockRow(canvas, metrics, row) {
+        const ctx = canvas.getContext("2d");
+        const image = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        const y0 = Math.ceil(row * metrics.height * window.devicePixelRatio);
+        const y1 = Math.floor((row + 1) * metrics.height * window.devicePixelRatio);
+        const samples = [];
+
+        for (let x = 0; x < canvas.width; x++) {
+          let covered = false;
+          for (let y = y0; y < y1; y++) {
+            const index = (y * canvas.width + x) * 4;
+            const r = image[index];
+            const g = image[index + 1];
+            const b = image[index + 2];
+            if (r > 190 && g > 200 && b > 210) {
+              covered = true;
+              break;
+            }
+          }
+          if (!covered) samples.push(x);
+        }
+
+        return samples;
+      }
+
+      async function run() {
+        await document.fonts.ready;
+
+        const cols = 48;
+        const lines = [
+          padded(Array.from({ length: cols }, () => cell("█")), cols),
+          padded(
+            [
+              ...Array.from({ length: 10 }, () => cell(" ", foreground, green)),
+              cell("\ue0b0", green, blue),
+              ...Array.from({ length: 10 }, () => cell(" ", foreground, blue)),
+              cell("\ue0b0", blue, magenta),
+              ...Array.from({ length: 10 }, () => cell(" ", foreground, magenta)),
+            ],
+            cols,
+          ),
+        ];
+
+        const canvas = document.querySelector("#terminal");
+        const renderer = new CanvasRenderer(canvas, {
+          devicePixelRatio: window.devicePixelRatio,
+          fontFamily: "JetBrains Mono, monospace",
+          fontSize: 15,
+          theme: {
+            background: "#000000",
+            foreground: "#d7e0ea",
+          },
+        });
+        renderer.resize(cols, lines.length);
+        renderer.render(mockBuffer(lines), true);
+
+        const metrics = renderer.getMetrics();
+        const blockGaps = scanBlockRow(canvas, metrics, 0);
+        window.__glyphGapResults = {
+          dpr: window.devicePixelRatio,
+          canvas: { width: canvas.width, height: canvas.height },
+          css: { width: canvas.clientWidth, height: canvas.clientHeight },
+          metrics,
+          checks: [
+            {
+              name: "full-block-row-has-no-empty-columns",
+              passed: blockGaps.length === 0,
+              emptyColumns: blockGaps.slice(0, 20),
+              emptyColumnCount: blockGaps.length,
+            },
+          ],
+        };
+      }
+
+      run().catch((error) => {
+        window.__glyphGapResults = {
+          error: error instanceof Error ? error.message : String(error),
+        };
+      });
+    </script>
+  </body>
+</html>

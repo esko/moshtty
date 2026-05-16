@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#101820" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon.svg" />
+    <title>Crostini Ghostty Terminal</title>
+    <script type="module" crossorigin src="/assets/index-CMac49Bk.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-5y0khSp3.css">
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <nav id="tabList" class="tab-list" role="tablist" aria-label="Terminal tabs"></nav>
+        <button id="newTab" class="toolbar-button" type="button" title="New tab" aria-label="New tab"></button>
+        <div id="status" class="status" data-state="connecting">Connecting</div>
+        <button id="diagnosticsToggle" class="toolbar-button" type="button" title="Diagnostics" aria-label="Diagnostics">
+          <span aria-hidden="true">i</span>
+        </button>
+        <button id="reconnect" class="toolbar-button" type="button" title="Reconnect" aria-label="Reconnect">
+          <span aria-hidden="true">↻</span>
+        </button>
+      </header>
+      <main id="terminal" class="terminal-root" aria-label="Terminal"></main>
+      <aside id="diagnostics" class="diagnostics" hidden aria-label="Diagnostics">
+        <div class="diagnostics-title">Diagnostics</div>
+        <dl id="diagnosticsList"></dl>
+      </aside>
+      <section id="offline" class="offline" hidden>
+        <h1>Agent unavailable</h1>
+        <p>Start the Crostini agent, then reconnect.</p>
+      </section>
+    </div>
+  </body>
+</html>

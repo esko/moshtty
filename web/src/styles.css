@@ -1,0 +1,275 @@
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/JetBrainsMono-Regular.ttf") format("truetype");
+}
+
+:root {
+  color-scheme: dark;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #0f151b;
+  color: #e6edf3;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: #0f151b;
+}
+
+#app {
+  display: grid;
+  grid-template-rows: 34px 1fr;
+}
+
+.topbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px auto 30px 30px;
+  align-items: end;
+  gap: 4px;
+  min-width: 0;
+  height: 34px;
+  padding: 4px 6px 0;
+  border-bottom: 1px solid #1f2b36;
+  background: #121b24;
+  user-select: none;
+}
+
+.tab-list {
+  display: flex;
+  min-width: 0;
+  height: 30px;
+  align-items: end;
+  gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.tab-list::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  display: grid;
+  grid-template-columns: minmax(42px, 1fr) 22px;
+  align-items: center;
+  width: clamp(118px, 18vw, 210px);
+  height: 30px;
+  min-width: 96px;
+  gap: 3px;
+  padding: 0 3px 0 10px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 7px 7px 0 0;
+  background: #182532;
+  color: #aab7c4;
+  cursor: default;
+}
+
+.tab:hover {
+  background: #203041;
+  color: #dbe5ee;
+}
+
+.tab[data-active="true"] {
+  border-color: #2d4050;
+  background: #000;
+  color: #f0f4f8;
+}
+
+.tab[data-state="offline"] .tab-title {
+  color: #ffad9d;
+}
+
+.tab-title {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-close,
+.toolbar-button {
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: currentColor;
+  cursor: default;
+}
+
+.tab-close {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  opacity: 0.75;
+}
+
+.tab-close:hover,
+.toolbar-button:hover {
+  border-color: #40576d;
+  background: #263848;
+  color: #f0f4f8;
+  opacity: 1;
+}
+
+.tab-close svg,
+.toolbar-button svg {
+  fill: currentColor;
+}
+
+.toolbar-button {
+  width: 28px;
+  height: 28px;
+  margin-bottom: 2px;
+  padding: 0;
+  color: #d4dde7;
+  font: inherit;
+  font-size: 13px;
+}
+
+.status {
+  min-width: 72px;
+  margin-bottom: 7px;
+  color: #aab7c4;
+  font-size: 12px;
+  line-height: 1;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.status[data-state="connected"] {
+  color: #7bd88f;
+}
+
+.status[data-state="offline"] {
+  color: #ff9b85;
+}
+
+.terminal-root {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+.terminal-pane {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+.terminal-pane[hidden] {
+  display: none;
+}
+
+.terminal-pane canvas {
+  display: block;
+}
+
+.terminal-pane textarea,
+.terminal-root textarea {
+  background: transparent !important;
+  caret-color: transparent !important;
+  color: transparent !important;
+  outline: none !important;
+  text-shadow: none !important;
+}
+
+.diagnostics {
+  position: fixed;
+  top: 44px;
+  right: 10px;
+  z-index: 20;
+  width: min(320px, calc(100vw - 20px));
+  padding: 10px;
+  border: 1px solid #40576d;
+  border-radius: 8px;
+  background: rgba(20, 33, 45, 0.96);
+  color: #dbe5ee;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
+}
+
+.diagnostics[hidden] {
+  display: none;
+}
+
+.diagnostics-title {
+  margin: 0 0 8px;
+  color: #f0f4f8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.diagnostics dl {
+  display: grid;
+  grid-template-columns: 86px 1fr;
+  gap: 5px 8px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.diagnostics dt {
+  color: #93a4b3;
+}
+
+.diagnostics dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #eef4f8;
+  font-family: "JetBrains Mono", "Noto Sans Mono", monospace;
+}
+
+.offline {
+  position: fixed;
+  inset: 34px 0 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 8px;
+  padding: 24px;
+  background: rgba(16, 24, 32, 0.94);
+  text-align: center;
+}
+
+.offline[hidden] {
+  display: none;
+}
+
+.offline h1 {
+  margin: 0;
+  color: #f0f4f8;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.offline p {
+  max-width: 360px;
+  margin: 0;
+  color: #aab7c4;
+  font-size: 13px;
+  line-height: 1.45;
+}

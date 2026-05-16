@@ -1,0 +1,24 @@
+{
+  "name": "@crostini-ghostty-terminal/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "postinstall": "bun scripts/patch-ghostty-web.ts",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "vitest run",
+    "test:visual:glyphs": "bun scripts/glyph-gap-visual-test.ts"
+  },
+  "dependencies": {
+    "ghostty-web": "github:rcarmo/ghostty-web#b6b243d7f380f8307e375719968f6046f1102c48"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "puppeteer": "^24.37.5",
+    "typescript": "^5.9.3",
+    "vite": "^6.4.2",
+    "vitest": "^2.1.9"
+  }
+}
