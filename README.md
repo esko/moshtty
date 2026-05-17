@@ -62,7 +62,21 @@ bun run test:visual:glyphs
 
 ## Protocol
 
-The browser connects to `GET /pty?token=<session-token>`.
+The browser creates and manages durable terminal workspaces through the session API:
+
+- `GET /api/terminal-sessions` lists parent workspaces.
+- `POST /api/terminal-sessions` creates a parent workspace.
+- `GET /api/terminal-sessions/{id}` returns the workspace layout and pane sessions.
+- `POST /api/terminal-sessions/{id}/splits` creates a child pane inside a parent workspace.
+- `POST /api/terminal-sessions/{id}/detach` promotes a child pane into its own parent workspace.
+- `PATCH /api/terminal-sessions/{id}/layout` persists split-pane ratios.
+- `DELETE /api/terminal-sessions/{id}` removes a parent workspace tree or a child pane.
+
+Terminal panes attach to a durable session with:
+
+```text
+GET /pty?token=<session-token>&session=<session-id>&restore=1&cols=120&rows=32
+```
 
 Browser to agent:
 
@@ -93,5 +107,5 @@ Agent to browser:
 
 - `web/scripts/patch-ghostty-web.ts` applies local renderer/input patches to the pinned `ghostty-web` dependency after install.
 - `web/visual/glyph-gap.html` and `bun run test:visual:glyphs` cover the fractional-DPR glyph gap regression.
-- The PWA opts into ChromeOS tabbed application mode. Use ChromeOS's native tab strip or `Ctrl+T` and `Ctrl+W` for terminal tabs.
-- See `docs/architecture.md`, `docs/fonts.md`, and `docs/systemd-user.md` for implementation details.
+- The PWA opts into ChromeOS tabbed application mode. Use ChromeOS's native tab strip or `Ctrl+T` and `Ctrl+W` for app tabs. Terminal panes and split layouts are managed inside each workspace.
+- See `docs/architecture.md`, `docs/sessions.md`, `docs/roadmap.md`, `docs/fonts.md`, and `docs/systemd-user.md` for implementation details.

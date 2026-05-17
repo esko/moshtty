@@ -9,35 +9,33 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	iofs "io/fs"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/creack/pty"
 )
 
 //go:embed web
 var embeddedWeb embed.FS
 
 type config struct {
-	addr      string
-	webDir    string
-	token     string
-	allowHost string
+	addr       string
+	webDir     string
+	token      string
+	allowHost  string
+	sessionDir string
 }
 
 type server struct {
-	cfg config
+	cfg      config
+	sessions *sessionManager
 }
 
 type clientMessage struct {
@@ -57,11 +55,21 @@ type serverMessage struct {
 
 func main() {
 	cfg := config{}
+	workerSession := ""
 	flag.StringVar(&cfg.addr, "addr", "127.0.0.1:8765", "HTTP listen address")
 	flag.StringVar(&cfg.webDir, "web-dir", "", "directory containing built web assets; defaults to embedded assets")
 	flag.StringVar(&cfg.token, "token", "", "PTY token; generated when empty")
 	flag.StringVar(&cfg.allowHost, "allow-host", "", "expected host header; defaults to listen host")
+	flag.StringVar(&cfg.sessionDir, "session-dir", defaultSessionDir(), "directory for durable terminal sessions")
+	flag.StringVar(&workerSession, "worker-session", "", "internal terminal worker session id")
 	flag.Parse()
+
+	if workerSession != "" {
+		if err := runSessionWorker(cfg.sessionDir, workerSession); err != nil {
+			log.Fatalf("terminal worker %s: %v", workerSession, err)
+		}
+		return
+	}
 
 	if cfg.token == "" {
 		token, err := generateToken()
@@ -74,7 +82,12 @@ func main() {
 		cfg.allowHost = cfg.addr
 	}
 
-	srv := &server{cfg: cfg}
+	sessionManager, err := newSessionManager(cfg.sessionDir)
+	if err != nil {
+		log.Fatalf("session manager: %v", err)
+	}
+
+	srv := &server{cfg: cfg, sessions: sessionManager}
 	httpServer := &http.Server{
 		Addr:              cfg.addr,
 		Handler:           srv.routes(),
@@ -92,6 +105,8 @@ func (s *server) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/session", s.handleSession)
+	mux.HandleFunc("/api/terminal-sessions", s.handleTerminalSessions)
+	mux.HandleFunc("/api/terminal-sessions/", s.handleTerminalSession)
 	mux.HandleFunc("/pty", s.handlePTY)
 	mux.Handle("/", s.staticHandler())
 	return withSecurityHeaders(mux)
@@ -147,115 +162,16 @@ func (s *server) handlePTY(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.CloseNow()
 
-	if err := s.runPTY(r.Context(), conn); err != nil {
-		log.Printf("pty session ended: %v", err)
-	}
-}
-
-func (s *server) runPTY(ctx context.Context, conn *websocket.Conn) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	shell, args := chooseShell()
-	cmd := exec.CommandContext(ctx, shell, args...)
-	cmd.Dir = userHome()
-	cmd.Env = append(os.Environ(),
-		"TERM=xterm-256color",
-		"COLORTERM=truecolor",
-		"TERM_PROGRAM=ghostty-web",
-		"TERM_PROGRAM_VERSION=0.1.0",
-	)
-
-	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: 100, Rows: 30})
+	sessionID := r.URL.Query().Get("session")
+	restore := r.URL.Query().Get("restore") != "0"
+	cols, rows, err := sizeFromRequest(r)
 	if err != nil {
-		sendServerMessage(ctx, conn, serverMessage{Type: "error", Message: "failed to start shell", Errors: []string{err.Error()}})
-		return err
-	}
-	defer ptmx.Close()
-
-	if err := sendServerMessage(ctx, conn, serverMessage{Type: "status", Shell: shell}); err != nil {
-		return err
+		_ = sendServerMessage(r.Context(), conn, serverMessage{Type: "error", Message: "invalid terminal size", Errors: []string{err.Error()}})
+		return
 	}
 
-	var writeMu sync.Mutex
-	errCh := make(chan error, 3)
-
-	go func() {
-		buf := make([]byte, 32*1024)
-		for {
-			n, readErr := ptmx.Read(buf)
-			if n > 0 {
-				writeMu.Lock()
-				writeErr := conn.Write(ctx, websocket.MessageBinary, buf[:n])
-				writeMu.Unlock()
-				if writeErr != nil {
-					errCh <- writeErr
-					return
-				}
-			}
-			if readErr != nil {
-				errCh <- readErr
-				return
-			}
-		}
-	}()
-
-	go func() {
-		for {
-			msgType, payload, readErr := conn.Read(ctx)
-			if readErr != nil {
-				errCh <- readErr
-				return
-			}
-			if msgType != websocket.MessageText {
-				continue
-			}
-			if err := handleClientMessage(ptmx, payload); err != nil {
-				writeMu.Lock()
-				_ = sendServerMessage(ctx, conn, serverMessage{Type: "error", Message: "invalid client message", Errors: []string{err.Error()}})
-				writeMu.Unlock()
-			}
-		}
-	}()
-
-	go func() {
-		errCh <- cmd.Wait()
-	}()
-
-	err = <-errCh
-	cancel()
-
-	exitCode := 0
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
-		exitCode = exitErr.ExitCode()
-	}
-	writeMu.Lock()
-	_ = sendServerMessage(context.Background(), conn, serverMessage{Type: "exit", Code: exitCode})
-	writeMu.Unlock()
-	return err
-}
-
-func handleClientMessage(ptmx *os.File, payload []byte) error {
-	var msg clientMessage
-	if err := json.Unmarshal(payload, &msg); err != nil {
-		return err
-	}
-	switch msg.Type {
-	case "input":
-		if msg.Data == "" {
-			return nil
-		}
-		_, err := io.WriteString(ptmx, msg.Data)
-		return err
-	case "resize":
-		cols, rows, err := sanitizeSize(msg.Cols, msg.Rows)
-		if err != nil {
-			return err
-		}
-		return pty.Setsize(ptmx, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
-	default:
-		return fmt.Errorf("unknown message type %q", msg.Type)
+	if err := s.runSessionPTY(r.Context(), conn, sessionID, cols, rows, restore); err != nil {
+		log.Printf("pty session ended: %v", err)
 	}
 }
 
@@ -412,7 +328,7 @@ func withSecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://127.0.0.1:* ws://localhost:*; img-src 'self' data:; font-src 'self' data:; worker-src 'self'")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://127.0.0.1:* ws://localhost:*; img-src 'self' data:; font-src 'self' data: http: https:; worker-src 'self'")
 		next.ServeHTTP(w, r)
 	})
 }

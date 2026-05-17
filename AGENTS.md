@@ -86,11 +86,26 @@ go test ./...
 
 The agent binds to `127.0.0.1:8765` by default. It should remain loopback-only unless a user explicitly asks for a different deployment model.
 
-The browser protocol is:
+The browser protocol starts with:
 
 - `GET /api/health`
 - `GET /api/session`
-- `GET /pty?token=<session-token>` WebSocket
+- `GET /api/terminal-sessions`
+- `POST /api/terminal-sessions`
+- `GET /api/terminal-sessions/{id}`
+- `POST /api/terminal-sessions/{id}/splits`
+- `POST /api/terminal-sessions/{id}/detach`
+- `PATCH /api/terminal-sessions/{id}/layout`
+- `DELETE /api/terminal-sessions/{id}`
+- `GET /pty?token=<session-token>&session=<session-id>&restore=<0|1>&cols=<cols>&rows=<rows>` WebSocket
+
+Session model:
+
+- A parent terminal session is a workspace listed on the settings/home page.
+- Child sessions are panes nested under a parent layout and are not listed as top-level workspaces.
+- Detaching a child pane clears its `parentId` and creates a single-pane layout so it becomes a parent workspace.
+- Layout PATCH requests may update split ratios only; they must not change pane membership or split structure.
+- Deleting a parent stops and removes the whole pane tree. Deleting a child removes it from its parent layout and deletes that child session directory.
 
 Browser-to-agent WebSocket messages are JSON text frames:
 
@@ -100,6 +115,8 @@ Browser-to-agent WebSocket messages are JSON text frames:
 ```
 
 Agent-to-browser PTY output is binary WebSocket frames.
+
+See `docs/sessions.md` for the API shapes.
 
 ## Style
 
