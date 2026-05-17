@@ -47,3 +47,5 @@ PTY output is batched once per animation frame before calling `Terminal.write`, 
 The PWA opts into ChromeOS tabbed application mode with `display_override: ["tabbed"]` and a manifest `tab_strip.new_tab_button.url` of `/terminal`. In native tabbed mode the in-app fallback toolbar is hidden so only the ChromeOS-integrated tab strip is visible.
 
 There is no in-app tab fallback. Each native ChromeOS app tab is a separate app context. A terminal tab can render one workspace with multiple panes; each pane has its own `Terminal`, `FitAddon`, WebSocket attachment, write queue, and wheel-scroll queue. `Ctrl+T` and `Ctrl+W` pass through to the native tab strip so ChromeOS controls app-tab creation and focus.
+
+For DevTools MCP automation, `?debug-shell=1` enables a DOM-visible debug tab strip. It mirrors the menu tab, terminal tabs, new-tab action, close action, and route switching inside the page so MCP can inspect and click the app-level tab workflow. This mode is only a debug harness; it does not replace the installed PWA's native ChromeOS tab strip.

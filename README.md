@@ -40,6 +40,20 @@ bun run dev
 
 The Vite dev server proxies `/api` and `/pty` to the Go agent at `127.0.0.1:8765`.
 
+For DevTools MCP coverage of the full app shape, open the debug shell:
+
+```text
+http://127.0.0.1:5175/?debug-shell=1
+```
+
+or, against the built app:
+
+```text
+http://127.0.0.1:8765/?debug-shell=1
+```
+
+The debug shell renders a DOM-visible PWA tab strip for MCP automation. The installed ChromeOS PWA still uses native tabbed app chrome.
+
 ## Scripts
 
 From the repository root:
