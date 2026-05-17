@@ -7,8 +7,8 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" />
     <title>Crostini Ghostty Terminal</title>
-    <script type="module" crossorigin src="/assets/index-Bij6AACN.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-C6mr-yUu.css">
+    <script type="module" crossorigin src="/assets/index-BfZG-t9w.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-B5ORwN3o.css">
   </head>
   <body>
     <div id="app">
@@ -24,6 +24,20 @@
       </header>
       <main id="settings" class="settings-page" hidden aria-label="Settings"></main>
       <main id="terminal" class="terminal-root" aria-label="Terminal"></main>
+      <nav id="terminalContextMenu" class="context-menu" hidden aria-label="Terminal context menu">
+        <button type="button" data-action="copy">Copy</button>
+        <button type="button" data-action="paste">Paste</button>
+        <button type="button" data-action="select-all">Select all</button>
+        <hr />
+        <button type="button" data-action="new-tab">New terminal tab</button>
+        <button type="button" data-action="split-right">Split right</button>
+        <button type="button" data-action="split-down">Split down</button>
+        <button type="button" data-action="detach">Move pane to new tab</button>
+        <button type="button" data-action="close-pane">Close pane</button>
+        <button type="button" data-action="clear">Clear screen</button>
+        <hr />
+        <button type="button" data-action="settings">Terminal settings</button>
+      </nav>
       <aside id="diagnostics" class="diagnostics" hidden aria-label="Diagnostics">
         <div class="diagnostics-title">Diagnostics</div>
         <dl id="diagnosticsList"></dl>
