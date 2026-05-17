@@ -28,6 +28,9 @@ const diagnosticsToggle = requiredElement<HTMLButtonElement>("#diagnosticsToggle
 const diagnosticsPanel = requiredElement<HTMLElement>("#diagnostics");
 const diagnosticsList = requiredElement<HTMLElement>("#diagnosticsList");
 const contextMenu = requiredElement<HTMLElement>("#terminalContextMenu");
+const renameDialog = requiredElement<HTMLDialogElement>("#renameDialog");
+const renameInput = requiredElement<HTMLInputElement>("#renameInput");
+const renameResetButton = requiredElement<HTMLButtonElement>("#renameReset");
 
 let settings = loadSettings();
 let currentWorkspace: Workspace | null = null;
@@ -38,6 +41,7 @@ let pendingFitFrame: number | undefined;
 let activeResize: SplitResizeState | null = null;
 let terminalRuntimeReady = false;
 let debugShell: DebugShellState | null = null;
+let listedSessions: TerminalSession[] = [];
 const panes = new Map<string, TerminalPane>();
 
 type SplitNode = Extract<SessionLayoutNode, { type: "split" }>;
@@ -112,6 +116,20 @@ contextMenu.addEventListener("click", (event) => {
   void handleContextAction(button.dataset.action ?? "");
 });
 
+renameDialog.addEventListener("close", () => {
+  if (renameDialog.returnValue !== "save") return;
+  const sessionId = renameDialog.dataset.sessionId;
+  if (!sessionId) return;
+  void renameSession(sessionId, renameInput.value);
+});
+
+renameResetButton.addEventListener("click", () => {
+  const sessionId = renameDialog.dataset.sessionId;
+  if (!sessionId) return;
+  renameDialog.close("cancel");
+  void renameSession(sessionId, "");
+});
+
 window.addEventListener("resize", scheduleFit);
 
 window.addEventListener("beforeunload", () => {
@@ -131,15 +149,20 @@ class TerminalPane {
   lastCols = 0;
   lastRows = 0;
   title = "Terminal";
+  customTitle = false;
   hasAttached = false;
   private pendingWriteFrame: number | undefined;
   private readonly pendingWrites: Array<string | Uint8Array> = [];
   private pendingWheelFrame: number | undefined;
   private pendingWheelLines = 0;
 
-  constructor(id: string, root: HTMLElement) {
+  constructor(id: string, root: HTMLElement, session: TerminalSession | undefined) {
     this.id = id;
     this.root = root;
+    if (session) {
+      this.title = sessionTitle(session);
+      this.customTitle = Boolean(session.customTitle);
+    }
     this.term = createTerminal();
     this.fitAddon = new FitAddon();
     this.term.loadAddon(this.fitAddon);
@@ -239,7 +262,7 @@ class TerminalPane {
     try {
       const message = JSON.parse(data) as AgentMessage;
       if (message.type === "status" && message.shell) {
-        this.title = pathBaseName(message.shell);
+        if (!this.customTitle) this.title = pathBaseName(message.shell);
         if (this.id === activePaneId) this.focus();
       } else if (message.type === "exit") {
         this.enqueueWrite(`\r\n[process exited ${message.code ?? 0}]\r\n`);
@@ -388,7 +411,7 @@ function renderLayoutNode(node: SessionLayoutNode): HTMLElement {
     paneRoot.className = "terminal-pane";
     paneRoot.dataset.paneId = node.sessionId;
     paneRoot.tabIndex = -1;
-    panes.set(node.sessionId, new TerminalPane(node.sessionId, paneRoot));
+    panes.set(node.sessionId, new TerminalPane(node.sessionId, paneRoot, sessionForPane(node.sessionId)));
     return paneRoot;
   }
 
@@ -500,6 +523,9 @@ async function handleContextAction(action: string): Promise<void> {
     case "select-all":
       activePane()?.term.selectAll();
       break;
+    case "rename":
+      openRenameDialog(activePaneId);
+      break;
     case "new-tab":
       openAppURL("/terminal.html", { newTab: true });
       break;
@@ -574,6 +600,56 @@ function setActivePane(sessionId: string): void {
 
 function activePane(): TerminalPane | undefined {
   return panes.get(activePaneId);
+}
+
+function sessionForPane(sessionId: string): TerminalSession | undefined {
+  if (!currentWorkspace) return undefined;
+  if (currentWorkspace.session.id === sessionId) return currentWorkspace.session;
+  return currentWorkspace.children.find((session) => session.id === sessionId);
+}
+
+function openRenameDialog(sessionId: string): void {
+  const session = sessionForPane(sessionId);
+  if (!session) return;
+  openRenameDialogForSession(session);
+}
+
+function openMenuRenameDialog(sessionId: string): void {
+  const session = listedSessions.find((candidate) => candidate.id === sessionId);
+  if (!session) return;
+  openRenameDialogForSession(session);
+}
+
+function openRenameDialogForSession(session: TerminalSession): void {
+  renameDialog.dataset.sessionId = session.id;
+  renameInput.value = session.customTitle ? session.title : "";
+  renameInput.placeholder = sessionTitle(session);
+  if (!renameDialog.open) renameDialog.showModal();
+  renameInput.focus();
+  renameInput.select();
+}
+
+async function renameSession(sessionId: string, title: string): Promise<void> {
+  const session = await patchJSON<TerminalSession>(`/api/terminal-sessions/${encodeURIComponent(sessionId)}`, { title });
+  applySessionUpdate(session);
+  if (settingsRoot.hidden) {
+    const pane = panes.get(session.id);
+    if (pane) {
+      pane.title = sessionTitle(session);
+      pane.customTitle = Boolean(session.customTitle);
+      if (pane.id === activePaneId) pane.focus();
+    }
+  } else {
+    await renderSessionList();
+  }
+}
+
+function applySessionUpdate(session: TerminalSession): void {
+  if (!currentWorkspace) return;
+  if (currentWorkspace.session.id === session.id) {
+    currentWorkspace.session = { ...currentWorkspace.session, ...session };
+  }
+  currentWorkspace.children = currentWorkspace.children.map((child) => (child.id === session.id ? { ...child, ...session } : child));
 }
 
 function disposePanes(): void {
@@ -793,6 +869,7 @@ async function renderSessionList(): Promise<void> {
   list.innerHTML = `<div class="session-empty">Loading sessions</div>`;
   try {
     const sessions = await getJSON<TerminalSession[]>("/api/terminal-sessions");
+    listedSessions = sessions;
     if (sessions.length === 0) {
       list.innerHTML = `<div class="session-empty">No saved terminal sessions</div>`;
       return;
@@ -814,6 +891,9 @@ async function renderSessionList(): Promise<void> {
             <a class="icon-button" href="${escapeAttribute(appURL(`/terminal.html?session=${encodeURIComponent(session.id)}`))}" title="Open session" aria-label="Open ${escapeAttribute(sessionTitle(session))} in a new tab">
               <span aria-hidden="true">↗</span>
             </a>
+            <button class="icon-button" type="button" title="Rename session" aria-label="Rename ${escapeAttribute(sessionTitle(session))}" data-rename-session="${escapeAttribute(session.id)}">
+              <span aria-hidden="true">✎</span>
+            </button>
             <button class="icon-button danger" type="button" title="Remove session" aria-label="Remove ${escapeAttribute(sessionTitle(session))}" data-delete-session="${escapeAttribute(session.id)}">
               <span aria-hidden="true">${trashIcon()}</span>
             </button>
@@ -824,11 +904,17 @@ async function renderSessionList(): Promise<void> {
     );
   } catch (error) {
     console.error(error);
+    listedSessions = [];
     list.innerHTML = `<div class="session-empty">Unable to load sessions</div>`;
   }
 }
 
 document.addEventListener("click", (event) => {
+  const renameButton = (event.target as Element).closest<HTMLButtonElement>("button[data-rename-session]");
+  if (renameButton?.dataset.renameSession) {
+    openMenuRenameDialog(renameButton.dataset.renameSession);
+    return;
+  }
   const button = (event.target as Element).closest<HTMLButtonElement>("button[data-delete-session]");
   if (!button) return;
   const sessionId = button.dataset.deleteSession;

@@ -4,6 +4,7 @@ export type AgentSession = { token: string };
 export type TerminalSession = {
   id: string;
   title: string;
+  customTitle?: boolean;
   parentId?: string;
   status: string;
   createdAt: string;

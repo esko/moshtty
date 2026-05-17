@@ -427,6 +427,127 @@ func TestSessionManagerUpdateLayoutRejectsChangedLeavesAndShape(t *testing.T) {
 	}
 }
 
+func TestSessionManagerUpdateTitlePersistsCustomWorkspaceName(t *testing.T) {
+	m := newTestSessionManager(t)
+	ctx := context.Background()
+
+	parent, err := m.create(ctx)
+	if err != nil {
+		t.Fatalf("create parent session: %v", err)
+	}
+	renamed, err := m.updateTitle(parent.ID, "  Work API  ")
+	if err != nil {
+		t.Fatalf("rename parent session: %v", err)
+	}
+	if renamed.Title != "Work API" || !renamed.CustomTitle {
+		t.Fatalf("unexpected renamed session %#v", renamed)
+	}
+
+	sessions, err := m.list(ctx)
+	if err != nil {
+		t.Fatalf("list sessions: %v", err)
+	}
+	if len(sessions) != 1 || sessions[0].Title != "Work API" || !sessions[0].CustomTitle {
+		t.Fatalf("unexpected listed session %#v", sessions)
+	}
+}
+
+func TestSessionManagerUpdateTitleRenamesChildPane(t *testing.T) {
+	m := newTestSessionManager(t)
+	ctx := context.Background()
+
+	parent, err := m.create(ctx)
+	if err != nil {
+		t.Fatalf("create parent session: %v", err)
+	}
+	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "horizontal")
+	if err != nil {
+		t.Fatalf("create split: %v", err)
+	}
+	childID := workspace.Layout.Second.SessionID
+	if _, err := m.updateTitle(childID, "Logs"); err != nil {
+		t.Fatalf("rename child pane: %v", err)
+	}
+
+	workspace, err = m.workspace(ctx, parent.ID)
+	if err != nil {
+		t.Fatalf("read workspace: %v", err)
+	}
+	var child *terminalSession
+	for i := range workspace.Children {
+		if workspace.Children[i].ID == childID {
+			child = &workspace.Children[i]
+		}
+	}
+	if child == nil || child.Title != "Logs" || !child.CustomTitle {
+		t.Fatalf("expected renamed child in workspace, got %#v", workspace.Children)
+	}
+}
+
+func TestSessionManagerUpdateTitleEmptyResetsToAutomaticName(t *testing.T) {
+	m := newTestSessionManager(t)
+	ctx := context.Background()
+
+	parent, err := m.create(ctx)
+	if err != nil {
+		t.Fatalf("create parent session: %v", err)
+	}
+	session, err := m.readMetadata(parent.ID)
+	if err != nil {
+		t.Fatalf("read parent metadata: %v", err)
+	}
+	session.Shell = "/usr/bin/fish"
+	session.Title = "Work"
+	session.CustomTitle = true
+	if err := m.writeMetadata(session); err != nil {
+		t.Fatalf("write parent metadata: %v", err)
+	}
+
+	renamed, err := m.updateTitle(parent.ID, "   ")
+	if err != nil {
+		t.Fatalf("reset parent title: %v", err)
+	}
+	if renamed.Title != "fish" || renamed.CustomTitle {
+		t.Fatalf("expected automatic fish title after reset, got %#v", renamed)
+	}
+}
+
+func TestWorkerMetadataPreservesCustomTitle(t *testing.T) {
+	root := t.TempDir()
+	m, err := newSessionManager(root)
+	if err != nil {
+		t.Fatalf("new session manager: %v", err)
+	}
+	now := time.Now().UTC()
+	if err := m.writeMetadata(&terminalSession{
+		ID:          "term-custom",
+		Title:       "Production",
+		CustomTitle: true,
+		Status:      sessionStatusStale,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		Socket:      m.socketPath("term-custom"),
+	}); err != nil {
+		t.Fatalf("write metadata: %v", err)
+	}
+
+	worker := &workerSession{
+		id:         "term-custom",
+		root:       root,
+		shell:      "/bin/bash",
+		socketPath: m.socketPath("term-custom"),
+	}
+	worker.updateMetadata(sessionStatusRunning)
+
+	session, err := m.readMetadata("term-custom")
+	if err != nil {
+		t.Fatalf("read updated metadata: %v", err)
+	}
+	if session.Title != "Production" || !session.CustomTitle {
+		t.Fatalf("expected custom title to survive worker update, got %#v", session)
+	}
+}
+
 func newTestSessionManager(t *testing.T) *sessionManager {
 	t.Helper()
 	m, err := newSessionManager(t.TempDir())

@@ -24,6 +24,8 @@ A top-level session is a parent workspace. Its `layout.json` stores a split tree
 
 The current layout supports horizontal and vertical splits with persisted ratios. The UI creates 50/50 splits by default, then stores divider resize changes through the layout API.
 
+Session metadata stores display titles for both workspaces and panes. Custom titles are preserved across worker updates; sessions without a custom title use the shell basename when available or `Terminal`.
+
 See `docs/sessions.md` for API details.
 
 ## Rendering

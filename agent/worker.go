@@ -397,12 +397,13 @@ func (w *workerSession) updateMetadata(status string) {
 	if existing, err := (&sessionManager{root: w.root}).readMetadata(w.id); err == nil {
 		session.CreatedAt = existing.CreatedAt
 		session.ParentID = existing.ParentID
-		if existing.Title != "" {
+		session.CustomTitle = existing.CustomTitle
+		if existing.CustomTitle && existing.Title != "" {
 			session.Title = existing.Title
 		}
 	}
-	if w.shell != "" {
-		session.Title = filepath.Base(w.shell)
+	if !session.CustomTitle {
+		session.Title = automaticSessionTitle(w.shell)
 	}
 	if err := (&sessionManager{root: w.root}).writeMetadata(session); err != nil {
 		log.Printf("write session metadata: %v", err)

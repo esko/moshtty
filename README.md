@@ -81,6 +81,7 @@ The browser creates and manages durable terminal workspaces through the session 
 - `GET /api/terminal-sessions` lists parent workspaces.
 - `POST /api/terminal-sessions` creates a parent workspace.
 - `GET /api/terminal-sessions/{id}` returns the workspace layout and pane sessions.
+- `PATCH /api/terminal-sessions/{id}` renames a workspace or pane; an empty title resets automatic naming.
 - `POST /api/terminal-sessions/{id}/splits` creates a child pane inside a parent workspace.
 - `POST /api/terminal-sessions/{id}/detach` promotes a child pane into its own parent workspace.
 - `PATCH /api/terminal-sessions/{id}/layout` persists split-pane ratios.

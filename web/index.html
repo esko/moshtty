@@ -27,6 +27,7 @@
         <button type="button" data-action="paste">Paste</button>
         <button type="button" data-action="select-all">Select all</button>
         <hr />
+        <button type="button" data-action="rename">Rename pane</button>
         <button type="button" data-action="new-tab">New terminal tab</button>
         <button type="button" data-action="split-right">Split right</button>
         <button type="button" data-action="split-down">Split down</button>
@@ -40,6 +41,20 @@
         <div class="diagnostics-title">Diagnostics</div>
         <dl id="diagnosticsList"></dl>
       </aside>
+      <dialog id="renameDialog" class="rename-dialog" aria-labelledby="renameDialogTitle">
+        <form method="dialog">
+          <h2 id="renameDialogTitle">Rename</h2>
+          <label>
+            <span>Name</span>
+            <input id="renameInput" name="title" type="text" autocomplete="off" />
+          </label>
+          <div class="rename-dialog-actions">
+            <button class="secondary-button" type="button" id="renameReset">Reset automatic</button>
+            <button class="secondary-button" value="cancel">Cancel</button>
+            <button class="primary-button" value="save">Save</button>
+          </div>
+        </form>
+      </dialog>
       <section id="offline" class="offline" hidden>
         <h1>Agent unavailable</h1>
         <p>Start the Crostini agent, then reconnect.</p>

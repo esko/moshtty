@@ -18,7 +18,16 @@ Completed outcome:
 
 ## 2. Session And Pane Naming
 
+Status: complete.
+
 Human-readable names are the next usability upgrade after panes can be arranged. Parent workspaces and child panes should be renameable, and titles should appear consistently in the app menu, terminal status, context menu actions, and native tab title.
+
+Completed outcome:
+
+- rename parent workspaces from the app menu;
+- rename the active pane from the terminal context menu;
+- preserve custom names across worker metadata updates;
+- reset blank names to automatic shell/default titles.
 
 ## 3. Appearance Settings
 

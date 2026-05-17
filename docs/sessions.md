@@ -10,6 +10,7 @@ The Go agent owns durable terminal sessions. The browser uses HTTP APIs to creat
 {
   "id": "term-0123abcd",
   "title": "Terminal",
+  "customTitle": true,
   "parentId": "term-parent",
   "shell": "/bin/bash",
   "status": "running",
@@ -20,7 +21,7 @@ The Go agent owns durable terminal sessions. The browser uses HTTP APIs to creat
 }
 ```
 
-`parentId`, `shell`, `pid`, and `paneCount` are omitted when they do not apply. Parent sessions are workspaces. Child sessions are panes inside a parent workspace and are hidden from the top-level list.
+`customTitle`, `parentId`, `shell`, `pid`, and `paneCount` are omitted when they do not apply. Parent sessions are workspaces. Child sessions are panes inside a parent workspace and are hidden from the top-level list. Empty titles reset a session to automatic naming from the shell basename or `Terminal`.
 
 `SessionLayoutNode`:
 
@@ -63,6 +64,18 @@ Creates a new parent workspace, writes a single-pane layout, starts the worker, 
 `GET /api/terminal-sessions/{id}`
 
 Returns a `Workspace` for a parent session id.
+
+`PATCH /api/terminal-sessions/{id}`
+
+Renames a parent workspace or child pane.
+
+Request:
+
+```json
+{ "title": "Work API" }
+```
+
+Whitespace is trimmed. A blank title clears the custom name and returns the session to automatic naming.
 
 `POST /api/terminal-sessions/{id}/splits`
 

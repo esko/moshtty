@@ -41,16 +41,17 @@ type sessionManager struct {
 }
 
 type terminalSession struct {
-	ID        string    `json:"id"`
-	Title     string    `json:"title"`
-	ParentID  string    `json:"parentId,omitempty"`
-	Shell     string    `json:"shell,omitempty"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
-	PID       int       `json:"pid,omitempty"`
-	Socket    string    `json:"socket,omitempty"`
-	PaneCount int       `json:"paneCount,omitempty"`
+	ID          string    `json:"id"`
+	Title       string    `json:"title"`
+	CustomTitle bool      `json:"customTitle,omitempty"`
+	ParentID    string    `json:"parentId,omitempty"`
+	Shell       string    `json:"shell,omitempty"`
+	Status      string    `json:"status"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+	PID         int       `json:"pid,omitempty"`
+	Socket      string    `json:"socket,omitempty"`
+	PaneCount   int       `json:"paneCount,omitempty"`
 }
 
 type workspaceResponse struct {
@@ -79,6 +80,10 @@ type detachRequest struct {
 
 type layoutRequest struct {
 	Layout sessionLayoutNode `json:"layout"`
+}
+
+type titleRequest struct {
+	Title string `json:"title"`
 }
 
 func newSessionManager(root string) (*sessionManager, error) {
@@ -522,6 +527,26 @@ func (m *sessionManager) updateLayout(ctx context.Context, parentID string, next
 	return m.workspace(ctx, parentID)
 }
 
+func (m *sessionManager) updateTitle(id, title string) (*terminalSession, error) {
+	session, err := m.readMetadata(id)
+	if err != nil {
+		return nil, err
+	}
+	nextTitle := strings.TrimSpace(title)
+	if nextTitle == "" {
+		session.CustomTitle = false
+		session.Title = automaticSessionTitle(session.Shell)
+	} else {
+		session.CustomTitle = true
+		session.Title = nextTitle
+	}
+	session.UpdatedAt = time.Now().UTC()
+	if err := m.writeMetadata(session); err != nil {
+		return nil, err
+	}
+	return session, nil
+}
+
 func (m *sessionManager) createChild(ctx context.Context, parentID string) (*terminalSession, error) {
 	id, err := randomSessionID()
 	if err != nil {
@@ -674,6 +699,20 @@ func (s *server) handleTerminalSession(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "not found", http.StatusNotFound)
 		}
 	case http.MethodPatch:
+		if len(parts) == 1 {
+			var req titleRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "invalid request body", http.StatusBadRequest)
+				return
+			}
+			session, err := s.sessions.updateTitle(id, req.Title)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, http.StatusOK, session)
+			return
+		}
 		if len(parts) != 2 || parts[1] != "layout" {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
@@ -841,6 +880,13 @@ func validSessionID(id string) bool {
 
 func singlePaneLayout(sessionID string) *sessionLayoutNode {
 	return &sessionLayoutNode{Type: "leaf", SessionID: sessionID}
+}
+
+func automaticSessionTitle(shell string) string {
+	if shell != "" {
+		return filepath.Base(shell)
+	}
+	return "Terminal"
 }
 
 func countLayoutLeaves(node *sessionLayoutNode) int {
