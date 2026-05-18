@@ -396,6 +396,7 @@ func (w *workerSession) updateMetadata(status string) {
 	}
 	if existing, err := (&sessionManager{root: w.root}).readMetadata(w.id); err == nil {
 		session.CreatedAt = existing.CreatedAt
+		session.SpaceID = existing.SpaceID
 		session.ParentID = existing.ParentID
 		session.CustomTitle = existing.CustomTitle
 		if existing.CustomTitle && existing.Title != "" {

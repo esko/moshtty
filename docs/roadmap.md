@@ -31,23 +31,65 @@ Completed outcome:
 
 ## 3. Appearance Settings
 
-The app stylesheet now exposes semantic CSS variables. The next appearance pass should add settings for app chrome colors, accent/focus color, compactness, and terminal palette selection while keeping terminal ANSI colors separate from app UI colors.
+Status: complete.
+
+The app stylesheet now exposes semantic CSS variables and the app menu has controls for terminal palette, app accent, and app density. Terminal ANSI colors remain separate from app chrome colors.
+
+Completed outcome:
+
+- choose the terminal palette used by new tabs;
+- choose the app accent used for controls, focus rings, and status highlights;
+- switch app chrome between comfortable and compact density;
+- normalize invalid stored appearance values back to stable defaults.
 
 ## 4. Session Reliability
 
-Durable sessions should expose clearer lifecycle controls and recovery states. Useful additions include stale worker cleanup, restart session, reconnect pane, orphan detection, and better failure messages when a worker cannot start.
+Status: complete.
+
+Durable sessions now have a higher-level space model, tab/pane API names, persisted stale-status detection, restart controls for a pane or a whole tab, multi-space management, orphan pane detection/cleanup, and worker-start failure messages with bounded recent log context.
 
 ## 5. Pane Keyboard Workflow
 
-Pane shortcuts should cover common layout operations without conflicting with ChromeOS or terminal control keys. Candidate actions: split right/down, close pane, focus next/previous pane, and detach pane.
+Status: complete.
+
+Pane shortcuts cover common layout operations without conflicting with ChromeOS or terminal control keys.
+
+Completed outcome:
+
+- split right/down with `Ctrl+Shift+ArrowRight` and `Ctrl+Shift+ArrowDown`;
+- focus previous/next pane with `Ctrl+Shift+ArrowLeft` and `Ctrl+Shift+ArrowUp`;
+- close the active pane with `Ctrl+Shift+Backspace`;
+- detach a child pane with `Ctrl+Shift+D`;
+- ignore app shortcuts while dialogs and normal editable controls are active.
 
 ## 6. Context Menu Functionality
 
-The terminal context menu can become the main discoverable pane command surface. Candidate actions: rename, restart, duplicate, copy session id, close workspace, and open appearance settings.
+Status: complete.
+
+The terminal context menu is the main discoverable pane command surface.
+
+Completed outcome:
+
+- rename, duplicate, split, restart, detach, close, and clear panes;
+- restart and close the current tab;
+- copy pane and tab ids;
+- open settings and create new terminal tabs;
+- disable menu items that do not apply to the current pane/tab state.
 
 ## 7. Session List UX
 
-The app menu should evolve from a flat parent-session list into a workspace overview. Useful additions include nested pane counts/details, last updated time, shell/status indicators, confirm delete, and quick restore/open actions.
+Status: complete.
+
+The app menu now shows spaces with nested terminal tabs instead of a flat parent-session list.
+
+Completed outcome:
+
+- group terminal tabs by space;
+- show pane counts, status, and last-updated time;
+- create, rename, and delete spaces;
+- create, open, rename, restart, and delete tabs from the list;
+- confirm destructive tab and space actions;
+- surface orphan pane cleanup from the app menu.
 
 ## 8. Profiles
 

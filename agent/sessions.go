@@ -28,22 +28,28 @@ const (
 	sessionStatusRunning = "running"
 	sessionStatusExited  = "exited"
 	sessionStatusStale   = "stale"
+	defaultSpaceID       = "space-default"
+	defaultSpaceTitle    = "Default Space"
 	minSplitRatio        = 0.2
 	maxSplitRatio        = 0.8
+	workerLogTailLimit   = 8 * 1024
 )
 
 var sessionIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{2,63}$`)
 
 type sessionManager struct {
-	root          string
-	startWorkerFn func(*terminalSession) error
-	socketReadyFn func(context.Context, string) bool
+	root                    string
+	startWorkerFn           func(*terminalSession) error
+	socketReadyFn           func(context.Context, string) bool
+	workerReadyTimeout      time.Duration
+	workerReadyPollInterval time.Duration
 }
 
 type terminalSession struct {
 	ID          string    `json:"id"`
 	Title       string    `json:"title"`
 	CustomTitle bool      `json:"customTitle,omitempty"`
+	SpaceID     string    `json:"spaceId,omitempty"`
 	ParentID    string    `json:"parentId,omitempty"`
 	Shell       string    `json:"shell,omitempty"`
 	Status      string    `json:"status"`
@@ -54,10 +60,28 @@ type terminalSession struct {
 	PaneCount   int       `json:"paneCount,omitempty"`
 }
 
+type spaceMetadata struct {
+	ID        string    `json:"id"`
+	Title     string    `json:"title"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+type spaceResponse struct {
+	ID        string            `json:"id"`
+	Title     string            `json:"title"`
+	CreatedAt time.Time         `json:"createdAt"`
+	UpdatedAt time.Time         `json:"updatedAt"`
+	TabCount  int               `json:"tabCount"`
+	Tabs      []terminalSession `json:"tabs"`
+}
+
 type workspaceResponse struct {
 	Session  terminalSession   `json:"session"`
+	Tab      terminalSession   `json:"tab"`
 	Layout   sessionLayoutNode `json:"layout"`
 	Children []terminalSession `json:"children"`
+	Panes    []terminalSession `json:"panes"`
 }
 
 type sessionLayoutNode struct {
@@ -86,6 +110,10 @@ type titleRequest struct {
 	Title string `json:"title"`
 }
 
+type orphanCleanupResponse struct {
+	Deleted int `json:"deleted"`
+}
+
 func newSessionManager(root string) (*sessionManager, error) {
 	if root == "" {
 		root = defaultSessionDir()
@@ -93,7 +121,11 @@ func newSessionManager(root string) (*sessionManager, error) {
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return nil, err
 	}
-	return &sessionManager{root: root}, nil
+	return &sessionManager{
+		root:                    root,
+		workerReadyTimeout:      3 * time.Second,
+		workerReadyPollInterval: 40 * time.Millisecond,
+	}, nil
 }
 
 func defaultSessionDir() string {
@@ -107,6 +139,16 @@ func defaultSessionDir() string {
 }
 
 func (m *sessionManager) create(ctx context.Context) (*terminalSession, error) {
+	return m.createTab(ctx, defaultSpaceID)
+}
+
+func (m *sessionManager) createTab(ctx context.Context, spaceID string) (*terminalSession, error) {
+	if spaceID == "" {
+		spaceID = defaultSpaceID
+	}
+	if _, err := m.readSpace(spaceID); err != nil {
+		return nil, err
+	}
 	id, err := randomSessionID()
 	if err != nil {
 		return nil, err
@@ -115,6 +157,7 @@ func (m *sessionManager) create(ctx context.Context) (*terminalSession, error) {
 	session := &terminalSession{
 		ID:        id,
 		Title:     "Terminal",
+		SpaceID:   spaceID,
 		Status:    sessionStatusStale,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -130,6 +173,117 @@ func (m *sessionManager) create(ctx context.Context) (*terminalSession, error) {
 		return nil, err
 	}
 	return m.ensureRunning(ctx, id)
+}
+
+func (m *sessionManager) createSpace(title string) (*spaceResponse, error) {
+	spaces, err := m.readSpaces()
+	if err != nil {
+		return nil, err
+	}
+	id, err := randomSpaceID()
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	space := spaceMetadata{
+		ID:        id,
+		Title:     normalizedSpaceTitle(id, title),
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	spaces = append(spaces, space)
+	if err := m.writeSpaces(spaces); err != nil {
+		return nil, err
+	}
+	return space.withTabs(nil), nil
+}
+
+func (m *sessionManager) updateSpaceTitle(ctx context.Context, id, title string) (*spaceResponse, error) {
+	spaces, err := m.readSpaces()
+	if err != nil {
+		return nil, err
+	}
+	for i := range spaces {
+		if spaces[i].ID != id {
+			continue
+		}
+		spaces[i].Title = normalizedSpaceTitle(id, title)
+		spaces[i].UpdatedAt = time.Now().UTC()
+		if err := m.writeSpaces(spaces); err != nil {
+			return nil, err
+		}
+		return m.space(ctx, id)
+	}
+	return nil, fmt.Errorf("unknown space id %q", id)
+}
+
+func (m *sessionManager) deleteSpace(ctx context.Context, id string) error {
+	if id == defaultSpaceID {
+		return fmt.Errorf("cannot delete default space")
+	}
+	spaces, err := m.readSpaces()
+	if err != nil {
+		return err
+	}
+	index := -1
+	for i := range spaces {
+		if spaces[i].ID == id {
+			index = i
+			break
+		}
+	}
+	if index == -1 {
+		return fmt.Errorf("unknown space id %q", id)
+	}
+	tabs, err := m.list(ctx)
+	if err != nil {
+		return err
+	}
+	for _, tab := range tabs {
+		if tab.SpaceID == id {
+			return fmt.Errorf("space %q still has tabs", id)
+		}
+	}
+	spaces = append(spaces[:index], spaces[index+1:]...)
+	return m.writeSpaces(spaces)
+}
+
+func (m *sessionManager) listSpaces(ctx context.Context) ([]spaceResponse, error) {
+	spaces, err := m.readSpaces()
+	if err != nil {
+		return nil, err
+	}
+	tabs, err := m.list(ctx)
+	if err != nil {
+		return nil, err
+	}
+	tabsBySpace := map[string][]terminalSession{}
+	for _, tab := range tabs {
+		tabsBySpace[tab.SpaceID] = append(tabsBySpace[tab.SpaceID], tab)
+	}
+	responses := make([]spaceResponse, 0, len(spaces))
+	for _, space := range spaces {
+		responses = append(responses, *space.withTabs(tabsBySpace[space.ID]))
+	}
+	return responses, nil
+}
+
+func (m *sessionManager) space(ctx context.Context, id string) (*spaceResponse, error) {
+	space, err := m.readSpace(id)
+	if err != nil {
+		return nil, err
+	}
+	tabs, err := m.list(ctx)
+	if err != nil {
+		return nil, err
+	}
+	spaceTabs := make([]terminalSession, 0, len(tabs))
+	for _, tab := range tabs {
+		if tab.SpaceID == id {
+			spaceTabs = append(spaceTabs, tab)
+		}
+	}
+	return space.withTabs(spaceTabs), nil
 }
 
 func (m *sessionManager) list(ctx context.Context) ([]terminalSession, error) {
@@ -152,9 +306,10 @@ func (m *sessionManager) list(ctx context.Context) ([]terminalSession, error) {
 		if session.ParentID != "" {
 			continue
 		}
-		if !m.socketReady(ctx, session.Socket) && session.Status == sessionStatusRunning {
-			session.Status = sessionStatusStale
+		if err := m.ensureTabSpace(session); err != nil {
+			return nil, err
 		}
+		m.refreshSessionStatus(ctx, session)
 		layout, err := m.ensureLayout(session.ID)
 		if err == nil {
 			session.PaneCount = countLayoutLeaves(layout)
@@ -195,14 +350,19 @@ func (m *sessionManager) ensureRunning(ctx context.Context, id string) (*termina
 	if session.Socket == "" {
 		session.Socket = m.socketPath(id)
 	}
+	if session.ParentID == "" {
+		if err := m.ensureTabSpace(session); err != nil {
+			return nil, err
+		}
+	}
 	if m.socketReady(ctx, session.Socket) {
 		return session, nil
 	}
 	_ = os.Remove(session.Socket)
 	if err := m.startWorker(session); err != nil {
-		return nil, err
+		return nil, m.workerErrorWithLog(id, fmt.Sprintf("session worker %q start command failed: %v", id, err))
 	}
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(m.workerReadyTimeout)
 	for time.Now().Before(deadline) {
 		if m.socketReady(ctx, session.Socket) {
 			session.Status = sessionStatusRunning
@@ -213,10 +373,19 @@ func (m *sessionManager) ensureRunning(ctx context.Context, id string) (*termina
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-time.After(40 * time.Millisecond):
+		case <-time.After(m.workerReadyPollInterval):
 		}
 	}
-	return nil, fmt.Errorf("session worker %q did not become ready", id)
+	return nil, m.workerErrorWithLog(id, fmt.Sprintf("session worker %q readiness timed out", id))
+}
+
+func (m *sessionManager) refreshSessionStatus(ctx context.Context, session *terminalSession) {
+	if session.Status != sessionStatusRunning || m.socketReady(ctx, session.Socket) {
+		return
+	}
+	session.Status = sessionStatusStale
+	session.UpdatedAt = time.Now().UTC()
+	_ = m.writeMetadata(session)
 }
 
 func (m *sessionManager) stop(ctx context.Context, id string) error {
@@ -246,6 +415,127 @@ func (m *sessionManager) stop(ctx context.Context, id string) error {
 	}
 }
 
+func (m *sessionManager) restart(ctx context.Context, id string) (*terminalSession, error) {
+	session, err := m.readMetadata(id)
+	if err != nil {
+		return nil, err
+	}
+	_ = m.stop(ctx, id)
+	deadline := time.Now().Add(800 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if !m.socketReady(ctx, session.Socket) {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(40 * time.Millisecond):
+		}
+	}
+	_ = os.Remove(session.Socket)
+	_ = os.Remove(m.capturePath(id))
+	session.Status = sessionStatusStale
+	session.PID = 0
+	session.UpdatedAt = time.Now().UTC()
+	if err := m.writeMetadata(session); err != nil {
+		return nil, err
+	}
+	return m.ensureRunning(ctx, id)
+}
+
+func (m *sessionManager) restartTab(ctx context.Context, id string) (*workspaceResponse, error) {
+	workspace, err := m.workspace(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	for _, leaf := range layoutLeaves(&workspace.Layout) {
+		if _, err := m.restart(ctx, leaf); err != nil {
+			return nil, err
+		}
+	}
+	return m.workspace(ctx, id)
+}
+
+func (m *sessionManager) listOrphanPaneSessions(ctx context.Context) ([]terminalSession, error) {
+	entries, err := os.ReadDir(m.root)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	orphans := []terminalSession{}
+	for _, entry := range entries {
+		if !entry.IsDir() || !validSessionID(entry.Name()) {
+			continue
+		}
+		session, err := m.readMetadata(entry.Name())
+		if err != nil {
+			continue
+		}
+		orphan, err := m.isOrphanPaneSession(session)
+		if err != nil {
+			return nil, err
+		}
+		if !orphan {
+			continue
+		}
+		m.refreshSessionStatus(ctx, session)
+		orphans = append(orphans, *session)
+	}
+	return orphans, nil
+}
+
+func (m *sessionManager) isOrphanPaneSession(session *terminalSession) (bool, error) {
+	if session.ParentID == "" {
+		return false, nil
+	}
+	if _, err := m.readMetadata(session.ParentID); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return true, nil
+		}
+		return false, err
+	}
+	layout, err := m.readLayout(session.ParentID)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return true, nil
+		}
+		return false, err
+	}
+	return !layoutContains(layout, session.ID), nil
+}
+
+func (m *sessionManager) deleteOrphanPaneSessions(ctx context.Context) (int, error) {
+	orphans, err := m.listOrphanPaneSessions(ctx)
+	if err != nil {
+		return 0, err
+	}
+	deleted := 0
+	for _, session := range orphans {
+		current, err := m.readMetadata(session.ID)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return deleted, err
+		}
+		orphan, err := m.isOrphanPaneSession(current)
+		if err != nil {
+			return deleted, err
+		}
+		if !orphan {
+			continue
+		}
+		_ = m.stop(ctx, current.ID)
+		if err := os.RemoveAll(m.sessionDir(current.ID)); err != nil {
+			return deleted, err
+		}
+		deleted++
+	}
+	return deleted, nil
+}
+
 func (m *sessionManager) delete(ctx context.Context, id string) error {
 	session, err := m.readMetadata(id)
 	if err != nil {
@@ -273,7 +563,7 @@ func (m *sessionManager) startSessionWorker(session *terminalSession) error {
 	if err != nil {
 		return err
 	}
-	logPath := filepath.Join(m.sessionDir(session.ID), "worker.log")
+	logPath := m.workerLogPath(session.ID)
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return err
@@ -342,6 +632,184 @@ func (m *sessionManager) socketPath(id string) string {
 	return filepath.Join(m.sessionDir(id), "worker.sock")
 }
 
+func (m *sessionManager) capturePath(id string) string {
+	return filepath.Join(m.sessionDir(id), "capture.log")
+}
+
+func (m *sessionManager) workerLogPath(id string) string {
+	return filepath.Join(m.sessionDir(id), "worker.log")
+}
+
+func (m *sessionManager) recentWorkerLog(id string) string {
+	tail, err := readFileTail(m.workerLogPath(id), workerLogTailLimit)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(tail)
+}
+
+func (m *sessionManager) workerErrorWithLog(id, message string) error {
+	if logTail := m.recentWorkerLog(id); logTail != "" {
+		return fmt.Errorf("%s; recent worker log: %s", message, logTail)
+	}
+	return errors.New(message)
+}
+
+func readFileTail(path string, limit int64) (string, error) {
+	if limit <= 0 {
+		return "", nil
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		return "", err
+	}
+	size := info.Size()
+	offset := int64(0)
+	if size > limit {
+		offset = size - limit
+	}
+	if _, err := file.Seek(offset, io.SeekStart); err != nil {
+		return "", err
+	}
+	data, err := io.ReadAll(io.LimitReader(file, limit))
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func (m *sessionManager) spacesPath() string {
+	return filepath.Join(m.root, "spaces.json")
+}
+
+func (m *sessionManager) readSpace(id string) (*spaceMetadata, error) {
+	spaces, err := m.readSpaces()
+	if err != nil {
+		return nil, err
+	}
+	for i := range spaces {
+		if spaces[i].ID == id {
+			return &spaces[i], nil
+		}
+	}
+	return nil, fmt.Errorf("unknown space id %q", id)
+}
+
+func (m *sessionManager) readSpaces() ([]spaceMetadata, error) {
+	f, err := os.Open(m.spacesPath())
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return []spaceMetadata{defaultSpaceMetadata(time.Now().UTC())}, nil
+		}
+		return nil, err
+	}
+	defer f.Close()
+
+	var spaces []spaceMetadata
+	if err := json.NewDecoder(f).Decode(&spaces); err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	hasDefault := false
+	for i := range spaces {
+		if spaces[i].ID == "" || !validSessionID(spaces[i].ID) {
+			return nil, fmt.Errorf("invalid space id %q", spaces[i].ID)
+		}
+		if spaces[i].Title == "" {
+			spaces[i].Title = normalizedSpaceTitle(spaces[i].ID, "")
+		}
+		if spaces[i].CreatedAt.IsZero() {
+			spaces[i].CreatedAt = now
+		}
+		if spaces[i].UpdatedAt.IsZero() {
+			spaces[i].UpdatedAt = spaces[i].CreatedAt
+		}
+		if spaces[i].ID == defaultSpaceID {
+			hasDefault = true
+		}
+	}
+	if !hasDefault {
+		spaces = append([]spaceMetadata{defaultSpaceMetadata(now)}, spaces...)
+	}
+	return spaces, nil
+}
+
+func (m *sessionManager) writeSpaces(spaces []spaceMetadata) error {
+	if len(spaces) == 0 {
+		spaces = []spaceMetadata{defaultSpaceMetadata(time.Now().UTC())}
+	}
+	hasDefault := false
+	for _, space := range spaces {
+		if !validSessionID(space.ID) {
+			return fmt.Errorf("invalid space id %q", space.ID)
+		}
+		if space.ID == defaultSpaceID {
+			hasDefault = true
+		}
+	}
+	if !hasDefault {
+		return fmt.Errorf("default space is required")
+	}
+	tmp := m.spacesPath() + ".tmp"
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+	encodeErr := enc.Encode(spaces)
+	closeErr := f.Close()
+	if encodeErr != nil {
+		_ = os.Remove(tmp)
+		return encodeErr
+	}
+	if closeErr != nil {
+		_ = os.Remove(tmp)
+		return closeErr
+	}
+	return os.Rename(tmp, m.spacesPath())
+}
+
+func (space spaceMetadata) withTabs(tabs []terminalSession) *spaceResponse {
+	if tabs == nil {
+		tabs = []terminalSession{}
+	}
+	return &spaceResponse{
+		ID:        space.ID,
+		Title:     space.Title,
+		CreatedAt: space.CreatedAt,
+		UpdatedAt: space.UpdatedAt,
+		TabCount:  len(tabs),
+		Tabs:      tabs,
+	}
+}
+
+func defaultSpaceMetadata(now time.Time) spaceMetadata {
+	return spaceMetadata{
+		ID:        defaultSpaceID,
+		Title:     defaultSpaceTitle,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+}
+
+func normalizedSpaceTitle(id, title string) string {
+	title = strings.TrimSpace(title)
+	if title != "" {
+		return title
+	}
+	if id == defaultSpaceID {
+		return defaultSpaceTitle
+	}
+	return "New Space"
+}
+
 func (m *sessionManager) readMetadata(id string) (*terminalSession, error) {
 	if !validSessionID(id) {
 		return nil, fmt.Errorf("invalid session id %q", id)
@@ -362,6 +830,15 @@ func (m *sessionManager) readMetadata(id string) (*terminalSession, error) {
 		session.Socket = m.socketPath(id)
 	}
 	return &session, nil
+}
+
+func (m *sessionManager) ensureTabSpace(session *terminalSession) error {
+	if session.ParentID != "" || session.SpaceID != "" {
+		return nil
+	}
+	session.SpaceID = defaultSpaceID
+	session.UpdatedAt = time.Now().UTC()
+	return m.writeMetadata(session)
 }
 
 func (m *sessionManager) writeMetadata(session *terminalSession) error {
@@ -451,6 +928,10 @@ func (m *sessionManager) workspace(ctx context.Context, id string) (*workspaceRe
 	if parent.ParentID != "" {
 		return nil, fmt.Errorf("session %q is not a parent", id)
 	}
+	if err := m.ensureTabSpace(parent); err != nil {
+		return nil, err
+	}
+	m.refreshSessionStatus(ctx, parent)
 	layout, err := m.ensureLayout(id)
 	if err != nil {
 		return nil, err
@@ -461,13 +942,11 @@ func (m *sessionManager) workspace(ctx context.Context, id string) (*workspaceRe
 		if err != nil {
 			continue
 		}
-		if !m.socketReady(ctx, session.Socket) && session.Status == sessionStatusRunning {
-			session.Status = sessionStatusStale
-		}
+		m.refreshSessionStatus(ctx, session)
 		children = append(children, *session)
 	}
 	parent.PaneCount = len(children)
-	return &workspaceResponse{Session: *parent, Layout: *layout, Children: children}, nil
+	return &workspaceResponse{Session: *parent, Tab: *parent, Layout: *layout, Children: children, Panes: children}, nil
 }
 
 func (m *sessionManager) createSplit(ctx context.Context, parentID, targetID, direction string) (*workspaceResponse, error) {
@@ -582,7 +1061,15 @@ func (m *sessionManager) detachPane(ctx context.Context, parentID, sessionID str
 	if err != nil {
 		return nil, err
 	}
+	parent, err := m.readMetadata(parentID)
+	if err != nil {
+		return nil, err
+	}
 	session.ParentID = ""
+	session.SpaceID = parent.SpaceID
+	if session.SpaceID == "" {
+		session.SpaceID = defaultSpaceID
+	}
 	session.UpdatedAt = time.Now().UTC()
 	if err := m.writeMetadata(session); err != nil {
 		return nil, err
@@ -642,12 +1129,265 @@ func (s *server) handleTerminalSessions(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+func (s *server) handleSpaces(w http.ResponseWriter, r *http.Request) {
+	if !s.validRequestOrigin(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		spaces, err := s.sessions.listSpaces(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, spaces)
+	case http.MethodPost:
+		var req titleRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		space, err := s.sessions.createSpace(req.Title)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusCreated, space)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *server) handleSpace(w http.ResponseWriter, r *http.Request) {
+	if !s.validRequestOrigin(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/spaces/"), "/"), "/")
+	if len(parts) == 0 || parts[0] == "" {
+		http.Error(w, "invalid space id", http.StatusBadRequest)
+		return
+	}
+	spaceID := parts[0]
+	switch r.Method {
+	case http.MethodGet:
+		if len(parts) != 1 {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		space, err := s.sessions.space(r.Context(), spaceID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		writeJSON(w, http.StatusOK, space)
+	case http.MethodPost:
+		if len(parts) != 2 || parts[1] != "tabs" {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		session, err := s.sessions.createTab(r.Context(), spaceID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		writeJSON(w, http.StatusCreated, session)
+	case http.MethodPatch:
+		if len(parts) != 1 {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		var req titleRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		space, err := s.sessions.updateSpaceTitle(r.Context(), spaceID, req.Title)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		writeJSON(w, http.StatusOK, space)
+	case http.MethodDelete:
+		if len(parts) != 1 {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		if err := s.sessions.deleteSpace(r.Context(), spaceID); err != nil {
+			status := http.StatusNotFound
+			if spaceID == defaultSpaceID || strings.Contains(err.Error(), "still has tabs") {
+				status = http.StatusConflict
+			}
+			http.Error(w, err.Error(), status)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *server) handleTab(w http.ResponseWriter, r *http.Request) {
+	if !s.validRequestOrigin(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/tabs/"), "/"), "/")
+	if len(parts) == 0 || !validSessionID(parts[0]) {
+		http.Error(w, "invalid tab id", http.StatusBadRequest)
+		return
+	}
+	id := parts[0]
+	switch r.Method {
+	case http.MethodGet:
+		if len(parts) != 1 {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		workspace, err := s.sessions.workspace(r.Context(), id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, workspace)
+	case http.MethodPost:
+		if len(parts) != 2 {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		switch parts[1] {
+		case "splits":
+			var req splitRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+				http.Error(w, "invalid request body", http.StatusBadRequest)
+				return
+			}
+			workspace, err := s.sessions.createSplit(r.Context(), id, req.TargetSessionID, req.Direction)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, http.StatusCreated, workspace)
+		case "restart":
+			workspace, err := s.sessions.restartTab(r.Context(), id)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, http.StatusOK, workspace)
+		default:
+			http.Error(w, "not found", http.StatusNotFound)
+		}
+	case http.MethodPatch:
+		if len(parts) == 1 {
+			var req titleRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "invalid request body", http.StatusBadRequest)
+				return
+			}
+			session, err := s.sessions.updateTitle(id, req.Title)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, http.StatusOK, session)
+			return
+		}
+		if len(parts) != 2 || parts[1] != "layout" {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		var req layoutRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		workspace, err := s.sessions.updateLayout(r.Context(), id, &req.Layout)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, http.StatusOK, workspace)
+	case http.MethodDelete:
+		if len(parts) != 1 {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		if err := s.sessions.delete(r.Context(), id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *server) handlePane(w http.ResponseWriter, r *http.Request) {
+	if !s.validRequestOrigin(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/panes/"), "/"), "/")
+	if len(parts) == 0 || !validSessionID(parts[0]) {
+		http.Error(w, "invalid pane id", http.StatusBadRequest)
+		return
+	}
+	id := parts[0]
+	switch r.Method {
+	case http.MethodPatch:
+		if len(parts) != 1 {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		var req titleRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		session, err := s.sessions.updateTitle(id, req.Title)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, session)
+	case http.MethodPost:
+		if len(parts) != 2 || parts[1] != "restart" {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		session, err := s.sessions.restart(r.Context(), id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, session)
+	case http.MethodDelete:
+		if len(parts) != 1 {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		if err := s.sessions.delete(r.Context(), id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
 func (s *server) handleTerminalSession(w http.ResponseWriter, r *http.Request) {
 	if !s.validRequestOrigin(r) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/terminal-sessions/"), "/"), "/")
+	if len(parts) == 1 && parts[0] == "orphans" {
+		s.handleSessionOrphans(w, r)
+		return
+	}
 	if len(parts) == 0 || !validSessionID(parts[0]) {
 		http.Error(w, "invalid session id", http.StatusBadRequest)
 		return
@@ -743,6 +1483,27 @@ func (s *server) handleTerminalSession(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *server) handleSessionOrphans(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		orphans, err := s.sessions.listOrphanPaneSessions(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, orphans)
+	case http.MethodDelete:
+		deleted, err := s.sessions.deleteOrphanPaneSessions(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, orphanCleanupResponse{Deleted: deleted})
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
 func (s *server) runSessionPTY(ctx context.Context, ws *websocket.Conn, sessionID string, cols, rows int, restore bool) error {
 	if sessionID == "" {
 		session, err := s.sessions.create(ctx)
@@ -759,8 +1520,9 @@ func (s *server) runSessionPTY(ctx context.Context, ws *websocket.Conn, sessionI
 	}
 	conn, err := net.DialTimeout("unix", session.Socket, 2*time.Second)
 	if err != nil {
-		_ = sendServerMessage(ctx, ws, serverMessage{Type: "error", Message: "failed to attach session", Errors: []string{err.Error()}})
-		return err
+		attachErr := s.sessions.workerErrorWithLog(session.ID, fmt.Sprintf("session worker %q socket attach failed: %v", session.ID, err))
+		_ = sendServerMessage(ctx, ws, serverMessage{Type: "error", Message: "failed to attach session", Errors: []string{attachErr.Error()}})
+		return attachErr
 	}
 	defer conn.Close()
 
@@ -872,6 +1634,14 @@ func randomSessionID() (string, error) {
 		return "", err
 	}
 	return "term-" + hex.EncodeToString(buf), nil
+}
+
+func randomSpaceID() (string, error) {
+	buf := make([]byte, 8)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return "space-" + hex.EncodeToString(buf), nil
 }
 
 func validSessionID(id string) bool {

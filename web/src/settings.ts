@@ -10,6 +10,8 @@ export const DEFAULT_SETTINGS: TerminalSettings = {
   fontSize: 15,
   scrollback: 5000,
   cursorBlink: true,
+  accent: "green",
+  density: "comfortable",
   theme: "dark",
   scrollSensitivity: 1,
 };
@@ -25,6 +27,11 @@ export function loadSettings(): TerminalSettings {
 
 export function saveSettings(nextSettings: TerminalSettings): void {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(nextSettings));
+}
+
+export function applyAppAppearance(nextSettings: TerminalSettings): void {
+  document.documentElement.dataset.accent = nextSettings.accent;
+  document.documentElement.dataset.density = nextSettings.density;
 }
 
 export async function loadCustomFont(nextSettings: TerminalSettings): Promise<void> {
@@ -65,6 +72,8 @@ export function normalizeSettings(value: Partial<TerminalSettings> | Record<stri
   const fontSize = Number(value.fontSize);
   const scrollback = Number(value.scrollback);
   const scrollSensitivity = Number(value.scrollSensitivity);
+  const accent = value.accent === "blue" || value.accent === "amber" ? value.accent : "green";
+  const density = value.density === "compact" ? value.density : "comfortable";
   const theme = value.theme === "highContrast" || value.theme === "soft" ? value.theme : "dark";
   return {
     fontFamily: normalizeText(value.fontFamily, DEFAULT_SETTINGS.fontFamily, 160),
@@ -73,6 +82,8 @@ export function normalizeSettings(value: Partial<TerminalSettings> | Record<stri
     fontSize: Number.isFinite(fontSize) ? clamp(Math.round(fontSize), 12, 22) : DEFAULT_SETTINGS.fontSize,
     scrollback: [1000, 5000, 10000, 20000].includes(scrollback) ? scrollback : DEFAULT_SETTINGS.scrollback,
     cursorBlink: typeof value.cursorBlink === "boolean" ? value.cursorBlink : DEFAULT_SETTINGS.cursorBlink,
+    accent,
+    density,
     theme,
     scrollSensitivity: Number.isFinite(scrollSensitivity) ? clamp(scrollSensitivity, 0.5, 2) : DEFAULT_SETTINGS.scrollSensitivity,
   };

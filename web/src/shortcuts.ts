@@ -32,6 +32,14 @@ const CHROMEOS_SYSTEM_KEYS = new Set([
   "ZoomToggle",
 ]);
 
+export type PaneShortcut =
+  | "split-right"
+  | "split-down"
+  | "focus-previous"
+  | "focus-next"
+  | "close-pane"
+  | "detach-pane";
+
 export function shouldPassThroughSystemShortcut(event: KeyboardEvent): boolean {
   if (CHROMEOS_SYSTEM_KEYS.has(event.key) || CHROMEOS_SYSTEM_KEYS.has(event.code)) {
     return true;
@@ -56,4 +64,27 @@ export function shouldPassThroughSystemShortcut(event: KeyboardEvent): boolean {
   }
 
   return CTRL_BROWSER_CODES.has(event.code);
+}
+
+export function paneShortcutForEvent(event: KeyboardEvent): PaneShortcut | undefined {
+  if (!event.ctrlKey || !event.shiftKey || event.altKey || event.metaKey) {
+    return undefined;
+  }
+
+  switch (event.code) {
+    case "ArrowRight":
+      return "split-right";
+    case "ArrowDown":
+      return "split-down";
+    case "ArrowLeft":
+      return "focus-previous";
+    case "ArrowUp":
+      return "focus-next";
+    case "Backspace":
+      return "close-pane";
+    case "KeyD":
+      return "detach-pane";
+    default:
+      return undefined;
+  }
 }

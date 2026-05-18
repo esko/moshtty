@@ -12,19 +12,22 @@
 1. The agent starts on `127.0.0.1:8765` and creates a random session token.
 2. Chrome loads the PWA from the agent.
 3. The PWA calls `/api/health` and `/api/session`.
-4. The settings page lists parent workspaces through `/api/terminal-sessions`, or a terminal tab creates/opens a parent workspace.
-5. Each terminal pane opens `/pty?token=<token>&session=<session-id>&restore=<0|1>&cols=<cols>&rows=<rows>` as a WebSocket.
-6. The agent starts the worker for that durable session if needed, then forwards binary PTY output frames to the browser.
+4. The settings page lists spaces through `/api/spaces`; each space contains terminal tabs.
+5. A terminal tab loads through `/api/tabs/{id}` and owns its split layout plus pane sessions.
+6. Each terminal pane opens `/pty?token=<token>&session=<session-id>&restore=<0|1>&cols=<cols>&rows=<rows>` as a WebSocket.
+7. The agent starts the worker for that durable session if needed, then forwards binary PTY output frames to the browser.
 
 ## Sessions
 
 Durable session state lives under the agent session directory, which defaults to `$XDG_STATE_HOME/crostini-ghostty/sessions` or `~/.local/state/crostini-ghostty/sessions`.
 
-A top-level session is a parent workspace. Its `layout.json` stores a split tree. Each leaf points at a session id, and child pane metadata stores `parentId` so child panes stay hidden from the top-level session list. Detaching a child pane clears `parentId` and writes a new single-pane layout, which promotes it to a parent workspace.
+A space is a durable grouping for terminal tabs. Space metadata is stored in `spaces.json` under the session root. The agent creates `space-default` automatically and lazily assigns existing parent sessions to it.
+
+A terminal tab is a parent session. Its `layout.json` stores a split tree. Each leaf points at a pane session id, and child pane metadata stores `parentId` so child panes stay hidden from space tab lists. Detaching a child pane clears `parentId`, assigns the default space if needed, and writes a new single-pane layout, which promotes it to a terminal tab.
 
 The current layout supports horizontal and vertical splits with persisted ratios. The UI creates 50/50 splits by default, then stores divider resize changes through the layout API.
 
-Session metadata stores display titles for both workspaces and panes. Custom titles are preserved across worker updates; sessions without a custom title use the shell basename when available or `Terminal`.
+Session metadata stores display titles for both tabs and panes. Custom titles are preserved across worker updates; sessions without a custom title use the shell basename when available or `Terminal`.
 
 See `docs/sessions.md` for API details.
 

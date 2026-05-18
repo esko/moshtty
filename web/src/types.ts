@@ -5,9 +5,11 @@ export type TerminalSession = {
   id: string;
   title: string;
   customTitle?: boolean;
+  spaceId?: string;
   parentId?: string;
   status: string;
   createdAt: string;
+  updatedAt?: string;
   paneCount?: number;
 };
 
@@ -23,8 +25,24 @@ export type SessionLayoutNode =
 
 export type Workspace = {
   session: TerminalSession;
+  tab?: TerminalSession;
   layout: SessionLayoutNode;
   children: TerminalSession[];
+  panes?: TerminalSession[];
+};
+
+export type Space = {
+  id: string;
+  title: string;
+  customTitle?: boolean;
+  createdAt: string;
+  updatedAt: string;
+  tabCount: number;
+  tabs: TerminalSession[];
+};
+
+export type OrphanCleanup = {
+  deleted: number;
 };
 
 export type AgentMessage = {
@@ -41,6 +59,8 @@ export type TerminalSettings = {
   fontSize: number;
   scrollback: number;
   cursorBlink: boolean;
+  accent: "green" | "blue" | "amber";
+  density: "comfortable" | "compact";
   theme: "dark" | "highContrast" | "soft";
   scrollSensitivity: number;
 };

@@ -76,16 +76,23 @@ bun run test:visual:glyphs
 
 ## Protocol
 
-The browser creates and manages durable terminal workspaces through the session API:
+The browser creates and manages durable terminal tabs through the spaces API:
 
-- `GET /api/terminal-sessions` lists parent workspaces.
-- `POST /api/terminal-sessions` creates a parent workspace.
-- `GET /api/terminal-sessions/{id}` returns the workspace layout and pane sessions.
-- `PATCH /api/terminal-sessions/{id}` renames a workspace or pane; an empty title resets automatic naming.
-- `POST /api/terminal-sessions/{id}/splits` creates a child pane inside a parent workspace.
-- `POST /api/terminal-sessions/{id}/detach` promotes a child pane into its own parent workspace.
-- `PATCH /api/terminal-sessions/{id}/layout` persists split-pane ratios.
-- `DELETE /api/terminal-sessions/{id}` removes a parent workspace tree or a child pane.
+- `GET /api/spaces` lists spaces and their terminal tabs.
+- `POST /api/spaces` creates a space.
+- `PATCH /api/spaces/{spaceId}` renames a space.
+- `DELETE /api/spaces/{spaceId}` removes an empty non-default space.
+- `POST /api/spaces/{spaceId}/tabs` creates a terminal tab in a space.
+- `GET /api/tabs/{tabId}` returns the tab layout and pane sessions.
+- `PATCH /api/tabs/{tabId}` renames a tab; an empty title resets automatic naming.
+- `POST /api/tabs/{tabId}/splits` creates a child pane inside a tab.
+- `PATCH /api/tabs/{tabId}/layout` persists split-pane ratios.
+- `POST /api/tabs/{tabId}/restart` restarts all panes in a tab.
+- `PATCH /api/panes/{paneId}` renames a pane.
+- `POST /api/panes/{paneId}/restart` restarts one pane.
+- `DELETE /api/tabs/{tabId}` or `DELETE /api/panes/{paneId}` removes a tab tree or child pane.
+
+The legacy `/api/terminal-sessions` routes remain as compatibility wrappers.
 
 Terminal panes attach to a durable session with:
 
@@ -122,5 +129,5 @@ Agent to browser:
 
 - `web/scripts/patch-ghostty-web.ts` applies local renderer/input patches to the pinned `ghostty-web` dependency after install.
 - `web/visual/glyph-gap.html` and `bun run test:visual:glyphs` cover the fractional-DPR glyph gap regression.
-- The PWA opts into ChromeOS tabbed application mode. Use ChromeOS's native tab strip or `Ctrl+T` and `Ctrl+W` for app tabs. Terminal panes and split layouts are managed inside each workspace.
+- The PWA opts into ChromeOS tabbed application mode. Use ChromeOS's native tab strip or `Ctrl+T` and `Ctrl+W` for app tabs. Terminal panes and split layouts are managed inside each terminal tab.
 - See `docs/architecture.md`, `docs/sessions.md`, `docs/roadmap.md`, `docs/fonts.md`, and `docs/systemd-user.md` for implementation details.

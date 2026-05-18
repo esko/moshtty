@@ -3,6 +3,7 @@ import { getAgentToken, getJSON, patchJSON, postJSON, ptyURL } from "./api";
 import { concatBytes, escapeAttribute, escapeHTML, formatNumber, pathBaseName, requiredElement, socketState } from "./dom";
 import { applySplitRatio, firstLeaf, layoutLeaves, ratioFromKeyboard, ratioFromPointer, splitRatio } from "./layout";
 import {
+  applyAppAppearance,
   DEFAULT_SETTINGS,
   loadCustomFont,
   loadSettings,
@@ -11,12 +12,13 @@ import {
   terminalFontFamily,
   terminalTheme,
 } from "./settings";
-import { shouldPassThroughSystemShortcut } from "./shortcuts";
-import type { AgentMessage, SessionLayoutNode, TerminalSession, TerminalSettings, Workspace } from "./types";
+import { paneShortcutForEvent, shouldPassThroughSystemShortcut, type PaneShortcut } from "./shortcuts";
+import type { AgentMessage, OrphanCleanup, SessionLayoutNode, Space, TerminalSession, TerminalSettings, Workspace } from "./types";
 import "./styles.css";
 
 const APP_TITLE = "Crostini Ghostty";
 const DEBUG_SHELL_PARAM = "debug-shell";
+const DEFAULT_SPACE_ID = "space-default";
 
 const appRoot = requiredElement<HTMLElement>("#app");
 const settingsRoot = requiredElement<HTMLElement>("#settings");
@@ -29,10 +31,12 @@ const diagnosticsPanel = requiredElement<HTMLElement>("#diagnostics");
 const diagnosticsList = requiredElement<HTMLElement>("#diagnosticsList");
 const contextMenu = requiredElement<HTMLElement>("#terminalContextMenu");
 const renameDialog = requiredElement<HTMLDialogElement>("#renameDialog");
+const renameDialogTitle = requiredElement<HTMLElement>("#renameDialogTitle");
 const renameInput = requiredElement<HTMLInputElement>("#renameInput");
 const renameResetButton = requiredElement<HTMLButtonElement>("#renameReset");
 
 let settings = loadSettings();
+applyAppAppearance(settings);
 let currentWorkspace: Workspace | null = null;
 let parentSessionId = "";
 let activePaneId = "";
@@ -42,6 +46,7 @@ let activeResize: SplitResizeState | null = null;
 let terminalRuntimeReady = false;
 let debugShell: DebugShellState | null = null;
 let listedSessions: TerminalSession[] = [];
+let listedSpaces: Space[] = [];
 const panes = new Map<string, TerminalPane>();
 
 type SplitNode = Extract<SessionLayoutNode, { type: "split" }>;
@@ -88,6 +93,14 @@ document.addEventListener("pointerdown", (event) => {
   hideContextMenu();
 });
 
+document.addEventListener(
+  "keydown",
+  (event) => {
+    if (handlePaneShortcut(event)) return;
+  },
+  { capture: true },
+);
+
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") hideContextMenu();
 });
@@ -118,6 +131,11 @@ contextMenu.addEventListener("click", (event) => {
 
 renameDialog.addEventListener("close", () => {
   if (renameDialog.returnValue !== "save") return;
+  const spaceId = renameDialog.dataset.spaceId;
+  if (spaceId) {
+    void renameSpace(spaceId, renameInput.value);
+    return;
+  }
   const sessionId = renameDialog.dataset.sessionId;
   if (!sessionId) return;
   void renameSession(sessionId, renameInput.value);
@@ -356,7 +374,7 @@ async function renderCurrentRoute(): Promise<void> {
   document.title = `Terminal - ${APP_TITLE}`;
   await ensureTerminalRuntime();
   parentSessionId = await ensureParentSession();
-  const workspace = await getJSON<Workspace>(`/api/terminal-sessions/${encodeURIComponent(parentSessionId)}`);
+  const workspace = await getJSON<Workspace>(`/api/tabs/${encodeURIComponent(parentSessionId)}`);
   renderWorkspace(workspace, firstLeaf(workspace.layout));
   updateDiagnosticsTimer();
   updateDebugShellFromLocation("Terminal");
@@ -475,7 +493,7 @@ function finishSplitResize(persist: boolean): void {
 async function persistCurrentLayout(): Promise<void> {
   if (!parentSessionId || !currentWorkspace) return;
   try {
-    const workspace = await patchJSON<Workspace>(`/api/terminal-sessions/${encodeURIComponent(parentSessionId)}/layout`, {
+    const workspace = await patchJSON<Workspace>(`/api/tabs/${encodeURIComponent(parentSessionId)}/layout`, {
       layout: currentWorkspace.layout,
     });
     currentWorkspace.session = workspace.session;
@@ -490,7 +508,7 @@ async function reloadCurrentWorkspace(): Promise<void> {
   if (!parentSessionId) return;
   try {
     const focusId = activePaneId;
-    const workspace = await getJSON<Workspace>(`/api/terminal-sessions/${encodeURIComponent(parentSessionId)}`);
+    const workspace = await getJSON<Workspace>(`/api/tabs/${encodeURIComponent(parentSessionId)}`);
     renderWorkspace(workspace, focusId);
   } catch (error) {
     console.error("reload workspace failed", error);
@@ -526,8 +544,17 @@ async function handleContextAction(action: string): Promise<void> {
     case "rename":
       openRenameDialog(activePaneId);
       break;
+    case "duplicate-pane":
+      await splitActivePane("horizontal");
+      break;
+    case "copy-pane-id":
+      await copyToClipboard(activePaneId);
+      break;
     case "new-tab":
       openAppURL("/terminal.html", { newTab: true });
+      break;
+    case "copy-tab-id":
+      await copyToClipboard(parentSessionId);
       break;
     case "split-right":
     case "split":
@@ -536,11 +563,20 @@ async function handleContextAction(action: string): Promise<void> {
     case "split-down":
       await splitActivePane("vertical");
       break;
+    case "restart-pane":
+      await restartActivePane();
+      break;
+    case "restart-tab":
+      await restartCurrentTab();
+      break;
     case "detach":
       await detachActivePane();
       break;
     case "close-pane":
       await closeActivePane();
+      break;
+    case "close-tab":
+      await closeCurrentTab();
       break;
     case "clear":
       activePane()?.term.clear();
@@ -551,10 +587,66 @@ async function handleContextAction(action: string): Promise<void> {
   }
 }
 
+function handlePaneShortcut(event: KeyboardEvent): boolean {
+  if (!shouldHandleAppShortcut(event)) return false;
+  const shortcut = paneShortcutForEvent(event);
+  if (!shortcut) return false;
+  event.preventDefault();
+  event.stopPropagation();
+  void runPaneShortcut(shortcut);
+  return true;
+}
+
+function shouldHandleAppShortcut(event: KeyboardEvent): boolean {
+  if (event.defaultPrevented || isSettingsRoute() || !currentWorkspace) return false;
+  if (document.querySelector("dialog[open]")) return false;
+  const target = event.target;
+  return !(target instanceof Element && isEditableShortcutTarget(target) && !terminalRoot.contains(target));
+}
+
+function isEditableShortcutTarget(target: Element): boolean {
+  if (target.closest("input, select, textarea")) return true;
+  const editable = target.closest<HTMLElement>("[contenteditable]");
+  return Boolean(editable?.isContentEditable);
+}
+
+async function runPaneShortcut(shortcut: PaneShortcut): Promise<void> {
+  switch (shortcut) {
+    case "split-right":
+      await splitActivePane("horizontal");
+      break;
+    case "split-down":
+      await splitActivePane("vertical");
+      break;
+    case "focus-previous":
+      focusAdjacentPane(-1);
+      break;
+    case "focus-next":
+      focusAdjacentPane(1);
+      break;
+    case "close-pane":
+      await closeActivePane();
+      break;
+    case "detach-pane":
+      await detachActivePane();
+      break;
+  }
+}
+
+function focusAdjacentPane(delta: -1 | 1): void {
+  if (!currentWorkspace) return;
+  const leaves = layoutLeaves(currentWorkspace.layout);
+  if (leaves.length === 0) return;
+  const index = leaves.indexOf(activePaneId);
+  const currentIndex = index >= 0 ? index : 0;
+  const nextIndex = (currentIndex + delta + leaves.length) % leaves.length;
+  setActivePane(leaves[nextIndex]);
+}
+
 async function splitActivePane(direction: "horizontal" | "vertical"): Promise<void> {
   const target = activePaneId || firstLeaf(currentWorkspace?.layout);
   if (!parentSessionId || !target) return;
-  const workspace = await postJSON<Workspace>(`/api/terminal-sessions/${encodeURIComponent(parentSessionId)}/splits`, {
+  const workspace = await postJSON<Workspace>(`/api/tabs/${encodeURIComponent(parentSessionId)}/splits`, {
     targetSessionId: target,
     direction,
   });
@@ -563,20 +655,43 @@ async function splitActivePane(direction: "horizontal" | "vertical"): Promise<vo
   renderWorkspace(workspace, focus);
 }
 
+async function restartActivePane(): Promise<void> {
+  if (!activePaneId) return;
+  const session = await postJSON<TerminalSession>(`/api/panes/${encodeURIComponent(activePaneId)}/restart`);
+  applySessionUpdate(session);
+  const pane = panes.get(activePaneId);
+  if (!pane) return;
+  pane.hasAttached = false;
+  pane.term.clear();
+  await pane.connect(false);
+}
+
+async function restartCurrentTab(): Promise<void> {
+  if (!parentSessionId) return;
+  const workspace = await postJSON<Workspace>(`/api/tabs/${encodeURIComponent(parentSessionId)}/restart`);
+  renderWorkspace(workspace, activePaneId || firstLeaf(workspace.layout));
+}
+
+async function copyToClipboard(value: string): Promise<void> {
+  if (!value) return;
+  await navigator.clipboard?.writeText(value);
+}
+
 async function detachActivePane(): Promise<void> {
   if (!parentSessionId || !activePaneId || activePaneId === parentSessionId) return;
   const session = await postJSON<TerminalSession>(`/api/terminal-sessions/${encodeURIComponent(parentSessionId)}/detach`, {
     sessionId: activePaneId,
   });
-  openAppURL(`/terminal.html?session=${encodeURIComponent(session.id)}`, { newTab: true });
-  const workspace = await getJSON<Workspace>(`/api/terminal-sessions/${encodeURIComponent(parentSessionId)}`);
+  openAppURL(`/terminal.html?tab=${encodeURIComponent(session.id)}`, { newTab: true });
+  const workspace = await getJSON<Workspace>(`/api/tabs/${encodeURIComponent(parentSessionId)}`);
   renderWorkspace(workspace, firstLeaf(workspace.layout));
 }
 
 async function closeActivePane(): Promise<void> {
   if (!activePaneId || !currentWorkspace) return;
   if (activePaneId === parentSessionId && layoutLeaves(currentWorkspace.layout).length > 1) return;
-  const response = await fetch(`/api/terminal-sessions/${encodeURIComponent(activePaneId)}`, {
+  const isTab = activePaneId === parentSessionId;
+  const response = await fetch(`/${isTab ? "api/tabs" : "api/panes"}/${encodeURIComponent(activePaneId)}`, {
     method: "DELETE",
     credentials: "same-origin",
   });
@@ -585,8 +700,19 @@ async function closeActivePane(): Promise<void> {
     window.close();
     return;
   }
-  const workspace = await getJSON<Workspace>(`/api/terminal-sessions/${encodeURIComponent(parentSessionId)}`);
+  const workspace = await getJSON<Workspace>(`/api/tabs/${encodeURIComponent(parentSessionId)}`);
   renderWorkspace(workspace, firstLeaf(workspace.layout));
+}
+
+async function closeCurrentTab(): Promise<void> {
+  if (!parentSessionId) return;
+  if (!window.confirm("Close this tab and all of its panes?")) return;
+  const response = await fetch(`/api/tabs/${encodeURIComponent(parentSessionId)}`, {
+    method: "DELETE",
+    credentials: "same-origin",
+  });
+  if (!response.ok) return;
+  window.close();
 }
 
 function setActivePane(sessionId: string): void {
@@ -621,7 +747,10 @@ function openMenuRenameDialog(sessionId: string): void {
 }
 
 function openRenameDialogForSession(session: TerminalSession): void {
+  delete renameDialog.dataset.spaceId;
   renameDialog.dataset.sessionId = session.id;
+  renameDialogTitle.textContent = "Rename tab";
+  renameResetButton.hidden = false;
   renameInput.value = session.customTitle ? session.title : "";
   renameInput.placeholder = sessionTitle(session);
   if (!renameDialog.open) renameDialog.showModal();
@@ -629,8 +758,22 @@ function openRenameDialogForSession(session: TerminalSession): void {
   renameInput.select();
 }
 
+function openRenameDialogForSpace(space: Space): void {
+  delete renameDialog.dataset.sessionId;
+  renameDialog.dataset.spaceId = space.id;
+  renameDialogTitle.textContent = "Rename space";
+  renameResetButton.hidden = true;
+  renameInput.value = space.title;
+  renameInput.placeholder = "Space name";
+  if (!renameDialog.open) renameDialog.showModal();
+  renameInput.focus();
+  renameInput.select();
+}
+
 async function renameSession(sessionId: string, title: string): Promise<void> {
-  const session = await patchJSON<TerminalSession>(`/api/terminal-sessions/${encodeURIComponent(sessionId)}`, { title });
+  const existing = sessionForPane(sessionId) ?? listedSessions.find((candidate) => candidate.id === sessionId);
+  const collection = existing?.parentId ? "panes" : "tabs";
+  const session = await patchJSON<TerminalSession>(`/api/${collection}/${encodeURIComponent(sessionId)}`, { title });
   applySessionUpdate(session);
   if (settingsRoot.hidden) {
     const pane = panes.get(session.id);
@@ -640,7 +783,7 @@ async function renameSession(sessionId: string, title: string): Promise<void> {
       if (pane.id === activePaneId) pane.focus();
     }
   } else {
-    await renderSessionList();
+    await renderSpaceList();
   }
 }
 
@@ -666,6 +809,7 @@ function disposeTerminalPage(): void {
 }
 
 function showContextMenu(x: number, y: number): void {
+  updateContextMenuState();
   contextMenu.hidden = false;
   contextMenu.style.left = "0px";
   contextMenu.style.top = "0px";
@@ -680,20 +824,32 @@ function hideContextMenu(): void {
   contextMenu.hidden = true;
 }
 
+function updateContextMenuState(): void {
+  for (const button of contextMenu.querySelectorAll<HTMLButtonElement>("button[data-action]")) {
+    const action = button.dataset.action ?? "";
+    button.disabled =
+      (["copy-pane-id", "duplicate-pane", "rename", "restart-pane", "split-right", "split-down", "detach", "close-pane"].includes(action) &&
+        !activePaneId) ||
+      (["copy-tab-id", "restart-tab", "close-tab"].includes(action) && !parentSessionId);
+  }
+}
+
 async function ensureParentSession(): Promise<string> {
-  const current = currentSessionId();
+  const current = currentTabId();
   if (current) return current;
-  const nextSession = await postJSON<TerminalSession>("/api/terminal-sessions");
+  const nextSession = await postJSON<TerminalSession>(`/api/spaces/${DEFAULT_SPACE_ID}/tabs`);
   const url = new URL(window.location.href);
-  url.searchParams.set("session", nextSession.id);
+  url.searchParams.set("tab", nextSession.id);
+  url.searchParams.delete("session");
   window.history.replaceState(null, "", url);
   updateDebugShellFromLocation("Terminal");
   return nextSession.id;
 }
 
-function currentSessionId(): string {
-  const session = new URL(window.location.href).searchParams.get("session") ?? "";
-  return /^[a-z0-9][a-z0-9-]{2,63}$/.test(session) ? session : "";
+function currentTabId(): string {
+  const params = new URL(window.location.href).searchParams;
+  const tab = params.get("tab") || params.get("session") || "";
+  return /^[a-z0-9][a-z0-9-]{2,63}$/.test(tab) ? tab : "";
 }
 
 function setStatus(state: "connecting" | "connected" | "offline", label: string): void {
@@ -710,7 +866,7 @@ function renderDiagnostics(): void {
   for (const [label, value] of [
     ["Renderer", "ghostty-web/canvas"],
     ["Core", "ghostty-vt"],
-    ["Parent", parentSessionId || "?"],
+    ["Tab", parentSessionId || "?"],
     ["Pane", activePaneId || "?"],
     ["Panes", String(panes.size)],
     ["DPR", formatNumber(window.devicePixelRatio || 1)],
@@ -739,7 +895,7 @@ function renderSettingsPage(): void {
       <div>
         <p class="settings-eyebrow">Pinned Home Tab</p>
         <h1>App Menu</h1>
-        <p class="settings-intro">Open terminal workspaces and tune defaults for new Crostini shell sessions.</p>
+        <p class="settings-intro">Open spaces, terminal tabs, and tune defaults for new Crostini shell sessions.</p>
       </div>
       <div class="menu-actions">
         <a class="primary-link" href="${escapeAttribute(appURL("/terminal.html"))}">New terminal</a>
@@ -750,7 +906,7 @@ function renderSettingsPage(): void {
     <section class="quick-grid" aria-label="Quick actions">
       <a class="quick-action" href="${escapeAttribute(appURL("/terminal.html"))}">
         <strong>New terminal</strong>
-        <span>Start a fresh Crostini workspace.</span>
+        <span>Start a fresh Crostini terminal tab.</span>
       </a>
       <button class="quick-action" type="button" id="copyLaunchCommand">
         <strong>Agent command</strong>
@@ -765,13 +921,19 @@ function renderSettingsPage(): void {
     <section class="session-panel" aria-labelledby="sessionsTitle">
       <div class="section-heading">
         <div>
-          <h2 id="sessionsTitle">Sessions</h2>
-          <p>Open parent workspaces or remove session trees you no longer need.</p>
+          <h2 id="sessionsTitle">Spaces</h2>
+          <p>Open terminal tabs grouped by space or remove tab trees you no longer need.</p>
         </div>
-        <button class="secondary-button" type="button" id="refreshSessions">Refresh</button>
+        <div class="section-actions">
+          <button class="secondary-button" type="button" id="createSpace">New space</button>
+          <button class="secondary-button" type="button" id="refreshSessions">Refresh</button>
+        </div>
       </div>
       <div id="sessionList" class="session-list" aria-live="polite">
-        <div class="session-empty">Loading sessions</div>
+        <div class="session-empty">Loading spaces</div>
+      </div>
+      <div id="orphanPanel" class="orphan-panel" aria-live="polite">
+        <span>Checking orphan panes</span>
       </div>
     </section>
 
@@ -795,11 +957,26 @@ function renderSettingsPage(): void {
           <input id="fontSize" name="fontSize" type="number" min="12" max="22" step="1" value="${settings.fontSize}" />
         </label>
         <label class="setting-row">
-          <span><strong>Theme</strong><small>Choose the terminal color palette used by new tabs.</small></span>
+          <span><strong>Terminal palette</strong><small>Choose the terminal colors used by new tabs.</small></span>
           <select id="theme" name="theme">
             <option value="dark">Dark</option>
             <option value="highContrast">High contrast</option>
             <option value="soft">Soft</option>
+          </select>
+        </label>
+        <label class="setting-row">
+          <span><strong>App accent</strong><small>Changes controls, focus rings, and status highlights.</small></span>
+          <select id="accent" name="accent">
+            <option value="green">Green</option>
+            <option value="blue">Blue</option>
+            <option value="amber">Amber</option>
+          </select>
+        </label>
+        <label class="setting-row">
+          <span><strong>App density</strong><small>Compact mode tightens app chrome around the terminal.</small></span>
+          <select id="density" name="density">
+            <option value="comfortable">Comfortable</option>
+            <option value="compact">Compact</option>
           </select>
         </label>
         <label class="setting-row">
@@ -834,9 +1011,13 @@ function renderSettingsPage(): void {
 
   const form = requiredElement<HTMLFormElement>("#settingsForm");
   const theme = requiredElement<HTMLSelectElement>("#theme");
+  const accent = requiredElement<HTMLSelectElement>("#accent");
+  const density = requiredElement<HTMLSelectElement>("#density");
   const scrollback = requiredElement<HTMLSelectElement>("#scrollback");
   const cursorBlink = requiredElement<HTMLInputElement>("#cursorBlink");
   theme.value = settings.theme;
+  accent.value = settings.accent;
+  density.value = settings.density;
   scrollback.value = String(settings.scrollback);
   cursorBlink.checked = settings.cursorBlink;
 
@@ -844,10 +1025,12 @@ function renderSettingsPage(): void {
     event.preventDefault();
     settings = readSettingsForm();
     saveSettings(settings);
+    applyAppAppearance(settings);
   });
   const reset = () => {
     settings = { ...DEFAULT_SETTINGS };
     saveSettings(settings);
+    applyAppAppearance(settings);
     renderSettingsPage();
   };
   requiredElement<HTMLButtonElement>("#resetSettings").addEventListener("click", reset);
@@ -859,60 +1042,134 @@ function renderSettingsPage(): void {
     await navigator.clipboard?.writeText("cd ~/crostini-ghostty-terminal/agent && go run . -web-dir ../web/dist");
   });
   requiredElement<HTMLButtonElement>("#refreshSessions").addEventListener("click", () => {
-    void renderSessionList();
+    void renderSpaceList();
   });
-  void renderSessionList();
+  requiredElement<HTMLButtonElement>("#createSpace").addEventListener("click", () => {
+    void createSpace();
+  });
+  void renderSpaceList();
+  void renderOrphanPanel();
 }
 
-async function renderSessionList(): Promise<void> {
+async function renderSpaceList(): Promise<void> {
   const list = requiredElement<HTMLElement>("#sessionList");
-  list.innerHTML = `<div class="session-empty">Loading sessions</div>`;
+  list.innerHTML = `<div class="session-empty">Loading spaces</div>`;
   try {
-    const sessions = await getJSON<TerminalSession[]>("/api/terminal-sessions");
-    listedSessions = sessions;
-    if (sessions.length === 0) {
-      list.innerHTML = `<div class="session-empty">No saved terminal sessions</div>`;
+    const spaces = await getJSON<Space[]>("/api/spaces");
+    listedSpaces = spaces;
+    listedSessions = spaces.flatMap((space) => space.tabs);
+    if (spaces.length === 0) {
+      list.innerHTML = `<div class="session-empty">No spaces available</div>`;
       return;
     }
-    list.replaceChildren(
-      ...sessions.map((session) => {
-        const row = document.createElement("article");
-        row.className = "session-row";
-        row.innerHTML = `
+    list.replaceChildren(...spaces.map((space) => renderSpace(space)));
+  } catch (error) {
+    console.error(error);
+    listedSpaces = [];
+    listedSessions = [];
+    list.innerHTML = `<div class="session-empty">Unable to load spaces</div>`;
+  }
+}
+
+function renderSpace(space: Space): HTMLElement {
+  const section = document.createElement("section");
+  section.className = "space-group";
+  const canDelete = space.id !== DEFAULT_SPACE_ID && space.tabs.length === 0;
+  const deleteTitle =
+    space.id === DEFAULT_SPACE_ID
+      ? "Default space cannot be removed"
+      : space.tabs.length === 0
+        ? "Delete space"
+        : "Only empty spaces can be removed";
+  section.innerHTML = `
+    <div class="space-heading">
+      <div>
+        <strong>${escapeHTML(space.title)}</strong>
+        <span>${space.tabCount} tab${space.tabCount === 1 ? "" : "s"}</span>
+      </div>
+      <div class="space-actions">
+        <button class="icon-button" type="button" title="New tab in ${escapeAttribute(space.title)}" aria-label="New tab in ${escapeAttribute(space.title)}" data-create-tab-space="${escapeAttribute(space.id)}">
+          <span aria-hidden="true">+</span>
+        </button>
+        <button class="icon-button" type="button" title="Rename space" aria-label="Rename ${escapeAttribute(space.title)}" data-rename-space="${escapeAttribute(space.id)}">
+          <span aria-hidden="true">✎</span>
+        </button>
+        <button class="icon-button danger" type="button" title="${escapeAttribute(deleteTitle)}" aria-label="${escapeAttribute(deleteTitle)}" data-delete-space="${escapeAttribute(space.id)}"${canDelete ? "" : " disabled"}>
+          <span aria-hidden="true">${trashIcon()}</span>
+        </button>
+      </div>
+    </div>
+  `;
+  const rows = document.createElement("div");
+  rows.className = "space-tabs";
+  if (space.tabs.length === 0) {
+    rows.innerHTML = `<div class="session-empty compact">No terminal tabs</div>`;
+  } else {
+    rows.replaceChildren(...space.tabs.map((session) => renderTabRow(session)));
+  }
+  section.append(rows);
+  return section;
+}
+
+function renderTabRow(session: TerminalSession): HTMLElement {
+  const row = document.createElement("article");
+  row.className = "session-row";
+  row.innerHTML = `
           <div class="session-main">
             <strong>${escapeHTML(sessionTitle(session))}</strong>
             <span>${escapeHTML(session.id)}${session.paneCount ? ` · ${session.paneCount} pane${session.paneCount === 1 ? "" : "s"}` : ""}</span>
           </div>
           <div class="session-meta">
             <span class="session-status" data-state="${escapeAttribute(session.status)}">${escapeHTML(session.status)}</span>
-            <time>${escapeHTML(formatSessionDate(session.createdAt))}</time>
+            <time>${escapeHTML(formatSessionDate(session.updatedAt || session.createdAt))}</time>
           </div>
           <div class="session-actions">
-            <a class="icon-button" href="${escapeAttribute(appURL(`/terminal.html?session=${encodeURIComponent(session.id)}`))}" title="Open session" aria-label="Open ${escapeAttribute(sessionTitle(session))} in a new tab">
+            <a class="icon-button" href="${escapeAttribute(appURL(`/terminal.html?tab=${encodeURIComponent(session.id)}`))}" title="Open tab" aria-label="Open ${escapeAttribute(sessionTitle(session))} in a new tab">
               <span aria-hidden="true">↗</span>
             </a>
-            <button class="icon-button" type="button" title="Rename session" aria-label="Rename ${escapeAttribute(sessionTitle(session))}" data-rename-session="${escapeAttribute(session.id)}">
+            <button class="icon-button" type="button" title="Restart tab" aria-label="Restart ${escapeAttribute(sessionTitle(session))}" data-restart-session="${escapeAttribute(session.id)}">
+              <span aria-hidden="true">↻</span>
+            </button>
+            <button class="icon-button" type="button" title="Rename tab" aria-label="Rename ${escapeAttribute(sessionTitle(session))}" data-rename-session="${escapeAttribute(session.id)}">
               <span aria-hidden="true">✎</span>
             </button>
-            <button class="icon-button danger" type="button" title="Remove session" aria-label="Remove ${escapeAttribute(sessionTitle(session))}" data-delete-session="${escapeAttribute(session.id)}">
+            <button class="icon-button danger" type="button" title="Remove tab" aria-label="Remove ${escapeAttribute(sessionTitle(session))}" data-delete-session="${escapeAttribute(session.id)}">
               <span aria-hidden="true">${trashIcon()}</span>
             </button>
           </div>
         `;
-        return row;
-      }),
-    );
-  } catch (error) {
-    console.error(error);
-    listedSessions = [];
-    list.innerHTML = `<div class="session-empty">Unable to load sessions</div>`;
-  }
+  return row;
 }
 
 document.addEventListener("click", (event) => {
+  const cleanupOrphansButton = (event.target as Element).closest<HTMLButtonElement>("button[data-cleanup-orphans]");
+  if (cleanupOrphansButton) {
+    void cleanupOrphanPanes();
+    return;
+  }
+  const createTabButton = (event.target as Element).closest<HTMLButtonElement>("button[data-create-tab-space]");
+  if (createTabButton?.dataset.createTabSpace) {
+    void createTabInSpace(createTabButton.dataset.createTabSpace);
+    return;
+  }
+  const renameSpaceButton = (event.target as Element).closest<HTMLButtonElement>("button[data-rename-space]");
+  if (renameSpaceButton?.dataset.renameSpace) {
+    openMenuSpaceRenameDialog(renameSpaceButton.dataset.renameSpace);
+    return;
+  }
+  const deleteSpaceButton = (event.target as Element).closest<HTMLButtonElement>("button[data-delete-space]");
+  if (deleteSpaceButton?.dataset.deleteSpace) {
+    void deleteSpace(deleteSpaceButton.dataset.deleteSpace);
+    return;
+  }
   const renameButton = (event.target as Element).closest<HTMLButtonElement>("button[data-rename-session]");
   if (renameButton?.dataset.renameSession) {
     openMenuRenameDialog(renameButton.dataset.renameSession);
+    return;
+  }
+  const restartButton = (event.target as Element).closest<HTMLButtonElement>("button[data-restart-session]");
+  if (restartButton?.dataset.restartSession) {
+    void restartListedTab(restartButton.dataset.restartSession);
     return;
   }
   const button = (event.target as Element).closest<HTMLButtonElement>("button[data-delete-session]");
@@ -923,7 +1180,11 @@ document.addEventListener("click", (event) => {
 });
 
 async function deleteTerminalSession(sessionId: string): Promise<void> {
-  const response = await fetch(`/api/terminal-sessions/${encodeURIComponent(sessionId)}`, {
+  const session = listedSessions.find((candidate) => candidate.id === sessionId);
+  const title = session ? sessionTitle(session) : sessionId;
+  const paneCount = session?.paneCount ?? 1;
+  if (!window.confirm(`Delete tab "${title}" and ${paneCount} pane${paneCount === 1 ? "" : "s"}?`)) return;
+  const response = await fetch(`/api/tabs/${encodeURIComponent(sessionId)}`, {
     method: "DELETE",
     credentials: "same-origin",
   });
@@ -931,7 +1192,94 @@ async function deleteTerminalSession(sessionId: string): Promise<void> {
     console.error(`delete session ${sessionId} failed with ${response.status}`);
     return;
   }
-  await renderSessionList();
+  await renderSpaceList();
+}
+
+async function restartListedTab(sessionId: string): Promise<void> {
+  const response = await fetch(`/api/tabs/${encodeURIComponent(sessionId)}/restart`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) {
+    console.error(`restart tab ${sessionId} failed with ${response.status}`);
+    return;
+  }
+  await renderSpaceList();
+}
+
+async function renderOrphanPanel(): Promise<void> {
+  const panel = document.querySelector<HTMLElement>("#orphanPanel");
+  if (!panel) return;
+  try {
+    const orphans = await getJSON<TerminalSession[]>("/api/terminal-sessions/orphans");
+    if (orphans.length === 0) {
+      panel.innerHTML = `<span>No orphan panes</span>`;
+      return;
+    }
+    panel.innerHTML = `
+      <span>${orphans.length} orphan pane${orphans.length === 1 ? "" : "s"} found</span>
+      <button class="secondary-button compact-button" type="button" data-cleanup-orphans>Clean up</button>
+    `;
+  } catch (error) {
+    console.error(error);
+    panel.innerHTML = `<span>Unable to check orphan panes</span>`;
+  }
+}
+
+async function cleanupOrphanPanes(): Promise<void> {
+  const panel = document.querySelector<HTMLElement>("#orphanPanel");
+  if (!window.confirm("Remove all orphan pane sessions?")) return;
+  const response = await fetch("/api/terminal-sessions/orphans", {
+    method: "DELETE",
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) {
+    console.error(`cleanup orphan panes failed with ${response.status}`);
+    return;
+  }
+  const result = (await response.json()) as OrphanCleanup;
+  if (panel) panel.innerHTML = `<span>Removed ${result.deleted} orphan pane${result.deleted === 1 ? "" : "s"}</span>`;
+}
+
+function openMenuSpaceRenameDialog(spaceId: string): void {
+  const space = listedSpaces.find((candidate) => candidate.id === spaceId);
+  if (!space) return;
+  openRenameDialogForSpace(space);
+}
+
+async function createSpace(): Promise<void> {
+  const title = window.prompt("Space name", "");
+  if (title === null) return;
+  await postJSON<Space>("/api/spaces", { title: title.trim() || undefined });
+  await renderSpaceList();
+}
+
+async function renameSpace(spaceId: string, title: string): Promise<void> {
+  await patchJSON<Space>(`/api/spaces/${encodeURIComponent(spaceId)}`, { title });
+  await renderSpaceList();
+}
+
+async function deleteSpace(spaceId: string): Promise<void> {
+  const space = listedSpaces.find((candidate) => candidate.id === spaceId);
+  if (!space || space.id === DEFAULT_SPACE_ID || space.tabs.length > 0) return;
+  if (!window.confirm(`Delete space "${space.title}"?`)) return;
+  const response = await fetch(`/api/spaces/${encodeURIComponent(spaceId)}`, {
+    method: "DELETE",
+    credentials: "same-origin",
+  });
+  if (!response.ok) {
+    console.error(`delete space ${spaceId} failed with ${response.status}`);
+    return;
+  }
+  await renderSpaceList();
+}
+
+async function createTabInSpace(spaceId: string): Promise<void> {
+  const session = await postJSON<TerminalSession>(`/api/spaces/${encodeURIComponent(spaceId)}/tabs`);
+  openAppURL(`/terminal.html?tab=${encodeURIComponent(session.id)}`, { newTab: true });
+  if (!settingsRoot.hidden) await renderSpaceList();
 }
 
 function readSettingsForm(): TerminalSettings {
@@ -942,6 +1290,8 @@ function readSettingsForm(): TerminalSettings {
     fontSize: Number(requiredElement<HTMLInputElement>("#fontSize").value),
     scrollback: Number(requiredElement<HTMLSelectElement>("#scrollback").value),
     cursorBlink: requiredElement<HTMLInputElement>("#cursorBlink").checked,
+    accent: requiredElement<HTMLSelectElement>("#accent").value,
+    density: requiredElement<HTMLSelectElement>("#density").value,
     theme: requiredElement<HTMLSelectElement>("#theme").value,
     scrollSensitivity: Number(requiredElement<HTMLInputElement>("#scrollSensitivity").value),
   });

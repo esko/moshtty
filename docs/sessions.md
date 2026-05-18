@@ -1,6 +1,6 @@
-# Durable Sessions
+# Spaces, Tabs, And Durable Sessions
 
-The Go agent owns durable terminal sessions. The browser uses HTTP APIs to create and arrange sessions, then attaches each visible pane to `/pty` with the session id.
+The Go agent owns spaces, terminal tabs, and durable pane sessions. The browser uses HTTP APIs to create and arrange tabs, then attaches each visible pane to `/pty` with the pane session id.
 
 ## Model
 
@@ -11,6 +11,7 @@ The Go agent owns durable terminal sessions. The browser uses HTTP APIs to creat
   "id": "term-0123abcd",
   "title": "Terminal",
   "customTitle": true,
+  "spaceId": "space-default",
   "parentId": "term-parent",
   "shell": "/bin/bash",
   "status": "running",
@@ -21,7 +22,20 @@ The Go agent owns durable terminal sessions. The browser uses HTTP APIs to creat
 }
 ```
 
-`customTitle`, `parentId`, `shell`, `pid`, and `paneCount` are omitted when they do not apply. Parent sessions are workspaces. Child sessions are panes inside a parent workspace and are hidden from the top-level list. Empty titles reset a session to automatic naming from the shell basename or `Terminal`.
+`customTitle`, `spaceId`, `parentId`, `shell`, `pid`, and `paneCount` are omitted when they do not apply. Parent sessions are terminal tabs inside a space. Child sessions are panes inside a terminal tab and are hidden from space tab lists. Empty titles reset a session to automatic naming from the shell basename or `Terminal`.
+
+`Space`:
+
+```json
+{
+  "id": "space-default",
+  "title": "Default Space",
+  "createdAt": "2026-05-17T10:00:00Z",
+  "updatedAt": "2026-05-17T10:00:00Z",
+  "tabCount": 1,
+  "tabs": []
+}
+```
 
 `SessionLayoutNode`:
 
@@ -39,35 +53,129 @@ The Go agent owns durable terminal sessions. The browser uses HTTP APIs to creat
 }
 ```
 
-`Workspace`:
+`TerminalTabWorkspace`:
 
 ```json
 {
   "session": {},
+  "tab": {},
   "layout": {},
-  "children": []
+  "children": [],
+  "panes": []
 }
 ```
 
-`session` is the parent workspace, `layout` is its split tree, and `children` contains the pane sessions referenced by the layout leaves.
+`session` and `tab` both contain the parent tab session for compatibility. `layout` is the tab split tree. `children` and `panes` both contain the pane sessions referenced by the layout leaves.
 
 ## HTTP API
 
+`GET /api/spaces`
+
+Returns spaces with their terminal tabs. The agent creates `space-default` automatically and lazily migrates legacy parent sessions into it.
+
+`POST /api/spaces`
+
+Creates a space.
+
+Request:
+
+```json
+{ "title": "Work" }
+```
+
+Blank or missing titles become `New Space`.
+
+`GET /api/spaces/{spaceId}`
+
+Returns one space with its tabs.
+
+`PATCH /api/spaces/{spaceId}`
+
+Renames a space.
+
+Request:
+
+```json
+{ "title": "Ops" }
+```
+
+Blank titles reset to `Default Space` for `space-default` and `New Space` for other spaces.
+
+`DELETE /api/spaces/{spaceId}`
+
+Deletes an empty non-default space. The default space cannot be deleted, and spaces with tabs are rejected.
+
+`POST /api/spaces/{spaceId}/tabs`
+
+Creates a new terminal tab in a space, writes a single-pane layout, starts the worker, and returns the created parent `TerminalSession`.
+
+`GET /api/tabs/{tabId}`
+
+Returns a `TerminalTabWorkspace` for a terminal tab.
+
+`PATCH /api/tabs/{tabId}`
+
+Renames a terminal tab.
+
+`DELETE /api/tabs/{tabId}`
+
+Stops every pane in the tab layout tree and removes the tab and child pane session directories.
+
+`POST /api/tabs/{tabId}/restart`
+
+Restarts every pane in the tab while preserving the tab id, pane ids, metadata, and split layout. Capture replay logs are removed before panes reconnect.
+
+`POST /api/tabs/{tabId}/splits`
+
+Creates a child pane in a terminal tab.
+
+`PATCH /api/tabs/{tabId}/layout`
+
+Persists split-pane geometry for a terminal tab. This endpoint only updates split ratios; it rejects layout submissions that change pane membership, leaf order, split structure, or split direction.
+
+`PATCH /api/panes/{paneId}`
+
+Renames a pane.
+
+`DELETE /api/panes/{paneId}`
+
+Removes a pane from its parent tab layout, stops that pane, and removes its session directory.
+
+`POST /api/panes/{paneId}/restart`
+
+Restarts one pane while preserving its id, metadata, and layout membership. Capture replay is removed before the pane reconnects.
+
+## Compatibility API
+
 `GET /api/terminal-sessions`
 
-Returns parent workspaces only. Child panes are represented by the parent workspace `paneCount`.
+Returns parent terminal tabs only. Child panes are represented by the parent tab `paneCount`.
+
+`GET /api/terminal-sessions/orphans`
+
+Returns child pane `TerminalSession` records whose `parentId` points at a missing parent metadata file, a missing parent layout, or a parent layout that no longer references the child pane id. Parent tabs are never returned as orphans.
+
+`DELETE /api/terminal-sessions/orphans`
+
+Stops and removes all currently orphaned child pane session directories.
+
+Response:
+
+```json
+{ "deleted": 1 }
+```
 
 `POST /api/terminal-sessions`
 
-Creates a new parent workspace, writes a single-pane layout, starts the worker, and returns the created `TerminalSession`.
+Creates a new parent tab in the default space.
 
 `GET /api/terminal-sessions/{id}`
 
-Returns a `Workspace` for a parent session id.
+Returns a `TerminalTabWorkspace` for a parent session id.
 
 `PATCH /api/terminal-sessions/{id}`
 
-Renames a parent workspace or child pane.
+Renames a parent tab or child pane.
 
 Request:
 
@@ -79,7 +187,7 @@ Whitespace is trimmed. A blank title clears the custom name and returns the sess
 
 `POST /api/terminal-sessions/{id}/splits`
 
-Creates a child pane in a parent workspace.
+Creates a child pane in a parent tab.
 
 Request:
 
@@ -94,7 +202,7 @@ Request:
 
 `POST /api/terminal-sessions/{id}/detach`
 
-Promotes a child pane into a parent workspace.
+Promotes a child pane into a parent tab.
 
 Request:
 
@@ -106,7 +214,7 @@ The child is removed from the old parent layout, its `parentId` is cleared, and 
 
 `PATCH /api/terminal-sessions/{id}/layout`
 
-Persists split-pane geometry for a parent workspace. This endpoint only updates split ratios; it rejects layout submissions that change pane membership, leaf order, split structure, or split direction.
+Persists split-pane geometry for a parent tab. This endpoint only updates split ratios; it rejects layout submissions that change pane membership, leaf order, split structure, or split direction.
 
 Request:
 
@@ -126,7 +234,7 @@ Ratios are clamped to `0.2..0.8`. The response is the updated `Workspace`.
 
 `DELETE /api/terminal-sessions/{id}`
 
-If `{id}` is a parent workspace, stops every pane in its layout tree and removes the parent and child session directories. If `{id}` is a child pane, removes it from the parent layout, stops only that pane, and removes the child session directory.
+If `{id}` is a parent tab, stops every pane in its layout tree and removes the parent and child session directories. If `{id}` is a child pane, removes it from the parent layout, stops only that pane, and removes the child session directory.
 
 ## PTY Attachment
 
@@ -149,3 +257,4 @@ Agent-to-browser frames:
 
 - Binary frames contain raw PTY output bytes.
 - Text JSON frames report status, errors, and process exit.
+- Startup and attach errors keep the same JSON shape and may include bounded recent `worker.log` context in the `errors` array.
