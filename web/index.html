@@ -61,6 +61,32 @@
           </div>
         </form>
       </dialog>
+      <dialog id="profileDialog" class="profile-dialog" aria-labelledby="profileDialogTitle">
+        <form id="profileForm" method="dialog">
+          <h2 id="profileDialogTitle">New profile</h2>
+          <label>
+            <span>Name</span>
+            <input id="profileTitle" name="title" type="text" autocomplete="off" />
+          </label>
+          <label>
+            <span>Shell path</span>
+            <input id="profileShell" name="shell" type="text" placeholder="/bin/bash" autocomplete="off" />
+          </label>
+          <label>
+            <span>Working directory</span>
+            <input id="profileWorkingDir" name="workingDir" type="text" placeholder="/home/user/project" autocomplete="off" />
+          </label>
+          <label>
+            <span>Environment</span>
+            <textarea id="profileEnv" name="env" rows="5" spellcheck="false" placeholder="KEY=value"></textarea>
+          </label>
+          <div id="profileError" class="dialog-error" hidden></div>
+          <div class="dialog-actions">
+            <button class="secondary-button" value="cancel">Cancel</button>
+            <button class="primary-button" value="save">Save</button>
+          </div>
+        </form>
+      </dialog>
       <section id="offline" class="offline" hidden>
         <h1>Agent unavailable</h1>
         <p>Start the Crostini agent, then reconnect.</p>

@@ -7,8 +7,8 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" />
     <title>Crostini Ghostty Terminal</title>
-    <script type="module" crossorigin src="/assets/index-dmmzd4ow.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-MNp4Z3kb.css">
+    <script type="module" crossorigin src="/assets/index-CMv8hDQ0.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DiGsfAx2.css">
   </head>
   <body>
     <div id="app">
@@ -58,6 +58,32 @@
           </label>
           <div class="rename-dialog-actions">
             <button class="secondary-button" type="button" id="renameReset">Reset automatic</button>
+            <button class="secondary-button" value="cancel">Cancel</button>
+            <button class="primary-button" value="save">Save</button>
+          </div>
+        </form>
+      </dialog>
+      <dialog id="profileDialog" class="profile-dialog" aria-labelledby="profileDialogTitle">
+        <form id="profileForm" method="dialog">
+          <h2 id="profileDialogTitle">New profile</h2>
+          <label>
+            <span>Name</span>
+            <input id="profileTitle" name="title" type="text" autocomplete="off" />
+          </label>
+          <label>
+            <span>Shell path</span>
+            <input id="profileShell" name="shell" type="text" placeholder="/bin/bash" autocomplete="off" />
+          </label>
+          <label>
+            <span>Working directory</span>
+            <input id="profileWorkingDir" name="workingDir" type="text" placeholder="/home/user/project" autocomplete="off" />
+          </label>
+          <label>
+            <span>Environment</span>
+            <textarea id="profileEnv" name="env" rows="5" spellcheck="false" placeholder="KEY=value"></textarea>
+          </label>
+          <div id="profileError" class="dialog-error" hidden></div>
+          <div class="dialog-actions">
             <button class="secondary-button" value="cancel">Cancel</button>
             <button class="primary-button" value="save">Save</button>
           </div>

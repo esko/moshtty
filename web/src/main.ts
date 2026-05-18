@@ -35,6 +35,14 @@ const renameDialog = requiredElement<HTMLDialogElement>("#renameDialog");
 const renameDialogTitle = requiredElement<HTMLElement>("#renameDialogTitle");
 const renameInput = requiredElement<HTMLInputElement>("#renameInput");
 const renameResetButton = requiredElement<HTMLButtonElement>("#renameReset");
+const profileDialog = requiredElement<HTMLDialogElement>("#profileDialog");
+const profileDialogTitle = requiredElement<HTMLElement>("#profileDialogTitle");
+const profileForm = requiredElement<HTMLFormElement>("#profileForm");
+const profileTitleInput = requiredElement<HTMLInputElement>("#profileTitle");
+const profileShellInput = requiredElement<HTMLInputElement>("#profileShell");
+const profileWorkingDirInput = requiredElement<HTMLInputElement>("#profileWorkingDir");
+const profileEnvInput = requiredElement<HTMLTextAreaElement>("#profileEnv");
+const profileError = requiredElement<HTMLElement>("#profileError");
 
 let settings = loadSettings();
 applyAppAppearance(settings);
@@ -148,6 +156,19 @@ renameResetButton.addEventListener("click", () => {
   if (!sessionId) return;
   renameDialog.close("cancel");
   void renameSession(sessionId, "");
+});
+
+profileDialog.addEventListener("close", () => {
+  if (profileDialog.returnValue !== "save") return;
+  void saveProfileDialog();
+});
+
+profileForm.addEventListener("submit", (event) => {
+  profileError.hidden = true;
+  profileError.textContent = "";
+  if (!envFromText(profileEnvInput.value)) {
+    event.preventDefault();
+  }
 });
 
 window.addEventListener("resize", scheduleFit);
@@ -1357,16 +1378,35 @@ function selectDefaultProfile(profileId: string): void {
 async function editProfile(profileId?: string): Promise<void> {
   const existing = profileId ? listedProfiles.find((candidate) => candidate.id === profileId) : undefined;
   if (profileId && !existing) return;
-  const title = window.prompt("Profile name", existing?.title ?? "");
-  if (title === null) return;
-  const shell = window.prompt("Shell path", existing?.shell ?? "");
-  if (shell === null) return;
-  const workingDir = window.prompt("Working directory", existing?.workingDir ?? "");
-  if (workingDir === null) return;
-  const envText = window.prompt("Environment variables, one KEY=value per line", envToText(existing?.env));
-  if (envText === null) return;
-  const env = envFromText(envText);
-  if (!env) return;
+  if (existing?.id === DEFAULT_PROFILE_ID) return;
+  profileDialog.dataset.profileId = existing?.id ?? "";
+  profileDialog.returnValue = "";
+  profileDialogTitle.textContent = existing ? "Edit profile" : "New profile";
+  profileTitleInput.value = existing?.title ?? "";
+  profileShellInput.value = existing?.shell ?? "";
+  profileWorkingDirInput.value = existing?.workingDir ?? "";
+  profileEnvInput.value = envToText(existing?.env);
+  profileError.hidden = true;
+  profileError.textContent = "";
+  if (!profileDialog.open) profileDialog.showModal();
+  profileTitleInput.focus();
+  profileTitleInput.select();
+}
+
+async function saveProfileDialog(): Promise<void> {
+  const profileId = profileDialog.dataset.profileId || "";
+  if (profileId === DEFAULT_PROFILE_ID) return;
+  const existing = profileId ? listedProfiles.find((candidate) => candidate.id === profileId) : undefined;
+  if (profileId && !existing) return;
+  const env = envFromText(profileEnvInput.value);
+  if (!env) {
+    profileDialog.showModal();
+    profileEnvInput.focus();
+    return;
+  }
+  const title = profileTitleInput.value;
+  const shell = profileShellInput.value;
+  const workingDir = profileWorkingDirInput.value;
   const payload = { title, shell, workingDir, env };
   const url = existing ? `/api/profiles/${encodeURIComponent(existing.id)}` : "/api/profiles";
   const response = await fetch(url, {
@@ -1376,7 +1416,9 @@ async function editProfile(profileId?: string): Promise<void> {
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
-    window.alert(await response.text());
+    profileError.textContent = (await response.text()).trim() || "Unable to save profile";
+    profileError.hidden = false;
+    profileDialog.showModal();
     return;
   }
   await renderProfileList();
@@ -1410,13 +1452,13 @@ function envToText(env: EnvVars | undefined): string {
 function envFromText(value: string): EnvVars | null {
   const env: EnvVars = {};
   for (const rawLine of value.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line) continue;
-    const index = line.indexOf("=");
-    const key = index >= 0 ? line.slice(0, index).trim() : line;
-    const envValue = index >= 0 ? line.slice(index + 1) : "";
+    if (!rawLine.trim()) continue;
+    const index = rawLine.indexOf("=");
+    const key = (index >= 0 ? rawLine.slice(0, index) : rawLine).trim();
+    const envValue = index >= 0 ? rawLine.slice(index + 1) : "";
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
-      window.alert(`Invalid environment variable name: ${key}`);
+      profileError.textContent = `Invalid environment variable name: ${key}`;
+      profileError.hidden = false;
       return null;
     }
     env[key] = envValue;

@@ -896,7 +896,8 @@ body {
   background: var(--color-border);
 }
 
-.rename-dialog {
+.rename-dialog,
+.profile-dialog {
   width: min(420px, calc(100vw - 32px));
   border: 1px solid var(--color-border-floating);
   border-radius: var(--radius-lg);
@@ -905,33 +906,42 @@ body {
   box-shadow: var(--shadow-menu);
 }
 
-.rename-dialog::backdrop {
+.profile-dialog {
+  width: min(520px, calc(100vw - 32px));
+}
+
+.rename-dialog::backdrop,
+.profile-dialog::backdrop {
   background: rgba(2, 6, 10, 0.72);
 }
 
-.rename-dialog form {
+.rename-dialog form,
+.profile-dialog form {
   display: grid;
   gap: 14px;
   margin: 0;
 }
 
-.rename-dialog h2 {
+.rename-dialog h2,
+.profile-dialog h2 {
   margin: 0;
   color: var(--color-text-strong);
   font-size: 16px;
   line-height: 1.2;
 }
 
-.rename-dialog label {
+.rename-dialog label,
+.profile-dialog label {
   display: grid;
   gap: 6px;
   color: var(--color-text-subtle);
   font-size: 12px;
 }
 
-.rename-dialog input {
+.rename-dialog input,
+.profile-dialog input,
+.profile-dialog textarea {
   width: 100%;
-  height: 34px;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   background: var(--color-app-bg);
@@ -941,7 +951,29 @@ body {
   padding: 0 9px;
 }
 
-.rename-dialog-actions {
+.rename-dialog input,
+.profile-dialog input {
+  height: 34px;
+}
+
+.profile-dialog textarea {
+  min-height: 92px;
+  padding: 8px 9px;
+  resize: vertical;
+}
+
+.dialog-error {
+  padding: 8px 9px;
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-surface);
+  color: var(--color-danger-text);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.rename-dialog-actions,
+.dialog-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
