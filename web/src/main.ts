@@ -1161,6 +1161,9 @@ function renderProfileRow(profile: Profile): HTMLElement {
       <time>${escapeHTML(formatSessionDate(profile.updatedAt || profile.createdAt))}</time>
     </div>
     <div class="session-actions">
+      <button class="icon-button" type="button" title="New terminal with profile" aria-label="New terminal with ${escapeAttribute(profile.title)}" data-launch-profile="${escapeAttribute(profile.id)}">
+        <span aria-hidden="true">↗</span>
+      </button>
       <button class="icon-button" type="button" title="Use for new terminals" aria-label="Use ${escapeAttribute(profile.title)} for new terminals" data-select-profile="${escapeAttribute(profile.id)}"${isDefault ? " disabled" : ""}>
         <span aria-hidden="true">✓</span>
       </button>
@@ -1258,6 +1261,11 @@ document.addEventListener("click", (event) => {
   const createProfileButton = (event.target as Element).closest<HTMLButtonElement>("button[data-create-profile]");
   if (createProfileButton) {
     void editProfile();
+    return;
+  }
+  const launchProfileButton = (event.target as Element).closest<HTMLButtonElement>("button[data-launch-profile]");
+  if (launchProfileButton?.dataset.launchProfile) {
+    void createTabInSpace(DEFAULT_SPACE_ID, launchProfileButton.dataset.launchProfile);
     return;
   }
   const selectProfileButton = (event.target as Element).closest<HTMLButtonElement>("button[data-select-profile]");
@@ -1511,9 +1519,9 @@ async function deleteSpace(spaceId: string): Promise<void> {
   await renderSpaceList();
 }
 
-async function createTabInSpace(spaceId: string): Promise<void> {
+async function createTabInSpace(spaceId: string, profileId = settings.defaultProfileId): Promise<void> {
   const session = await postJSON<TerminalSession>(`/api/spaces/${encodeURIComponent(spaceId)}/tabs`, {
-    profileId: settings.defaultProfileId,
+    profileId,
   });
   openAppURL(`/terminal.html?tab=${encodeURIComponent(session.id)}`, { newTab: true });
   if (!settingsRoot.hidden) await renderSpaceList();
