@@ -6,11 +6,27 @@ export type TerminalSession = {
   title: string;
   customTitle?: boolean;
   spaceId?: string;
+  profileId?: string;
   parentId?: string;
+  shell?: string;
+  workingDir?: string;
+  env?: EnvVars;
   status: string;
   createdAt: string;
   updatedAt?: string;
   paneCount?: number;
+};
+
+export type EnvVars = Record<string, string>;
+
+export type Profile = {
+  id: string;
+  title: string;
+  shell?: string;
+  workingDir?: string;
+  env?: EnvVars;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type SessionLayoutNode =
@@ -63,4 +79,5 @@ export type TerminalSettings = {
   density: "comfortable" | "compact";
   theme: "dark" | "highContrast" | "soft";
   scrollSensitivity: number;
+  defaultProfileId: string;
 };

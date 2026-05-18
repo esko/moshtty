@@ -30,12 +30,15 @@ const (
 	sessionStatusStale   = "stale"
 	defaultSpaceID       = "space-default"
 	defaultSpaceTitle    = "Default Space"
+	defaultProfileID     = "profile-default"
+	defaultProfileTitle  = "Default Profile"
 	minSplitRatio        = 0.2
 	maxSplitRatio        = 0.8
 	workerLogTailLimit   = 8 * 1024
 )
 
 var sessionIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{2,63}$`)
+var envNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 type sessionManager struct {
 	root                    string
@@ -50,14 +53,40 @@ type terminalSession struct {
 	Title       string    `json:"title"`
 	CustomTitle bool      `json:"customTitle,omitempty"`
 	SpaceID     string    `json:"spaceId,omitempty"`
+	ProfileID   string    `json:"profileId,omitempty"`
 	ParentID    string    `json:"parentId,omitempty"`
 	Shell       string    `json:"shell,omitempty"`
+	WorkingDir  string    `json:"workingDir,omitempty"`
+	Env         envVars   `json:"env,omitempty"`
 	Status      string    `json:"status"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
 	PID         int       `json:"pid,omitempty"`
 	Socket      string    `json:"socket,omitempty"`
 	PaneCount   int       `json:"paneCount,omitempty"`
+}
+
+type envVars map[string]string
+
+type profileMetadata struct {
+	ID         string    `json:"id"`
+	Title      string    `json:"title"`
+	Shell      string    `json:"shell,omitempty"`
+	WorkingDir string    `json:"workingDir,omitempty"`
+	Env        envVars   `json:"env,omitempty"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
+}
+
+type profileRequest struct {
+	Title      string  `json:"title"`
+	Shell      string  `json:"shell"`
+	WorkingDir string  `json:"workingDir"`
+	Env        envVars `json:"env"`
+}
+
+type tabRequest struct {
+	ProfileID string `json:"profileId"`
 }
 
 type spaceMetadata struct {
@@ -96,6 +125,7 @@ type sessionLayoutNode struct {
 type splitRequest struct {
 	TargetSessionID string `json:"targetSessionId"`
 	Direction       string `json:"direction"`
+	ProfileID       string `json:"profileId,omitempty"`
 }
 
 type detachRequest struct {
@@ -139,14 +169,18 @@ func defaultSessionDir() string {
 }
 
 func (m *sessionManager) create(ctx context.Context) (*terminalSession, error) {
-	return m.createTab(ctx, defaultSpaceID)
+	return m.createTab(ctx, defaultSpaceID, defaultProfileID)
 }
 
-func (m *sessionManager) createTab(ctx context.Context, spaceID string) (*terminalSession, error) {
+func (m *sessionManager) createTab(ctx context.Context, spaceID, profileID string) (*terminalSession, error) {
 	if spaceID == "" {
 		spaceID = defaultSpaceID
 	}
 	if _, err := m.readSpace(spaceID); err != nil {
+		return nil, err
+	}
+	profile, err := m.readProfile(profileID)
+	if err != nil {
 		return nil, err
 	}
 	id, err := randomSessionID()
@@ -163,6 +197,7 @@ func (m *sessionManager) createTab(ctx context.Context, spaceID string) (*termin
 		UpdatedAt: now,
 		Socket:    m.socketPath(id),
 	}
+	applyProfileToSession(session, profile)
 	if err := os.MkdirAll(m.sessionDir(id), 0o700); err != nil {
 		return nil, err
 	}
@@ -196,6 +231,78 @@ func (m *sessionManager) createSpace(title string) (*spaceResponse, error) {
 		return nil, err
 	}
 	return space.withTabs(nil), nil
+}
+
+func (m *sessionManager) listProfiles() ([]profileMetadata, error) {
+	return m.readProfiles()
+}
+
+func (m *sessionManager) createProfile(req profileRequest) (*profileMetadata, error) {
+	profiles, err := m.readProfiles()
+	if err != nil {
+		return nil, err
+	}
+	id, err := randomProfileID()
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	profile, err := normalizedProfile(id, req, now, now)
+	if err != nil {
+		return nil, err
+	}
+	profiles = append(profiles, *profile)
+	if err := m.writeProfiles(profiles); err != nil {
+		return nil, err
+	}
+	return profile, nil
+}
+
+func (m *sessionManager) updateProfile(id string, req profileRequest) (*profileMetadata, error) {
+	if id == defaultProfileID {
+		return nil, fmt.Errorf("cannot modify default profile")
+	}
+	profiles, err := m.readProfiles()
+	if err != nil {
+		return nil, err
+	}
+	for i := range profiles {
+		if profiles[i].ID != id {
+			continue
+		}
+		profile, err := normalizedProfile(id, req, profiles[i].CreatedAt, time.Now().UTC())
+		if err != nil {
+			return nil, err
+		}
+		profiles[i] = *profile
+		if err := m.writeProfiles(profiles); err != nil {
+			return nil, err
+		}
+		return profile, nil
+	}
+	return nil, fmt.Errorf("unknown profile id %q", id)
+}
+
+func (m *sessionManager) deleteProfile(id string) error {
+	if id == defaultProfileID {
+		return fmt.Errorf("cannot delete default profile")
+	}
+	profiles, err := m.readProfiles()
+	if err != nil {
+		return err
+	}
+	index := -1
+	for i := range profiles {
+		if profiles[i].ID == id {
+			index = i
+			break
+		}
+	}
+	if index == -1 {
+		return fmt.Errorf("unknown profile id %q", id)
+	}
+	profiles = append(profiles[:index], profiles[index+1:]...)
+	return m.writeProfiles(profiles)
 }
 
 func (m *sessionManager) updateSpaceTitle(ctx context.Context, id, title string) (*spaceResponse, error) {
@@ -688,6 +795,104 @@ func (m *sessionManager) spacesPath() string {
 	return filepath.Join(m.root, "spaces.json")
 }
 
+func (m *sessionManager) profilesPath() string {
+	return filepath.Join(m.root, "profiles.json")
+}
+
+func (m *sessionManager) readProfile(id string) (*profileMetadata, error) {
+	if id == "" {
+		id = defaultProfileID
+	}
+	profiles, err := m.readProfiles()
+	if err != nil {
+		return nil, err
+	}
+	for i := range profiles {
+		if profiles[i].ID == id {
+			return &profiles[i], nil
+		}
+	}
+	return nil, fmt.Errorf("unknown profile id %q", id)
+}
+
+func (m *sessionManager) readProfiles() ([]profileMetadata, error) {
+	f, err := os.Open(m.profilesPath())
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return []profileMetadata{defaultProfileMetadata(time.Now().UTC())}, nil
+		}
+		return nil, err
+	}
+	defer f.Close()
+
+	var profiles []profileMetadata
+	if err := json.NewDecoder(f).Decode(&profiles); err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	hasDefault := false
+	for i := range profiles {
+		if profiles[i].ID == "" || !validSessionID(profiles[i].ID) {
+			return nil, fmt.Errorf("invalid profile id %q", profiles[i].ID)
+		}
+		if profiles[i].Title == "" {
+			profiles[i].Title = normalizedProfileTitle(profiles[i].ID, "")
+		}
+		if profiles[i].CreatedAt.IsZero() {
+			profiles[i].CreatedAt = now
+		}
+		if profiles[i].UpdatedAt.IsZero() {
+			profiles[i].UpdatedAt = profiles[i].CreatedAt
+		}
+		if profiles[i].Env == nil {
+			profiles[i].Env = envVars{}
+		}
+		if profiles[i].ID == defaultProfileID {
+			hasDefault = true
+		}
+	}
+	if !hasDefault {
+		profiles = append([]profileMetadata{defaultProfileMetadata(now)}, profiles...)
+	}
+	return profiles, nil
+}
+
+func (m *sessionManager) writeProfiles(profiles []profileMetadata) error {
+	if len(profiles) == 0 {
+		profiles = []profileMetadata{defaultProfileMetadata(time.Now().UTC())}
+	}
+	hasDefault := false
+	for _, profile := range profiles {
+		if !validSessionID(profile.ID) {
+			return fmt.Errorf("invalid profile id %q", profile.ID)
+		}
+		if profile.ID == defaultProfileID {
+			hasDefault = true
+		}
+	}
+	if !hasDefault {
+		return fmt.Errorf("default profile is required")
+	}
+	tmp := m.profilesPath() + ".tmp"
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+	encodeErr := enc.Encode(profiles)
+	closeErr := f.Close()
+	if encodeErr != nil {
+		_ = os.Remove(tmp)
+		return encodeErr
+	}
+	if closeErr != nil {
+		_ = os.Remove(tmp)
+		return closeErr
+	}
+	return os.Rename(tmp, m.profilesPath())
+}
+
 func (m *sessionManager) readSpace(id string) (*spaceMetadata, error) {
 	spaces, err := m.readSpaces()
 	if err != nil {
@@ -799,6 +1004,16 @@ func defaultSpaceMetadata(now time.Time) spaceMetadata {
 	}
 }
 
+func defaultProfileMetadata(now time.Time) profileMetadata {
+	return profileMetadata{
+		ID:        defaultProfileID,
+		Title:     defaultProfileTitle,
+		Env:       envVars{},
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+}
+
 func normalizedSpaceTitle(id, title string) string {
 	title = strings.TrimSpace(title)
 	if title != "" {
@@ -808,6 +1023,104 @@ func normalizedSpaceTitle(id, title string) string {
 		return defaultSpaceTitle
 	}
 	return "New Space"
+}
+
+func normalizedProfile(id string, req profileRequest, createdAt, updatedAt time.Time) (*profileMetadata, error) {
+	shell, err := normalizeProfilePath(req.Shell, false)
+	if err != nil {
+		return nil, fmt.Errorf("invalid shell: %w", err)
+	}
+	workingDir, err := normalizeProfilePath(req.WorkingDir, true)
+	if err != nil {
+		return nil, fmt.Errorf("invalid working directory: %w", err)
+	}
+	env, err := normalizeEnv(req.Env)
+	if err != nil {
+		return nil, err
+	}
+	return &profileMetadata{
+		ID:         id,
+		Title:      normalizedProfileTitle(id, req.Title),
+		Shell:      shell,
+		WorkingDir: workingDir,
+		Env:        env,
+		CreatedAt:  createdAt,
+		UpdatedAt:  updatedAt,
+	}, nil
+}
+
+func normalizedProfileTitle(id, title string) string {
+	title = strings.TrimSpace(title)
+	if title != "" {
+		return title
+	}
+	if id == defaultProfileID {
+		return defaultProfileTitle
+	}
+	return "New Profile"
+}
+
+func normalizeProfilePath(value string, requireDir bool) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil
+	}
+	if !filepath.IsAbs(value) {
+		return "", fmt.Errorf("path must be absolute")
+	}
+	info, err := os.Stat(value)
+	if err != nil {
+		return "", err
+	}
+	if requireDir && !info.IsDir() {
+		return "", fmt.Errorf("%q is not a directory", value)
+	}
+	if !requireDir && info.IsDir() {
+		return "", fmt.Errorf("%q is not an executable file", value)
+	}
+	if !requireDir && info.Mode()&0o111 == 0 {
+		return "", fmt.Errorf("%q is not executable", value)
+	}
+	return value, nil
+}
+
+func normalizeEnv(values envVars) (envVars, error) {
+	env := envVars{}
+	for key, value := range values {
+		key = strings.TrimSpace(key)
+		if key == "" && value == "" {
+			continue
+		}
+		if !envNamePattern.MatchString(key) {
+			return nil, fmt.Errorf("invalid environment variable name %q", key)
+		}
+		env[key] = value
+	}
+	return env, nil
+}
+
+func applyProfileToSession(session *terminalSession, profile *profileMetadata) {
+	if profile == nil {
+		return
+	}
+	session.ProfileID = profile.ID
+	session.Shell = profile.Shell
+	session.WorkingDir = profile.WorkingDir
+	session.Env = cloneEnv(profile.Env)
+	if session.Title == "" || session.Title == "Terminal" {
+		session.Title = automaticSessionTitle(session.Shell)
+	}
+}
+
+func cloneEnv(values envVars) envVars {
+	if len(values) == 0 {
+		return envVars{}
+	}
+	next := make(envVars, len(values))
+	for key, value := range values {
+		next[key] = value
+	}
+	return next
 }
 
 func (m *sessionManager) readMetadata(id string) (*terminalSession, error) {
@@ -949,7 +1262,7 @@ func (m *sessionManager) workspace(ctx context.Context, id string) (*workspaceRe
 	return &workspaceResponse{Session: *parent, Tab: *parent, Layout: *layout, Children: children, Panes: children}, nil
 }
 
-func (m *sessionManager) createSplit(ctx context.Context, parentID, targetID, direction string) (*workspaceResponse, error) {
+func (m *sessionManager) createSplit(ctx context.Context, parentID, targetID, direction, profileID string) (*workspaceResponse, error) {
 	if direction != "horizontal" && direction != "vertical" {
 		return nil, fmt.Errorf("invalid split direction %q", direction)
 	}
@@ -970,7 +1283,13 @@ func (m *sessionManager) createSplit(ctx context.Context, parentID, targetID, di
 	if !layoutContains(layout, targetID) {
 		return nil, fmt.Errorf("target pane %q not found", targetID)
 	}
-	child, err := m.createChild(ctx, parentID)
+	if profileID == "" {
+		target, err := m.readMetadata(targetID)
+		if err == nil {
+			profileID = target.ProfileID
+		}
+	}
+	child, err := m.createChild(ctx, parentID, profileID)
 	if err != nil {
 		return nil, err
 	}
@@ -1026,7 +1345,18 @@ func (m *sessionManager) updateTitle(id, title string) (*terminalSession, error)
 	return session, nil
 }
 
-func (m *sessionManager) createChild(ctx context.Context, parentID string) (*terminalSession, error) {
+func (m *sessionManager) createChild(ctx context.Context, parentID, profileID string) (*terminalSession, error) {
+	parent, err := m.readMetadata(parentID)
+	if err != nil {
+		return nil, err
+	}
+	var profile *profileMetadata
+	if profileID != "" {
+		profile, err = m.readProfile(profileID)
+		if err != nil {
+			return nil, err
+		}
+	}
 	id, err := randomSessionID()
 	if err != nil {
 		return nil, err
@@ -1040,6 +1370,17 @@ func (m *sessionManager) createChild(ctx context.Context, parentID string) (*ter
 		CreatedAt: now,
 		UpdatedAt: now,
 		Socket:    m.socketPath(id),
+	}
+	if profile != nil {
+		applyProfileToSession(session, profile)
+	} else {
+		session.ProfileID = parent.ProfileID
+		session.Shell = parent.Shell
+		session.WorkingDir = parent.WorkingDir
+		session.Env = cloneEnv(parent.Env)
+		if session.Shell != "" {
+			session.Title = automaticSessionTitle(session.Shell)
+		}
 	}
 	if err := os.MkdirAll(m.sessionDir(id), 0o700); err != nil {
 		return nil, err
@@ -1159,6 +1500,74 @@ func (s *server) handleSpaces(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *server) handleProfiles(w http.ResponseWriter, r *http.Request) {
+	if !s.validRequestOrigin(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		profiles, err := s.sessions.listProfiles()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, profiles)
+	case http.MethodPost:
+		var req profileRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		profile, err := s.sessions.createProfile(req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, http.StatusCreated, profile)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *server) handleProfile(w http.ResponseWriter, r *http.Request) {
+	if !s.validRequestOrigin(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/profiles/"), "/")
+	if id == "" || !validSessionID(id) {
+		http.Error(w, "invalid profile id", http.StatusBadRequest)
+		return
+	}
+	switch r.Method {
+	case http.MethodPatch:
+		var req profileRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		profile, err := s.sessions.updateProfile(id, req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, http.StatusOK, profile)
+	case http.MethodDelete:
+		if err := s.sessions.deleteProfile(id); err != nil {
+			status := http.StatusNotFound
+			if id == defaultProfileID {
+				status = http.StatusConflict
+			}
+			http.Error(w, err.Error(), status)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
 func (s *server) handleSpace(w http.ResponseWriter, r *http.Request) {
 	if !s.validRequestOrigin(r) {
 		http.Error(w, "forbidden", http.StatusForbidden)
@@ -1187,7 +1596,12 @@ func (s *server) handleSpace(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
-		session, err := s.sessions.createTab(r.Context(), spaceID)
+		var req tabRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		session, err := s.sessions.createTab(r.Context(), spaceID, req.ProfileID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
@@ -1263,7 +1677,7 @@ func (s *server) handleTab(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "invalid request body", http.StatusBadRequest)
 				return
 			}
-			workspace, err := s.sessions.createSplit(r.Context(), id, req.TargetSessionID, req.Direction)
+			workspace, err := s.sessions.createSplit(r.Context(), id, req.TargetSessionID, req.Direction, req.ProfileID)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -1417,7 +1831,7 @@ func (s *server) handleTerminalSession(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "invalid request body", http.StatusBadRequest)
 				return
 			}
-			workspace, err := s.sessions.createSplit(r.Context(), id, req.TargetSessionID, req.Direction)
+			workspace, err := s.sessions.createSplit(r.Context(), id, req.TargetSessionID, req.Direction, req.ProfileID)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -1642,6 +2056,14 @@ func randomSpaceID() (string, error) {
 		return "", err
 	}
 	return "space-" + hex.EncodeToString(buf), nil
+}
+
+func randomProfileID() (string, error) {
+	buf := make([]byte, 8)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return "profile-" + hex.EncodeToString(buf), nil
 }
 
 func validSessionID(id string) bool {

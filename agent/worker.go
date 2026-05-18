@@ -210,15 +210,11 @@ func (w *workerSession) startPTY(cols, rows int) error {
 		w.mu.Unlock()
 		return nil
 	}
-	shell, args := chooseShell()
+	session, _ := (&sessionManager{root: w.root}).readMetadata(w.id)
+	shell, args := shellCommand(session)
 	cmd := exec.Command(shell, args...)
-	cmd.Dir = userHome()
-	cmd.Env = append(os.Environ(),
-		"TERM=xterm-256color",
-		"COLORTERM=truecolor",
-		"TERM_PROGRAM=ghostty-web",
-		"TERM_PROGRAM_VERSION=0.1.0",
-	)
+	cmd.Dir = workingDir(session)
+	cmd.Env = sessionEnvironment(session)
 	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
 	if err != nil {
 		w.mu.Unlock()
@@ -397,7 +393,10 @@ func (w *workerSession) updateMetadata(status string) {
 	if existing, err := (&sessionManager{root: w.root}).readMetadata(w.id); err == nil {
 		session.CreatedAt = existing.CreatedAt
 		session.SpaceID = existing.SpaceID
+		session.ProfileID = existing.ProfileID
 		session.ParentID = existing.ParentID
+		session.WorkingDir = existing.WorkingDir
+		session.Env = cloneEnv(existing.Env)
 		session.CustomTitle = existing.CustomTitle
 		if existing.CustomTitle && existing.Title != "" {
 			session.Title = existing.Title

@@ -12,8 +12,11 @@ The Go agent owns spaces, terminal tabs, and durable pane sessions. The browser 
   "title": "Terminal",
   "customTitle": true,
   "spaceId": "space-default",
+  "profileId": "profile-default",
   "parentId": "term-parent",
   "shell": "/bin/bash",
+  "workingDir": "/home/me/project",
+  "env": { "NODE_ENV": "development" },
   "status": "running",
   "createdAt": "2026-05-17T10:00:00Z",
   "updatedAt": "2026-05-17T10:00:00Z",
@@ -22,7 +25,23 @@ The Go agent owns spaces, terminal tabs, and durable pane sessions. The browser 
 }
 ```
 
-`customTitle`, `spaceId`, `parentId`, `shell`, `pid`, and `paneCount` are omitted when they do not apply. Parent sessions are terminal tabs inside a space. Child sessions are panes inside a terminal tab and are hidden from space tab lists. Empty titles reset a session to automatic naming from the shell basename or `Terminal`.
+`customTitle`, `spaceId`, `profileId`, `parentId`, `shell`, `workingDir`, `env`, `pid`, and `paneCount` are omitted when they do not apply. Parent sessions are terminal tabs inside a space. Child sessions are panes inside a terminal tab and are hidden from space tab lists. Empty titles reset a session to automatic naming from the shell basename or `Terminal`.
+
+`Profile`:
+
+```json
+{
+  "id": "profile-default",
+  "title": "Default Profile",
+  "shell": "/bin/bash",
+  "workingDir": "/home/me/project",
+  "env": { "NODE_ENV": "development" },
+  "createdAt": "2026-05-17T10:00:00Z",
+  "updatedAt": "2026-05-17T10:00:00Z"
+}
+```
+
+Profiles define launch defaults for new terminal tabs and panes. The agent snapshots `profileId`, `shell`, `workingDir`, and `env` into session metadata when the session is created, so changing or deleting a profile does not mutate existing sessions.
 
 `Space`:
 
@@ -69,6 +88,35 @@ The Go agent owns spaces, terminal tabs, and durable pane sessions. The browser 
 
 ## HTTP API
 
+`GET /api/profiles`
+
+Returns launch profiles. The agent creates `profile-default` automatically.
+
+`POST /api/profiles`
+
+Creates a profile.
+
+Request:
+
+```json
+{
+  "title": "Project",
+  "shell": "/bin/bash",
+  "workingDir": "/home/me/project",
+  "env": { "NODE_ENV": "development" }
+}
+```
+
+`shell` and `workingDir` may be blank for automatic shell and home directory defaults. Non-blank paths must be absolute; `workingDir` must point at an existing directory. Environment variable names must be shell-safe names like `KEY` or `PROJECT_ROOT`.
+
+`PATCH /api/profiles/{profileId}`
+
+Updates a non-default profile.
+
+`DELETE /api/profiles/{profileId}`
+
+Deletes a non-default profile. Existing sessions keep their snapshotted launch fields.
+
 `GET /api/spaces`
 
 Returns spaces with their terminal tabs. The agent creates `space-default` automatically and lazily migrates legacy parent sessions into it.
@@ -109,6 +157,14 @@ Deletes an empty non-default space. The default space cannot be deleted, and spa
 
 Creates a new terminal tab in a space, writes a single-pane layout, starts the worker, and returns the created parent `TerminalSession`.
 
+Request:
+
+```json
+{ "profileId": "profile-default" }
+```
+
+Blank or missing `profileId` uses `profile-default`.
+
 `GET /api/tabs/{tabId}`
 
 Returns a `TerminalTabWorkspace` for a terminal tab.
@@ -127,7 +183,17 @@ Restarts every pane in the tab while preserving the tab id, pane ids, metadata, 
 
 `POST /api/tabs/{tabId}/splits`
 
-Creates a child pane in a terminal tab.
+Creates a child pane in a terminal tab. Missing `profileId` inherits the target pane profile snapshot.
+
+Request:
+
+```json
+{
+  "targetSessionId": "term-parent",
+  "direction": "horizontal",
+  "profileId": "profile-default"
+}
+```
 
 `PATCH /api/tabs/{tabId}/layout`
 

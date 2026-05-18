@@ -12,16 +12,19 @@
 1. The agent starts on `127.0.0.1:8765` and creates a random session token.
 2. Chrome loads the PWA from the agent.
 3. The PWA calls `/api/health` and `/api/session`.
-4. The settings page lists spaces through `/api/spaces`; each space contains terminal tabs.
-5. A terminal tab loads through `/api/tabs/{id}` and owns its split layout plus pane sessions.
-6. Each terminal pane opens `/pty?token=<token>&session=<session-id>&restore=<0|1>&cols=<cols>&rows=<rows>` as a WebSocket.
-7. The agent starts the worker for that durable session if needed, then forwards binary PTY output frames to the browser.
+4. The settings page lists profiles through `/api/profiles` and spaces through `/api/spaces`; each space contains terminal tabs.
+5. New terminal tabs snapshot the selected profile's shell, working directory, and environment into session metadata.
+6. A terminal tab loads through `/api/tabs/{id}` and owns its split layout plus pane sessions.
+7. Each terminal pane opens `/pty?token=<token>&session=<session-id>&restore=<0|1>&cols=<cols>&rows=<rows>` as a WebSocket.
+8. The agent starts the worker for that durable session if needed, then forwards binary PTY output frames to the browser.
 
 ## Sessions
 
 Durable session state lives under the agent session directory, which defaults to `$XDG_STATE_HOME/crostini-ghostty/sessions` or `~/.local/state/crostini-ghostty/sessions`.
 
 A space is a durable grouping for terminal tabs. Space metadata is stored in `spaces.json` under the session root. The agent creates `space-default` automatically and lazily assigns existing parent sessions to it.
+
+Profiles are durable launch templates stored in `profiles.json` under the session root. The agent creates `profile-default` automatically. Profiles define shell path, working directory, and environment variables for new sessions; terminal session metadata stores a snapshot so existing tabs and panes remain stable after profile edits.
 
 A terminal tab is a parent session. Its `layout.json` stores a split tree. Each leaf points at a pane session id, and child pane metadata stores `parentId` so child panes stay hidden from space tab lists. Detaching a child pane clears `parentId`, assigns the default space if needed, and writes a new single-pane layout, which promotes it to a terminal tab.
 

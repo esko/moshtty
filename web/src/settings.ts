@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS: TerminalSettings = {
   density: "comfortable",
   theme: "dark",
   scrollSensitivity: 1,
+  defaultProfileId: "profile-default",
 };
 
 export function loadSettings(): TerminalSettings {
@@ -75,6 +76,10 @@ export function normalizeSettings(value: Partial<TerminalSettings> | Record<stri
   const accent = value.accent === "blue" || value.accent === "amber" ? value.accent : "green";
   const density = value.density === "compact" ? value.density : "comfortable";
   const theme = value.theme === "highContrast" || value.theme === "soft" ? value.theme : "dark";
+  const defaultProfileId =
+    typeof value.defaultProfileId === "string" && /^[a-z0-9][a-z0-9-]{2,63}$/.test(value.defaultProfileId)
+      ? value.defaultProfileId
+      : DEFAULT_SETTINGS.defaultProfileId;
   return {
     fontFamily: normalizeText(value.fontFamily, DEFAULT_SETTINGS.fontFamily, 160),
     customFontName: normalizeText(value.customFontName, DEFAULT_SETTINGS.customFontName, 80),
@@ -86,6 +91,7 @@ export function normalizeSettings(value: Partial<TerminalSettings> | Record<stri
     density,
     theme,
     scrollSensitivity: Number.isFinite(scrollSensitivity) ? clamp(scrollSensitivity, 0.5, 2) : DEFAULT_SETTINGS.scrollSensitivity,
+    defaultProfileId,
   };
 }
 

@@ -22,6 +22,7 @@ describe("settings normalization", () => {
       accent: "purple",
       density: "tiny",
       theme: "unknown",
+      defaultProfileId: "../bad",
     });
     expect(settings.fontSize).toBe(22);
     expect(settings.scrollback).toBe(5000);
@@ -30,6 +31,7 @@ describe("settings normalization", () => {
     expect(settings.accent).toBe("green");
     expect(settings.density).toBe("comfortable");
     expect(settings.theme).toBe("dark");
+    expect(settings.defaultProfileId).toBe("profile-default");
   });
 });
 

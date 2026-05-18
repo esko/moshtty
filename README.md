@@ -78,11 +78,13 @@ bun run test:visual:glyphs
 
 The browser creates and manages durable terminal tabs through the spaces API:
 
+- `GET /api/profiles` lists launch profiles.
+- `POST /api/profiles`, `PATCH /api/profiles/{profileId}`, and `DELETE /api/profiles/{profileId}` manage non-default profiles.
 - `GET /api/spaces` lists spaces and their terminal tabs.
 - `POST /api/spaces` creates a space.
 - `PATCH /api/spaces/{spaceId}` renames a space.
 - `DELETE /api/spaces/{spaceId}` removes an empty non-default space.
-- `POST /api/spaces/{spaceId}/tabs` creates a terminal tab in a space.
+- `POST /api/spaces/{spaceId}/tabs` creates a terminal tab in a space, optionally with `{ "profileId": "profile-default" }`.
 - `GET /api/tabs/{tabId}` returns the tab layout and pane sessions.
 - `PATCH /api/tabs/{tabId}` renames a tab; an empty title resets automatic naming.
 - `POST /api/tabs/{tabId}/splits` creates a child pane inside a tab.
@@ -93,6 +95,8 @@ The browser creates and manages durable terminal tabs through the spaces API:
 - `DELETE /api/tabs/{tabId}` or `DELETE /api/panes/{paneId}` removes a tab tree or child pane.
 
 The legacy `/api/terminal-sessions` routes remain as compatibility wrappers.
+
+Profiles are stored by the agent and can define a shell path, working directory, and environment variables. New sessions snapshot those launch fields so existing tabs keep their startup behavior when a profile changes later.
 
 Terminal panes attach to a durable session with:
 

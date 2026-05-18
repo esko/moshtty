@@ -105,6 +105,8 @@ func (s *server) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/session", s.handleSession)
+	mux.HandleFunc("/api/profiles", s.handleProfiles)
+	mux.HandleFunc("/api/profiles/", s.handleProfile)
 	mux.HandleFunc("/api/spaces", s.handleSpaces)
 	mux.HandleFunc("/api/spaces/", s.handleSpace)
 	mux.HandleFunc("/api/tabs/", s.handleTab)
@@ -282,13 +284,61 @@ func chooseShell() (string, []string) {
 			continue
 		}
 		if _, err := os.Stat(candidate); err == nil {
-			if strings.HasSuffix(candidate, "bash") || strings.HasSuffix(candidate, "zsh") || strings.HasSuffix(candidate, "fish") {
-				return candidate, []string{"-l"}
-			}
-			return candidate, nil
+			return candidate, loginShellArgs(candidate)
 		}
 	}
 	return "/bin/sh", nil
+}
+
+func shellCommand(session *terminalSession) (string, []string) {
+	if session != nil && session.Shell != "" {
+		return session.Shell, loginShellArgs(session.Shell)
+	}
+	return chooseShell()
+}
+
+func loginShellArgs(shell string) []string {
+	if strings.HasSuffix(shell, "bash") || strings.HasSuffix(shell, "zsh") || strings.HasSuffix(shell, "fish") {
+		return []string{"-l"}
+	}
+	return nil
+}
+
+func workingDir(session *terminalSession) string {
+	if session != nil && session.WorkingDir != "" {
+		return session.WorkingDir
+	}
+	return userHome()
+}
+
+func sessionEnvironment(session *terminalSession) []string {
+	env := os.Environ()
+	if session != nil {
+		for key, value := range session.Env {
+			env = setEnvValue(env, key, value)
+		}
+	}
+	for _, pair := range []string{
+		"TERM=xterm-256color",
+		"COLORTERM=truecolor",
+		"TERM_PROGRAM=ghostty-web",
+		"TERM_PROGRAM_VERSION=0.1.0",
+	} {
+		parts := strings.SplitN(pair, "=", 2)
+		env = setEnvValue(env, parts[0], parts[1])
+	}
+	return env
+}
+
+func setEnvValue(env []string, key, value string) []string {
+	prefix := key + "="
+	for i, pair := range env {
+		if strings.HasPrefix(pair, prefix) {
+			env[i] = prefix + value
+			return env
+		}
+	}
+	return append(env, prefix+value)
 }
 
 func userHome() string {

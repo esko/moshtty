@@ -134,7 +134,7 @@ func TestSessionManagerListsParentWorkspaces(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create parent session: %v", err)
 	}
-	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "horizontal")
+	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "horizontal", "")
 	if err != nil {
 		t.Fatalf("create split: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestSessionManagerDefaultSpaceGroupsParentTabs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create parent session: %v", err)
 	}
-	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "horizontal")
+	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "horizontal", "")
 	if err != nil {
 		t.Fatalf("create split: %v", err)
 	}
@@ -329,7 +329,7 @@ func TestSessionManagerRejectsSpaceDeleteWithTabs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create space: %v", err)
 	}
-	tab, err := m.createTab(ctx, space.ID)
+	tab, err := m.createTab(ctx, space.ID, "")
 	if err != nil {
 		t.Fatalf("create tab in space: %v", err)
 	}
@@ -349,14 +349,14 @@ func TestSessionManagerCreateTabUsesSelectedSpace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create space: %v", err)
 	}
-	tab, err := m.createTab(ctx, space.ID)
+	tab, err := m.createTab(ctx, space.ID, "")
 	if err != nil {
 		t.Fatalf("create tab in selected space: %v", err)
 	}
 	if tab.SpaceID != space.ID {
 		t.Fatalf("expected selected space id %q, got %#v", space.ID, tab)
 	}
-	if _, err := m.createTab(ctx, "space-missing"); err == nil {
+	if _, err := m.createTab(ctx, "space-missing", ""); err == nil {
 		t.Fatal("expected unknown space to be rejected")
 	}
 
@@ -378,6 +378,66 @@ func TestSessionManagerCreateTabUsesSelectedSpace(t *testing.T) {
 	}
 }
 
+func TestSessionManagerCreateTabUsesProfileSnapshot(t *testing.T) {
+	m := newTestSessionManager(t)
+	ctx := context.Background()
+	workdir := t.TempDir()
+
+	profile, err := m.createProfile(profileRequest{
+		Title:      "Build",
+		Shell:      "/bin/sh",
+		WorkingDir: workdir,
+		Env:        envVars{"CROSTINI_TEST_PROFILE": "1"},
+	})
+	if err != nil {
+		t.Fatalf("create profile: %v", err)
+	}
+	tab, err := m.createTab(ctx, defaultSpaceID, profile.ID)
+	if err != nil {
+		t.Fatalf("create tab with profile: %v", err)
+	}
+	if tab.ProfileID != profile.ID || tab.Shell != "/bin/sh" || tab.WorkingDir != workdir || tab.Env["CROSTINI_TEST_PROFILE"] != "1" {
+		t.Fatalf("expected profile snapshot on tab, got %#v", tab)
+	}
+
+	if _, err := m.updateProfile(profile.ID, profileRequest{Title: "Changed", Shell: "/bin/sh"}); err != nil {
+		t.Fatalf("update profile: %v", err)
+	}
+	stored, err := m.readMetadata(tab.ID)
+	if err != nil {
+		t.Fatalf("read tab metadata: %v", err)
+	}
+	if stored.WorkingDir != workdir || stored.Env["CROSTINI_TEST_PROFILE"] != "1" {
+		t.Fatalf("expected existing tab snapshot to remain stable, got %#v", stored)
+	}
+}
+
+func TestSessionManagerSplitInheritsParentProfileSnapshot(t *testing.T) {
+	m := newTestSessionManager(t)
+	ctx := context.Background()
+
+	profile, err := m.createProfile(profileRequest{Title: "Fish", Shell: "/bin/sh", Env: envVars{"PANE_PROFILE": "inherited"}})
+	if err != nil {
+		t.Fatalf("create profile: %v", err)
+	}
+	tab, err := m.createTab(ctx, defaultSpaceID, profile.ID)
+	if err != nil {
+		t.Fatalf("create tab: %v", err)
+	}
+	workspace, err := m.createSplit(ctx, tab.ID, tab.ID, "horizontal", "")
+	if err != nil {
+		t.Fatalf("create split: %v", err)
+	}
+	childID := workspace.Layout.Second.SessionID
+	child, err := m.readMetadata(childID)
+	if err != nil {
+		t.Fatalf("read child metadata: %v", err)
+	}
+	if child.ProfileID != profile.ID || child.Shell != "/bin/sh" || child.Env["PANE_PROFILE"] != "inherited" {
+		t.Fatalf("expected inherited profile snapshot on child, got %#v", child)
+	}
+}
+
 func TestSessionManagerRestartClearsCaptureAndPreservesTabLayout(t *testing.T) {
 	m := newTestSessionManager(t)
 	ctx := context.Background()
@@ -386,7 +446,7 @@ func TestSessionManagerRestartClearsCaptureAndPreservesTabLayout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create parent session: %v", err)
 	}
-	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "horizontal")
+	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "horizontal", "")
 	if err != nil {
 		t.Fatalf("create split: %v", err)
 	}
@@ -421,7 +481,7 @@ func TestSessionManagerWorkspaceAndDetach(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create parent session: %v", err)
 	}
-	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "vertical")
+	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "vertical", "")
 	if err != nil {
 		t.Fatalf("create split: %v", err)
 	}
@@ -477,7 +537,7 @@ func TestSessionManagerRemoveChildPaneUpdatesLayout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create parent session: %v", err)
 	}
-	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "horizontal")
+	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "horizontal", "")
 	if err != nil {
 		t.Fatalf("create split: %v", err)
 	}
@@ -503,7 +563,7 @@ func TestSessionManagerDeleteParentRemovesSessionTree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create parent session: %v", err)
 	}
-	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "horizontal")
+	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "horizontal", "")
 	if err != nil {
 		t.Fatalf("create split: %v", err)
 	}
@@ -535,7 +595,7 @@ func TestSessionManagerDeleteChildRemovesPaneOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create parent session: %v", err)
 	}
-	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "vertical")
+	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "vertical", "")
 	if err != nil {
 		t.Fatalf("create split: %v", err)
 	}
@@ -571,7 +631,7 @@ func TestSessionManagerReferencedChildPaneIsNotOrphan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create parent session: %v", err)
 	}
-	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "horizontal")
+	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "horizontal", "")
 	if err != nil {
 		t.Fatalf("create split: %v", err)
 	}
@@ -599,7 +659,7 @@ func TestSessionManagerChildMissingFromParentLayoutIsOrphan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create parent session: %v", err)
 	}
-	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "horizontal")
+	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "horizontal", "")
 	if err != nil {
 		t.Fatalf("create split: %v", err)
 	}
@@ -625,7 +685,7 @@ func TestSessionManagerChildWithMissingParentMetadataIsOrphan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create parent session: %v", err)
 	}
-	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "vertical")
+	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "vertical", "")
 	if err != nil {
 		t.Fatalf("create split: %v", err)
 	}
@@ -651,7 +711,7 @@ func TestSessionManagerDeleteOrphanPaneSessionsPreservesValidDirs(t *testing.T) 
 	if err != nil {
 		t.Fatalf("create valid parent session: %v", err)
 	}
-	validWorkspace, err := m.createSplit(ctx, validParent.ID, validParent.ID, "horizontal")
+	validWorkspace, err := m.createSplit(ctx, validParent.ID, validParent.ID, "horizontal", "")
 	if err != nil {
 		t.Fatalf("create valid split: %v", err)
 	}
@@ -661,7 +721,7 @@ func TestSessionManagerDeleteOrphanPaneSessionsPreservesValidDirs(t *testing.T) 
 	if err != nil {
 		t.Fatalf("create orphan parent session: %v", err)
 	}
-	orphanWorkspace, err := m.createSplit(ctx, orphanParent.ID, orphanParent.ID, "vertical")
+	orphanWorkspace, err := m.createSplit(ctx, orphanParent.ID, orphanParent.ID, "vertical", "")
 	if err != nil {
 		t.Fatalf("create orphan split: %v", err)
 	}
@@ -695,7 +755,7 @@ func TestSessionManagerUpdateLayoutPersistsClampedRatios(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create parent session: %v", err)
 	}
-	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "horizontal")
+	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "horizontal", "")
 	if err != nil {
 		t.Fatalf("create split: %v", err)
 	}
@@ -726,12 +786,12 @@ func TestSessionManagerUpdateLayoutPersistsNestedRatios(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create parent session: %v", err)
 	}
-	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "horizontal")
+	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "horizontal", "")
 	if err != nil {
 		t.Fatalf("create first split: %v", err)
 	}
 	childID := workspace.Layout.Second.SessionID
-	workspace, err = m.createSplit(ctx, parent.ID, childID, "vertical")
+	workspace, err = m.createSplit(ctx, parent.ID, childID, "vertical", "")
 	if err != nil {
 		t.Fatalf("create nested split: %v", err)
 	}
@@ -767,7 +827,7 @@ func TestSessionManagerUpdateLayoutRejectsChangedLeavesAndShape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create parent session: %v", err)
 	}
-	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "horizontal")
+	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "horizontal", "")
 	if err != nil {
 		t.Fatalf("create split: %v", err)
 	}
@@ -830,7 +890,7 @@ func TestSessionManagerUpdateTitleRenamesChildPane(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create parent session: %v", err)
 	}
-	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "horizontal")
+	workspace, err := m.createSplit(ctx, parent.ID, parent.ID, "horizontal", "")
 	if err != nil {
 		t.Fatalf("create split: %v", err)
 	}
@@ -983,6 +1043,23 @@ func TestEnsureRunningTimeoutIncludesWorkerLog(t *testing.T) {
 		if !strings.Contains(msg, want) {
 			t.Fatalf("expected error to contain %q, got %q", want, msg)
 		}
+	}
+}
+
+func TestSessionEnvironmentAppliesProfileAndPreservesTerminalVars(t *testing.T) {
+	env := sessionEnvironment(&terminalSession{Env: envVars{"TERM": "bad", "CUSTOM_VALUE": "ok"}})
+	got := map[string]string{}
+	for _, pair := range env {
+		parts := strings.SplitN(pair, "=", 2)
+		if len(parts) == 2 {
+			got[parts[0]] = parts[1]
+		}
+	}
+	if got["CUSTOM_VALUE"] != "ok" {
+		t.Fatalf("expected custom env value, got %#v", got)
+	}
+	if got["TERM"] != "xterm-256color" || got["COLORTERM"] != "truecolor" || got["TERM_PROGRAM"] != "ghostty-web" {
+		t.Fatalf("expected terminal env vars to win, got %#v", got)
 	}
 }
 

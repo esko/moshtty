@@ -93,4 +93,14 @@ Completed outcome:
 
 ## 8. Profiles
 
-Profiles should come after settings and session naming are stable. A profile can define shell path, environment variables, working directory, font/theme overrides, and startup behavior for new workspaces.
+Status: complete.
+
+Profiles define launch defaults for new terminal tabs and panes.
+
+Completed outcome:
+
+- list, create, edit, and delete non-default profiles from the app menu;
+- choose the default profile for new terminal tabs;
+- define shell path, working directory, and environment variables;
+- snapshot profile launch fields into new sessions so later profile edits do not mutate existing sessions;
+- have child panes inherit the target pane profile unless an explicit profile is supplied by the API.

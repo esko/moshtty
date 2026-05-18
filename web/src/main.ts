@@ -13,12 +13,13 @@ import {
   terminalTheme,
 } from "./settings";
 import { paneShortcutForEvent, shouldPassThroughSystemShortcut, type PaneShortcut } from "./shortcuts";
-import type { AgentMessage, OrphanCleanup, SessionLayoutNode, Space, TerminalSession, TerminalSettings, Workspace } from "./types";
+import type { AgentMessage, EnvVars, OrphanCleanup, Profile, SessionLayoutNode, Space, TerminalSession, TerminalSettings, Workspace } from "./types";
 import "./styles.css";
 
 const APP_TITLE = "Crostini Ghostty";
 const DEBUG_SHELL_PARAM = "debug-shell";
 const DEFAULT_SPACE_ID = "space-default";
+const DEFAULT_PROFILE_ID = "profile-default";
 
 const appRoot = requiredElement<HTMLElement>("#app");
 const settingsRoot = requiredElement<HTMLElement>("#settings");
@@ -47,6 +48,7 @@ let terminalRuntimeReady = false;
 let debugShell: DebugShellState | null = null;
 let listedSessions: TerminalSession[] = [];
 let listedSpaces: Space[] = [];
+let listedProfiles: Profile[] = [];
 const panes = new Map<string, TerminalPane>();
 
 type SplitNode = Extract<SessionLayoutNode, { type: "split" }>;
@@ -837,7 +839,9 @@ function updateContextMenuState(): void {
 async function ensureParentSession(): Promise<string> {
   const current = currentTabId();
   if (current) return current;
-  const nextSession = await postJSON<TerminalSession>(`/api/spaces/${DEFAULT_SPACE_ID}/tabs`);
+  const nextSession = await postJSON<TerminalSession>(`/api/spaces/${DEFAULT_SPACE_ID}/tabs`, {
+    profileId: settings.defaultProfileId,
+  });
   const url = new URL(window.location.href);
   url.searchParams.set("tab", nextSession.id);
   url.searchParams.delete("session");
@@ -898,16 +902,16 @@ function renderSettingsPage(): void {
         <p class="settings-intro">Open spaces, terminal tabs, and tune defaults for new Crostini shell sessions.</p>
       </div>
       <div class="menu-actions">
-        <a class="primary-link" href="${escapeAttribute(appURL("/terminal.html"))}">New terminal</a>
+        <button class="primary-button" type="button" id="createDefaultTerminal">New terminal</button>
         <button class="secondary-button" type="button" id="focusSettings">Settings</button>
       </div>
     </section>
 
     <section class="quick-grid" aria-label="Quick actions">
-      <a class="quick-action" href="${escapeAttribute(appURL("/terminal.html"))}">
+      <button class="quick-action" type="button" id="createQuickTerminal">
         <strong>New terminal</strong>
         <span>Start a fresh Crostini terminal tab.</span>
-      </a>
+      </button>
       <button class="quick-action" type="button" id="copyLaunchCommand">
         <strong>Agent command</strong>
         <span>Copy the local launch command.</span>
@@ -916,6 +920,21 @@ function renderSettingsPage(): void {
         <strong>Reset profile</strong>
         <span>Restore terminal defaults.</span>
       </button>
+    </section>
+
+    <section class="session-panel" aria-labelledby="profilesTitle">
+      <div class="section-heading">
+        <div>
+          <h2 id="profilesTitle">Profiles</h2>
+          <p>Choose shell, working directory, and environment defaults for new terminal tabs.</p>
+        </div>
+        <div class="section-actions">
+          <button class="secondary-button" type="button" id="createProfile">New profile</button>
+        </div>
+      </div>
+      <div id="profileList" class="session-list" aria-live="polite">
+        <div class="session-empty">Loading profiles</div>
+      </div>
     </section>
 
     <section class="session-panel" aria-labelledby="sessionsTitle">
@@ -1035,6 +1054,12 @@ function renderSettingsPage(): void {
   };
   requiredElement<HTMLButtonElement>("#resetSettings").addEventListener("click", reset);
   requiredElement<HTMLButtonElement>("#resetSettingsQuick").addEventListener("click", reset);
+  requiredElement<HTMLButtonElement>("#createDefaultTerminal").addEventListener("click", () => {
+    void createTabInSpace(DEFAULT_SPACE_ID);
+  });
+  requiredElement<HTMLButtonElement>("#createQuickTerminal").addEventListener("click", () => {
+    void createTabInSpace(DEFAULT_SPACE_ID);
+  });
   requiredElement<HTMLButtonElement>("#focusSettings").addEventListener("click", () => {
     requiredElement<HTMLElement>("#settingsActions").scrollIntoView({ behavior: "smooth", block: "end" });
   });
@@ -1047,6 +1072,10 @@ function renderSettingsPage(): void {
   requiredElement<HTMLButtonElement>("#createSpace").addEventListener("click", () => {
     void createSpace();
   });
+  requiredElement<HTMLButtonElement>("#createProfile").addEventListener("click", () => {
+    void editProfile();
+  });
+  void renderProfileList();
   void renderSpaceList();
   void renderOrphanPanel();
 }
@@ -1069,6 +1098,62 @@ async function renderSpaceList(): Promise<void> {
     listedSessions = [];
     list.innerHTML = `<div class="session-empty">Unable to load spaces</div>`;
   }
+}
+
+async function renderProfileList(): Promise<void> {
+  const list = requiredElement<HTMLElement>("#profileList");
+  list.innerHTML = `<div class="session-empty">Loading profiles</div>`;
+  try {
+    const profiles = await getJSON<Profile[]>("/api/profiles");
+    listedProfiles = profiles;
+    if (!profiles.some((profile) => profile.id === settings.defaultProfileId)) {
+      settings = { ...settings, defaultProfileId: DEFAULT_PROFILE_ID };
+      saveSettings(settings);
+    }
+    list.replaceChildren(...profiles.map((profile) => renderProfileRow(profile)));
+  } catch (error) {
+    console.error(error);
+    listedProfiles = [];
+    list.innerHTML = `<div class="session-empty">Unable to load profiles</div>`;
+  }
+}
+
+function renderProfileRow(profile: Profile): HTMLElement {
+  const row = document.createElement("article");
+  row.className = "session-row";
+  const isDefault = profile.id === settings.defaultProfileId;
+  const details = profileSummary(profile);
+  row.innerHTML = `
+    <div class="session-main">
+      <strong>${escapeHTML(profile.title)}${isDefault ? " · default" : ""}</strong>
+      <span>${escapeHTML(details)}</span>
+    </div>
+    <div class="session-meta">
+      <span>${escapeHTML(profile.id)}</span>
+      <time>${escapeHTML(formatSessionDate(profile.updatedAt || profile.createdAt))}</time>
+    </div>
+    <div class="session-actions">
+      <button class="icon-button" type="button" title="Use for new terminals" aria-label="Use ${escapeAttribute(profile.title)} for new terminals" data-select-profile="${escapeAttribute(profile.id)}"${isDefault ? " disabled" : ""}>
+        <span aria-hidden="true">✓</span>
+      </button>
+      <button class="icon-button" type="button" title="Edit profile" aria-label="Edit ${escapeAttribute(profile.title)}" data-edit-profile="${escapeAttribute(profile.id)}"${profile.id === DEFAULT_PROFILE_ID ? " disabled" : ""}>
+        <span aria-hidden="true">✎</span>
+      </button>
+      <button class="icon-button danger" type="button" title="Delete profile" aria-label="Delete ${escapeAttribute(profile.title)}" data-delete-profile="${escapeAttribute(profile.id)}"${profile.id === DEFAULT_PROFILE_ID ? " disabled" : ""}>
+        <span aria-hidden="true">${trashIcon()}</span>
+      </button>
+    </div>
+  `;
+  return row;
+}
+
+function profileSummary(profile: Profile): string {
+  const parts = [
+    profile.shell || "Automatic shell",
+    profile.workingDir || "Home directory",
+    `${Object.keys(profile.env ?? {}).length} env`,
+  ];
+  return parts.join(" · ");
 }
 
 function renderSpace(space: Space): HTMLElement {
@@ -1142,6 +1227,26 @@ function renderTabRow(session: TerminalSession): HTMLElement {
 }
 
 document.addEventListener("click", (event) => {
+  const createProfileButton = (event.target as Element).closest<HTMLButtonElement>("button[data-create-profile]");
+  if (createProfileButton) {
+    void editProfile();
+    return;
+  }
+  const selectProfileButton = (event.target as Element).closest<HTMLButtonElement>("button[data-select-profile]");
+  if (selectProfileButton?.dataset.selectProfile) {
+    selectDefaultProfile(selectProfileButton.dataset.selectProfile);
+    return;
+  }
+  const editProfileButton = (event.target as Element).closest<HTMLButtonElement>("button[data-edit-profile]");
+  if (editProfileButton?.dataset.editProfile) {
+    void editProfile(editProfileButton.dataset.editProfile);
+    return;
+  }
+  const deleteProfileButton = (event.target as Element).closest<HTMLButtonElement>("button[data-delete-profile]");
+  if (deleteProfileButton?.dataset.deleteProfile) {
+    void deleteProfile(deleteProfileButton.dataset.deleteProfile);
+    return;
+  }
   const cleanupOrphansButton = (event.target as Element).closest<HTMLButtonElement>("button[data-cleanup-orphans]");
   if (cleanupOrphansButton) {
     void cleanupOrphanPanes();
@@ -1243,6 +1348,82 @@ async function cleanupOrphanPanes(): Promise<void> {
   if (panel) panel.innerHTML = `<span>Removed ${result.deleted} orphan pane${result.deleted === 1 ? "" : "s"}</span>`;
 }
 
+function selectDefaultProfile(profileId: string): void {
+  settings = normalizeSettings({ ...settings, defaultProfileId: profileId });
+  saveSettings(settings);
+  void renderProfileList();
+}
+
+async function editProfile(profileId?: string): Promise<void> {
+  const existing = profileId ? listedProfiles.find((candidate) => candidate.id === profileId) : undefined;
+  if (profileId && !existing) return;
+  const title = window.prompt("Profile name", existing?.title ?? "");
+  if (title === null) return;
+  const shell = window.prompt("Shell path", existing?.shell ?? "");
+  if (shell === null) return;
+  const workingDir = window.prompt("Working directory", existing?.workingDir ?? "");
+  if (workingDir === null) return;
+  const envText = window.prompt("Environment variables, one KEY=value per line", envToText(existing?.env));
+  if (envText === null) return;
+  const env = envFromText(envText);
+  if (!env) return;
+  const payload = { title, shell, workingDir, env };
+  const url = existing ? `/api/profiles/${encodeURIComponent(existing.id)}` : "/api/profiles";
+  const response = await fetch(url, {
+    method: existing ? "PATCH" : "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    window.alert(await response.text());
+    return;
+  }
+  await renderProfileList();
+}
+
+async function deleteProfile(profileId: string): Promise<void> {
+  const profile = listedProfiles.find((candidate) => candidate.id === profileId);
+  if (!profile || profile.id === DEFAULT_PROFILE_ID) return;
+  if (!window.confirm(`Delete profile "${profile.title}"?`)) return;
+  const response = await fetch(`/api/profiles/${encodeURIComponent(profile.id)}`, {
+    method: "DELETE",
+    credentials: "same-origin",
+  });
+  if (!response.ok) {
+    console.error(`delete profile ${profile.id} failed with ${response.status}`);
+    return;
+  }
+  if (settings.defaultProfileId === profile.id) {
+    settings = { ...settings, defaultProfileId: DEFAULT_PROFILE_ID };
+    saveSettings(settings);
+  }
+  await renderProfileList();
+}
+
+function envToText(env: EnvVars | undefined): string {
+  return Object.entries(env ?? {})
+    .map(([key, value]) => `${key}=${value}`)
+    .join("\n");
+}
+
+function envFromText(value: string): EnvVars | null {
+  const env: EnvVars = {};
+  for (const rawLine of value.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const index = line.indexOf("=");
+    const key = index >= 0 ? line.slice(0, index).trim() : line;
+    const envValue = index >= 0 ? line.slice(index + 1) : "";
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+      window.alert(`Invalid environment variable name: ${key}`);
+      return null;
+    }
+    env[key] = envValue;
+  }
+  return env;
+}
+
 function openMenuSpaceRenameDialog(spaceId: string): void {
   const space = listedSpaces.find((candidate) => candidate.id === spaceId);
   if (!space) return;
@@ -1277,7 +1458,9 @@ async function deleteSpace(spaceId: string): Promise<void> {
 }
 
 async function createTabInSpace(spaceId: string): Promise<void> {
-  const session = await postJSON<TerminalSession>(`/api/spaces/${encodeURIComponent(spaceId)}/tabs`);
+  const session = await postJSON<TerminalSession>(`/api/spaces/${encodeURIComponent(spaceId)}/tabs`, {
+    profileId: settings.defaultProfileId,
+  });
   openAppURL(`/terminal.html?tab=${encodeURIComponent(session.id)}`, { newTab: true });
   if (!settingsRoot.hidden) await renderSpaceList();
 }
@@ -1294,6 +1477,7 @@ function readSettingsForm(): TerminalSettings {
     density: requiredElement<HTMLSelectElement>("#density").value,
     theme: requiredElement<HTMLSelectElement>("#theme").value,
     scrollSensitivity: Number(requiredElement<HTMLInputElement>("#scrollSensitivity").value),
+    defaultProfileId: settings.defaultProfileId,
   });
 }
 
