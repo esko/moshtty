@@ -5,7 +5,7 @@ export function requiredElement<T extends Element>(selector: string): T {
 }
 
 export function escapeAttribute(value: string): string {
-  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("'", "&#39;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
 export function escapeHTML(value: string): string {
