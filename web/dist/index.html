@@ -7,7 +7,7 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" />
     <title>Crostini Ghostty Terminal</title>
-    <script type="module" crossorigin src="/assets/index-CMv8hDQ0.js"></script>
+    <script type="module" crossorigin src="/assets/index-DNyrJylH.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-DiGsfAx2.css">
   </head>
   <body>
@@ -86,6 +86,19 @@
           <div class="dialog-actions">
             <button class="secondary-button" value="cancel">Cancel</button>
             <button class="primary-button" value="save">Save</button>
+          </div>
+        </form>
+      </dialog>
+      <dialog id="spaceDialog" class="rename-dialog" aria-labelledby="spaceDialogTitle">
+        <form method="dialog">
+          <h2 id="spaceDialogTitle">New space</h2>
+          <label>
+            <span>Name</span>
+            <input id="spaceTitle" name="title" type="text" autocomplete="off" />
+          </label>
+          <div class="dialog-actions">
+            <button class="secondary-button" value="cancel">Cancel</button>
+            <button class="primary-button" value="save">Create</button>
           </div>
         </form>
       </dialog>

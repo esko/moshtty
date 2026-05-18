@@ -87,6 +87,19 @@
           </div>
         </form>
       </dialog>
+      <dialog id="spaceDialog" class="rename-dialog" aria-labelledby="spaceDialogTitle">
+        <form method="dialog">
+          <h2 id="spaceDialogTitle">New space</h2>
+          <label>
+            <span>Name</span>
+            <input id="spaceTitle" name="title" type="text" autocomplete="off" />
+          </label>
+          <div class="dialog-actions">
+            <button class="secondary-button" value="cancel">Cancel</button>
+            <button class="primary-button" value="save">Create</button>
+          </div>
+        </form>
+      </dialog>
       <section id="offline" class="offline" hidden>
         <h1>Agent unavailable</h1>
         <p>Start the Crostini agent, then reconnect.</p>

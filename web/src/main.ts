@@ -43,6 +43,8 @@ const profileShellInput = requiredElement<HTMLInputElement>("#profileShell");
 const profileWorkingDirInput = requiredElement<HTMLInputElement>("#profileWorkingDir");
 const profileEnvInput = requiredElement<HTMLTextAreaElement>("#profileEnv");
 const profileError = requiredElement<HTMLElement>("#profileError");
+const spaceDialog = requiredElement<HTMLDialogElement>("#spaceDialog");
+const spaceTitleInput = requiredElement<HTMLInputElement>("#spaceTitle");
 
 let settings = loadSettings();
 applyAppAppearance(settings);
@@ -169,6 +171,11 @@ profileForm.addEventListener("submit", (event) => {
   if (!envFromText(profileEnvInput.value)) {
     event.preventDefault();
   }
+});
+
+spaceDialog.addEventListener("close", () => {
+  if (spaceDialog.returnValue !== "save") return;
+  void createSpace(spaceTitleInput.value);
 });
 
 window.addEventListener("resize", scheduleFit);
@@ -1091,7 +1098,7 @@ function renderSettingsPage(): void {
     void renderSpaceList();
   });
   requiredElement<HTMLButtonElement>("#createSpace").addEventListener("click", () => {
-    void createSpace();
+    openCreateSpaceDialog();
   });
   requiredElement<HTMLButtonElement>("#createProfile").addEventListener("click", () => {
     void editProfile();
@@ -1472,9 +1479,14 @@ function openMenuSpaceRenameDialog(spaceId: string): void {
   openRenameDialogForSpace(space);
 }
 
-async function createSpace(): Promise<void> {
-  const title = window.prompt("Space name", "");
-  if (title === null) return;
+function openCreateSpaceDialog(): void {
+  spaceDialog.returnValue = "";
+  spaceTitleInput.value = "";
+  if (!spaceDialog.open) spaceDialog.showModal();
+  spaceTitleInput.focus();
+}
+
+async function createSpace(title: string): Promise<void> {
   await postJSON<Space>("/api/spaces", { title: title.trim() || undefined });
   await renderSpaceList();
 }
