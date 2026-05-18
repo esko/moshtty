@@ -49,6 +49,7 @@ type SplitResizeState = {
   pointerId: number;
   node: SplitNode;
   split: HTMLElement;
+  splitRect: DOMRect;
   divider: HTMLElement;
   first: HTMLElement;
   second: HTMLElement;
@@ -438,7 +439,7 @@ function renderLayoutNode(node: SessionLayoutNode): HTMLElement {
   divider.addEventListener("pointerdown", (event) => {
     event.preventDefault();
     divider.setPointerCapture(event.pointerId);
-    activeResize = { pointerId: event.pointerId, node: splitNode, split, divider, first, second };
+    activeResize = { pointerId: event.pointerId, node: splitNode, split, splitRect: split.getBoundingClientRect(), divider, first, second };
     split.classList.add("resizing");
     resizeSplitFromPointer(activeResize, event.clientX, event.clientY);
   });
@@ -456,7 +457,7 @@ function renderLayoutNode(node: SessionLayoutNode): HTMLElement {
 }
 
 function resizeSplitFromPointer(state: SplitResizeState, clientX: number, clientY: number): void {
-  const nextRatio = ratioFromPointer(state.node.direction, state.split.getBoundingClientRect(), clientX, clientY);
+  const nextRatio = ratioFromPointer(state.node.direction, state.splitRect, clientX, clientY);
   applySplitRatio(state.node, state.first, state.second, nextRatio);
   updateDividerValue(state.divider, state.node.ratio);
   scheduleFit();

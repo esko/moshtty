@@ -1,0 +1,3 @@
+## 2025-05-18 - Eliminated pointermove layout thrashing in split resize
+**Learning:** During split pane resizing, the `pointermove` event was calling `split.getBoundingClientRect()` on every execution. Since the event handler updates flex basis (which triggers layout changes), the subsequent read of bounding client rect forced synchronous layout calculations ("layout thrashing"), degrading rendering performance, especially noticeable with high-polling rate inputs.
+**Action:** Always cache bounding boxes (like `DOMRect`) retrieved from elements whose size/position is static during a continuous gesture (like drag/resize), typically upon the initial event (e.g. `pointerdown`), and reuse that state during the high-frequency continuous events (e.g. `pointermove`).
