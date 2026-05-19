@@ -378,6 +378,115 @@ func TestSessionManagerCreateTabUsesSelectedSpace(t *testing.T) {
 	}
 }
 
+func TestSessionManagerMovesTabBetweenSpaces(t *testing.T) {
+	m := newTestSessionManager(t)
+	ctx := context.Background()
+
+	source, err := m.createSpace("Source")
+	if err != nil {
+		t.Fatalf("create source space: %v", err)
+	}
+	target, err := m.createSpace("Target")
+	if err != nil {
+		t.Fatalf("create target space: %v", err)
+	}
+	tab, err := m.createTab(ctx, source.ID, "")
+	if err != nil {
+		t.Fatalf("create tab: %v", err)
+	}
+	title := "Build log"
+	renamed, err := m.updateTab(tab.ID, tabUpdateRequest{Title: &title})
+	if err != nil {
+		t.Fatalf("rename tab: %v", err)
+	}
+	moved, err := m.updateTab(tab.ID, tabUpdateRequest{SpaceID: target.ID})
+	if err != nil {
+		t.Fatalf("move tab: %v", err)
+	}
+	if moved.SpaceID != target.ID {
+		t.Fatalf("expected moved tab in %q, got %#v", target.ID, moved)
+	}
+	if moved.Title != renamed.Title || !moved.CustomTitle {
+		t.Fatalf("expected move to preserve custom title, got %#v", moved)
+	}
+	if _, err := m.updateTab(tab.ID, tabUpdateRequest{SpaceID: "space-missing"}); err == nil {
+		t.Fatal("expected move to missing space to fail")
+	}
+	stored, err := m.readMetadata(tab.ID)
+	if err != nil {
+		t.Fatalf("read moved tab metadata: %v", err)
+	}
+	if stored.SpaceID != target.ID {
+		t.Fatalf("expected failed move to leave tab in target space, got %#v", stored)
+	}
+
+	spaces, err := m.listSpaces(ctx)
+	if err != nil {
+		t.Fatalf("list spaces: %v", err)
+	}
+	for _, listed := range spaces {
+		switch listed.ID {
+		case source.ID:
+			if len(listed.Tabs) != 0 {
+				t.Fatalf("expected source space to be empty, got %#v", listed.Tabs)
+			}
+		case target.ID:
+			if len(listed.Tabs) != 1 || listed.Tabs[0].ID != tab.ID {
+				t.Fatalf("expected moved tab in target space, got %#v", listed.Tabs)
+			}
+		}
+	}
+}
+
+func TestSessionManagerUpdateTabRenamesAndMoves(t *testing.T) {
+	m := newTestSessionManager(t)
+	ctx := context.Background()
+
+	space, err := m.createSpace("Tasks")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	tab, err := m.createTab(ctx, defaultSpaceID, "")
+	if err != nil {
+		t.Fatalf("create tab: %v", err)
+	}
+	title := "Worker"
+	updated, err := m.updateTab(tab.ID, tabUpdateRequest{Title: &title, SpaceID: space.ID})
+	if err != nil {
+		t.Fatalf("rename and move tab: %v", err)
+	}
+	if updated.Title != title || !updated.CustomTitle || updated.SpaceID != space.ID {
+		t.Fatalf("expected renamed moved tab, got %#v", updated)
+	}
+}
+
+func TestSessionManagerUpdateTabRejectsChildPane(t *testing.T) {
+	m := newTestSessionManager(t)
+	ctx := context.Background()
+
+	tab, err := m.createTab(ctx, defaultSpaceID, "")
+	if err != nil {
+		t.Fatalf("create tab: %v", err)
+	}
+	workspace, err := m.createSplit(ctx, tab.ID, tab.ID, "horizontal", "")
+	if err != nil {
+		t.Fatalf("create split: %v", err)
+	}
+	childID := ""
+	for _, child := range workspace.Children {
+		if child.ID != tab.ID {
+			childID = child.ID
+			break
+		}
+	}
+	if childID == "" {
+		t.Fatalf("expected child pane in workspace %#v", workspace)
+	}
+	if _, err := m.updateTab(childID, tabUpdateRequest{SpaceID: defaultSpaceID}); err == nil {
+		t.Fatal("expected child pane tab update to fail")
+	}
+}
+
 func TestSessionManagerCreateTabUsesProfileSnapshot(t *testing.T) {
 	m := newTestSessionManager(t)
 	ctx := context.Background()

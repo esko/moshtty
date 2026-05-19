@@ -89,6 +89,11 @@ type tabRequest struct {
 	ProfileID string `json:"profileId"`
 }
 
+type tabUpdateRequest struct {
+	Title   *string `json:"title"`
+	SpaceID string  `json:"spaceId"`
+}
+
 type spaceMetadata struct {
 	ID        string    `json:"id"`
 	Title     string    `json:"title"`
@@ -1345,6 +1350,37 @@ func (m *sessionManager) updateTitle(id, title string) (*terminalSession, error)
 	return session, nil
 }
 
+func (m *sessionManager) updateTab(id string, req tabUpdateRequest) (*terminalSession, error) {
+	session, err := m.readMetadata(id)
+	if err != nil {
+		return nil, err
+	}
+	if session.ParentID != "" {
+		return nil, fmt.Errorf("session %q is not a tab", id)
+	}
+	if req.Title != nil {
+		nextTitle := strings.TrimSpace(*req.Title)
+		if nextTitle == "" {
+			session.CustomTitle = false
+			session.Title = automaticSessionTitle(session.Shell)
+		} else {
+			session.CustomTitle = true
+			session.Title = nextTitle
+		}
+	}
+	if req.SpaceID != "" {
+		if _, err := m.readSpace(req.SpaceID); err != nil {
+			return nil, err
+		}
+		session.SpaceID = req.SpaceID
+	}
+	session.UpdatedAt = time.Now().UTC()
+	if err := m.writeMetadata(session); err != nil {
+		return nil, err
+	}
+	return session, nil
+}
+
 func (m *sessionManager) createChild(ctx context.Context, parentID, profileID string) (*terminalSession, error) {
 	parent, err := m.readMetadata(parentID)
 	if err != nil {
@@ -1695,12 +1731,12 @@ func (s *server) handleTab(w http.ResponseWriter, r *http.Request) {
 		}
 	case http.MethodPatch:
 		if len(parts) == 1 {
-			var req titleRequest
+			var req tabUpdateRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, "invalid request body", http.StatusBadRequest)
 				return
 			}
-			session, err := s.sessions.updateTitle(id, req.Title)
+			session, err := s.sessions.updateTab(id, req)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return

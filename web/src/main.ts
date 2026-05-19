@@ -1263,6 +1263,7 @@ function renderTabRow(session: TerminalSession): HTMLElement {
             <button class="icon-button" type="button" title="Duplicate tab" aria-label="Duplicate ${escapeAttribute(sessionTitle(session))}" data-duplicate-session="${escapeAttribute(session.id)}">
               <span aria-hidden="true">⧉</span>
             </button>
+            ${spaceSelectForTab(session)}
             <button class="icon-button" type="button" title="Rename tab" aria-label="Rename ${escapeAttribute(sessionTitle(session))}" data-rename-session="${escapeAttribute(session.id)}">
               <span aria-hidden="true">✎</span>
             </button>
@@ -1272,6 +1273,22 @@ function renderTabRow(session: TerminalSession): HTMLElement {
           </div>
         `;
   return row;
+}
+
+function spaceSelectForTab(session: TerminalSession): string {
+  if (listedSpaces.length <= 1) return "";
+  const currentSpaceId = session.spaceId ?? listedSpaces.find((space) => space.tabs.some((tab) => tab.id === session.id))?.id ?? DEFAULT_SPACE_ID;
+  const options = listedSpaces
+    .map(
+      (space) =>
+        `<option value="${escapeAttribute(space.id)}"${space.id === currentSpaceId ? " selected" : ""}>${escapeHTML(space.title)}</option>`,
+    )
+    .join("");
+  return `
+            <select class="space-select" title="Move tab to space" aria-label="Move ${escapeAttribute(sessionTitle(session))} to space" data-move-session="${escapeAttribute(session.id)}">
+              ${options}
+            </select>
+          `;
 }
 
 document.addEventListener("click", (event) => {
@@ -1347,6 +1364,12 @@ document.addEventListener("click", (event) => {
   void deleteTerminalSession(sessionId);
 });
 
+document.addEventListener("change", (event) => {
+  const spaceSelect = (event.target as Element).closest<HTMLSelectElement>("select[data-move-session]");
+  if (!spaceSelect?.dataset.moveSession) return;
+  void moveListedTab(spaceSelect.dataset.moveSession, spaceSelect.value);
+});
+
 async function deleteTerminalSession(sessionId: string): Promise<void> {
   const session = listedSessions.find((candidate) => candidate.id === sessionId);
   const title = session ? sessionTitle(session) : sessionId;
@@ -1388,6 +1411,21 @@ async function duplicateListedTab(sessionId: string): Promise<void> {
       ? session.profileId
       : settings.defaultProfileId;
   await createTabInSpace(spaceId, profileId);
+}
+
+async function moveListedTab(sessionId: string, spaceId: string): Promise<void> {
+  const session = listedSessions.find((candidate) => candidate.id === sessionId);
+  if (!session || !spaceId || session.spaceId === spaceId) return;
+  const response = await fetch(`/api/tabs/${encodeURIComponent(sessionId)}`, {
+    method: "PATCH",
+    credentials: "same-origin",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({ spaceId }),
+  });
+  if (!response.ok) {
+    console.error(`move tab ${sessionId} failed with ${response.status}`);
+  }
+  await renderSpaceList();
 }
 
 async function renderOrphanPanel(): Promise<void> {

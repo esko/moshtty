@@ -684,7 +684,27 @@ body {
 
 .session-actions {
   display: flex;
+  align-items: center;
   gap: 6px;
+}
+
+.space-select {
+  max-width: 130px;
+  height: 30px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  color: var(--color-text-control);
+  font: inherit;
+  font-size: 12px;
+}
+
+.space-select:hover,
+.space-select:focus-visible {
+  border-color: var(--color-border-hover);
+  background: var(--color-surface-hover);
+  color: var(--color-text-bright);
+  outline: none;
 }
 
 .icon-button {

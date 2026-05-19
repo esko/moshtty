@@ -171,7 +171,15 @@ Returns a `TerminalTabWorkspace` for a terminal tab.
 
 `PATCH /api/tabs/{tabId}`
 
-Renames a terminal tab.
+Updates a terminal tab. Fields may be sent independently.
+
+Request:
+
+```json
+{ "title": "Build", "spaceId": "space-default" }
+```
+
+Blank `title` resets the tab to automatic naming. `spaceId` moves the whole tab, including its pane layout, to another existing space.
 
 `DELETE /api/tabs/{tabId}`
 
