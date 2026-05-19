@@ -1260,6 +1260,9 @@ function renderTabRow(session: TerminalSession): HTMLElement {
             <button class="icon-button" type="button" title="Restart tab" aria-label="Restart ${escapeAttribute(sessionTitle(session))}" data-restart-session="${escapeAttribute(session.id)}">
               <span aria-hidden="true">↻</span>
             </button>
+            <button class="icon-button" type="button" title="Duplicate tab" aria-label="Duplicate ${escapeAttribute(sessionTitle(session))}" data-duplicate-session="${escapeAttribute(session.id)}">
+              <span aria-hidden="true">⧉</span>
+            </button>
             <button class="icon-button" type="button" title="Rename tab" aria-label="Rename ${escapeAttribute(sessionTitle(session))}" data-rename-session="${escapeAttribute(session.id)}">
               <span aria-hidden="true">✎</span>
             </button>
@@ -1332,6 +1335,11 @@ document.addEventListener("click", (event) => {
     void restartListedTab(restartButton.dataset.restartSession);
     return;
   }
+  const duplicateButton = (event.target as Element).closest<HTMLButtonElement>("button[data-duplicate-session]");
+  if (duplicateButton?.dataset.duplicateSession) {
+    void duplicateListedTab(duplicateButton.dataset.duplicateSession);
+    return;
+  }
   const button = (event.target as Element).closest<HTMLButtonElement>("button[data-delete-session]");
   if (!button) return;
   const sessionId = button.dataset.deleteSession;
@@ -1366,6 +1374,20 @@ async function restartListedTab(sessionId: string): Promise<void> {
     return;
   }
   await renderSpaceList();
+}
+
+async function duplicateListedTab(sessionId: string): Promise<void> {
+  const session = listedSessions.find((candidate) => candidate.id === sessionId);
+  if (!session) return;
+  const spaceId =
+    session.spaceId ??
+    listedSpaces.find((space) => space.tabs.some((tab) => tab.id === sessionId))?.id ??
+    DEFAULT_SPACE_ID;
+  const profileId =
+    session.profileId && listedProfiles.some((profile) => profile.id === session.profileId)
+      ? session.profileId
+      : settings.defaultProfileId;
+  await createTabInSpace(spaceId, profileId);
 }
 
 async function renderOrphanPanel(): Promise<void> {
