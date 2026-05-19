@@ -1263,6 +1263,9 @@ function renderTabRow(session: TerminalSession): HTMLElement {
             <button class="icon-button" type="button" title="Duplicate tab" aria-label="Duplicate ${escapeAttribute(sessionTitle(session))}" data-duplicate-session="${escapeAttribute(session.id)}">
               <span aria-hidden="true">⧉</span>
             </button>
+            <button class="icon-button" type="button" title="Copy tab ID" aria-label="Copy tab ID for ${escapeAttribute(sessionTitle(session))}" data-copy-tab-id="${escapeAttribute(session.id)}">
+              <span aria-hidden="true">#</span>
+            </button>
             ${spaceSelectForTab(session)}
             <button class="icon-button" type="button" title="Rename tab" aria-label="Rename ${escapeAttribute(sessionTitle(session))}" data-rename-session="${escapeAttribute(session.id)}">
               <span aria-hidden="true">✎</span>
@@ -1355,6 +1358,11 @@ document.addEventListener("click", (event) => {
   const duplicateButton = (event.target as Element).closest<HTMLButtonElement>("button[data-duplicate-session]");
   if (duplicateButton?.dataset.duplicateSession) {
     void duplicateListedTab(duplicateButton.dataset.duplicateSession);
+    return;
+  }
+  const copyTabIdButton = (event.target as Element).closest<HTMLButtonElement>("button[data-copy-tab-id]");
+  if (copyTabIdButton?.dataset.copyTabId) {
+    void copyToClipboard(copyTabIdButton.dataset.copyTabId);
     return;
   }
   const button = (event.target as Element).closest<HTMLButtonElement>("button[data-delete-session]");
