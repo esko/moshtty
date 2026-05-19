@@ -1167,6 +1167,9 @@ function renderProfileRow(profile: Profile): HTMLElement {
       <button class="icon-button" type="button" title="Use for new terminals" aria-label="Use ${escapeAttribute(profile.title)} for new terminals" data-select-profile="${escapeAttribute(profile.id)}"${isDefault ? " disabled" : ""}>
         <span aria-hidden="true">✓</span>
       </button>
+      <button class="icon-button" type="button" title="Duplicate profile" aria-label="Duplicate ${escapeAttribute(profile.title)}" data-duplicate-profile="${escapeAttribute(profile.id)}"${profile.id === DEFAULT_PROFILE_ID ? " disabled" : ""}>
+        <span aria-hidden="true">⧉</span>
+      </button>
       <button class="icon-button" type="button" title="Edit profile" aria-label="Edit ${escapeAttribute(profile.title)}" data-edit-profile="${escapeAttribute(profile.id)}"${profile.id === DEFAULT_PROFILE_ID ? " disabled" : ""}>
         <span aria-hidden="true">✎</span>
       </button>
@@ -1271,6 +1274,11 @@ document.addEventListener("click", (event) => {
   const selectProfileButton = (event.target as Element).closest<HTMLButtonElement>("button[data-select-profile]");
   if (selectProfileButton?.dataset.selectProfile) {
     selectDefaultProfile(selectProfileButton.dataset.selectProfile);
+    return;
+  }
+  const duplicateProfileButton = (event.target as Element).closest<HTMLButtonElement>("button[data-duplicate-profile]");
+  if (duplicateProfileButton?.dataset.duplicateProfile) {
+    void duplicateProfile(duplicateProfileButton.dataset.duplicateProfile);
     return;
   }
   const editProfileButton = (event.target as Element).closest<HTMLButtonElement>("button[data-edit-profile]");
@@ -1437,6 +1445,29 @@ async function saveProfileDialog(): Promise<void> {
     return;
   }
   await renderProfileList();
+}
+
+async function duplicateProfile(profileId: string): Promise<void> {
+  const profile = listedProfiles.find((candidate) => candidate.id === profileId);
+  if (!profile || profile.id === DEFAULT_PROFILE_ID) return;
+  await postJSON<Profile>("/api/profiles", {
+    title: duplicateProfileTitle(profile.title),
+    shell: profile.shell ?? "",
+    workingDir: profile.workingDir ?? "",
+    env: { ...(profile.env ?? {}) },
+  });
+  await renderProfileList();
+}
+
+function duplicateProfileTitle(title: string): string {
+  const baseTitle = title.trim() || "Profile";
+  const copyTitle = `${baseTitle} copy`;
+  const existingTitles = new Set(listedProfiles.map((profile) => profile.title));
+  if (!existingTitles.has(copyTitle)) return copyTitle;
+  for (let index = 2; ; index += 1) {
+    const candidate = `${copyTitle} ${index}`;
+    if (!existingTitles.has(candidate)) return candidate;
+  }
 }
 
 async function deleteProfile(profileId: string): Promise<void> {
