@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -484,6 +485,55 @@ func TestSessionManagerUpdateTabRejectsChildPane(t *testing.T) {
 	}
 	if _, err := m.updateTab(childID, tabUpdateRequest{SpaceID: defaultSpaceID}); err == nil {
 		t.Fatal("expected child pane tab update to fail")
+	}
+}
+
+func TestHandleTabPatchMovesTabToSpace(t *testing.T) {
+	m := newTestSessionManager(t)
+	ctx := context.Background()
+	target, err := m.createSpace("Ops")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	tab, err := m.createTab(ctx, defaultSpaceID, "")
+	if err != nil {
+		t.Fatalf("create tab: %v", err)
+	}
+	srv := &server{cfg: config{allowHost: "127.0.0.1:8765"}, sessions: m}
+	req := httptest.NewRequest(http.MethodPatch, "http://127.0.0.1:8765/api/tabs/"+tab.ID, strings.NewReader(`{"spaceId":"`+target.ID+`"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	srv.routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var moved terminalSession
+	if err := json.NewDecoder(rec.Body).Decode(&moved); err != nil {
+		t.Fatalf("decode moved tab: %v", err)
+	}
+	if moved.ID != tab.ID || moved.SpaceID != target.ID {
+		t.Fatalf("expected moved tab response, got %#v", moved)
+	}
+}
+
+func TestHandleTabPatchRejectsMalformedJSON(t *testing.T) {
+	m := newTestSessionManager(t)
+	ctx := context.Background()
+	tab, err := m.createTab(ctx, defaultSpaceID, "")
+	if err != nil {
+		t.Fatalf("create tab: %v", err)
+	}
+	srv := &server{cfg: config{allowHost: "127.0.0.1:8765"}, sessions: m}
+	req := httptest.NewRequest(http.MethodPatch, "http://127.0.0.1:8765/api/tabs/"+tab.ID, strings.NewReader(`{"spaceId"`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	srv.routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
