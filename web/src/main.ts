@@ -45,6 +45,7 @@ const profileEnvInput = requiredElement<HTMLTextAreaElement>("#profileEnv");
 const profileError = requiredElement<HTMLElement>("#profileError");
 const spaceDialog = requiredElement<HTMLDialogElement>("#spaceDialog");
 const spaceTitleInput = requiredElement<HTMLInputElement>("#spaceTitle");
+const shortcutsDialog = requiredElement<HTMLDialogElement>("#shortcutsDialog");
 
 let settings = loadSettings();
 applyAppAppearance(settings);
@@ -611,6 +612,9 @@ async function handleContextAction(action: string): Promise<void> {
     case "clear":
       activePane()?.term.clear();
       break;
+    case "shortcuts":
+      openShortcutsDialog();
+      break;
     case "settings":
       openAppURL("/");
       break;
@@ -944,6 +948,10 @@ function renderSettingsPage(): void {
         <strong>Agent command</strong>
         <span>Copy the local launch command.</span>
       </button>
+      <button class="quick-action" type="button" id="showShortcuts">
+        <strong>Shortcuts</strong>
+        <span>Review pane keyboard controls.</span>
+      </button>
       <button class="quick-action" type="button" id="resetSettingsQuick">
         <strong>Reset profile</strong>
         <span>Restore terminal defaults.</span>
@@ -1093,6 +1101,9 @@ function renderSettingsPage(): void {
   });
   requiredElement<HTMLButtonElement>("#copyLaunchCommand").addEventListener("click", async () => {
     await navigator.clipboard?.writeText("cd ~/crostini-ghostty-terminal/agent && go run . -web-dir ../web/dist");
+  });
+  requiredElement<HTMLButtonElement>("#showShortcuts").addEventListener("click", () => {
+    openShortcutsDialog();
   });
   requiredElement<HTMLButtonElement>("#refreshSessions").addEventListener("click", () => {
     void renderSpaceList();
@@ -1591,6 +1602,10 @@ function formatSessionDate(value: string): string {
 
 function trashIcon(): string {
   return `<svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-.7 11H7.7L7 9Zm3 2v7h2v-7h-2Zm4 0v7h2v-7h-2Z"/></svg>`;
+}
+
+function openShortcutsDialog(): void {
+  if (!shortcutsDialog.open) shortcutsDialog.showModal();
 }
 
 function isSettingsRoute(): boolean {

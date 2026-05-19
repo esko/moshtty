@@ -41,6 +41,7 @@
         <button type="button" data-action="close-tab">Close tab</button>
         <button type="button" data-action="clear">Clear screen</button>
         <hr />
+        <button type="button" data-action="shortcuts">Keyboard shortcuts</button>
         <button type="button" data-action="settings">Terminal settings</button>
       </nav>
       <aside id="diagnostics" class="diagnostics" hidden aria-label="Diagnostics">
@@ -98,6 +99,42 @@
             <button class="secondary-button" value="cancel">Cancel</button>
             <button class="primary-button" value="save">Create</button>
           </div>
+        </form>
+      </dialog>
+      <dialog id="shortcutsDialog" class="shortcuts-dialog" aria-labelledby="shortcutsDialogTitle">
+        <form method="dialog">
+          <div class="dialog-heading">
+            <h2 id="shortcutsDialogTitle">Keyboard shortcuts</h2>
+            <button class="icon-button" value="cancel" aria-label="Close keyboard shortcuts">
+              <span aria-hidden="true">x</span>
+            </button>
+          </div>
+          <dl class="shortcut-list">
+            <div>
+              <dt><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>Right</kbd></dt>
+              <dd>Split pane right</dd>
+            </div>
+            <div>
+              <dt><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>Down</kbd></dt>
+              <dd>Split pane down</dd>
+            </div>
+            <div>
+              <dt><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>Left</kbd></dt>
+              <dd>Focus previous pane</dd>
+            </div>
+            <div>
+              <dt><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>Up</kbd></dt>
+              <dd>Focus next pane</dd>
+            </div>
+            <div>
+              <dt><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>D</kbd></dt>
+              <dd>Move pane to new tab</dd>
+            </div>
+            <div>
+              <dt><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>Backspace</kbd></dt>
+              <dd>Close active pane</dd>
+            </div>
+          </dl>
         </form>
       </dialog>
       <section id="offline" class="offline" hidden>
