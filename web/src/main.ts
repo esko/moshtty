@@ -70,6 +70,7 @@ type SplitResizeState = {
   divider: HTMLElement;
   first: HTMLElement;
   second: HTMLElement;
+  rect: DOMRect; // Cached bounding rect to avoid layout thrashing during pointermove
 };
 type DebugShellTab = {
   id: string;
@@ -487,7 +488,7 @@ function renderLayoutNode(node: SessionLayoutNode): HTMLElement {
   divider.addEventListener("pointerdown", (event) => {
     event.preventDefault();
     divider.setPointerCapture(event.pointerId);
-    activeResize = { pointerId: event.pointerId, node: splitNode, split, divider, first, second };
+    activeResize = { pointerId: event.pointerId, node: splitNode, split, divider, first, second, rect: split.getBoundingClientRect() };
     split.classList.add("resizing");
     resizeSplitFromPointer(activeResize, event.clientX, event.clientY);
   });
@@ -505,7 +506,7 @@ function renderLayoutNode(node: SessionLayoutNode): HTMLElement {
 }
 
 function resizeSplitFromPointer(state: SplitResizeState, clientX: number, clientY: number): void {
-  const nextRatio = ratioFromPointer(state.node.direction, state.split.getBoundingClientRect(), clientX, clientY);
+  const nextRatio = ratioFromPointer(state.node.direction, state.rect, clientX, clientY);
   applySplitRatio(state.node, state.first, state.second, nextRatio);
   updateDividerValue(state.divider, state.node.ratio);
   scheduleFit();
