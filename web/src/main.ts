@@ -633,9 +633,12 @@ function handlePaneShortcut(event: KeyboardEvent): boolean {
 
 function shouldHandleAppShortcut(event: KeyboardEvent): boolean {
   if (event.defaultPrevented || isSettingsRoute() || !currentWorkspace) return false;
-  if (document.querySelector("dialog[open]")) return false;
+  // Use cached properties instead of expensive DOM query in hot path
+  if (renameDialog.open || profileDialog.open || spaceDialog.open || shortcutsDialog.open) return false;
   const target = event.target;
-  return !(target instanceof Element && isEditableShortcutTarget(target) && !terminalRoot.contains(target));
+  // Evaluate the cheap and most likely case (target inside terminalRoot)
+  // before running expensive DOM traversals in isEditableShortcutTarget
+  return !(target instanceof Element && !terminalRoot.contains(target) && isEditableShortcutTarget(target));
 }
 
 function isEditableShortcutTarget(target: Element): boolean {
