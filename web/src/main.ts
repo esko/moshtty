@@ -10,16 +10,16 @@ import {
   normalizeSettings,
   saveSettings,
   terminalFontFamily,
-  terminalTheme,
 } from "./settings";
+import { getThemePalette } from "./themes";
 import { shouldPassThroughSystemShortcut } from "./shortcuts";
 import { registerAction, getAction, getAllActions, matchKeyChord, eventToChordString, type Action } from "./actions";
 import { initPalette, openPalette, isPaletteOpen } from "./palette";
 import type { AgentMessage, EnvVars, OrphanCleanup, Profile, SessionLayoutNode, Space, TerminalSession, TerminalSettings, Workspace, TerminalTheme, TerminalPalette } from "./types";
 import "./styles.css";
+import { initDebugShell, updateDebugShellFromLocation, updateActiveDebugTabTitle, isSettingsPath, currentAppPath, isAppPath, appURL, openAppURL } from "./debug-shell";
 
 const APP_TITLE = "Crostini Ghostty";
-const DEBUG_SHELL_PARAM = "debug-shell";
 const DEFAULT_SPACE_ID = "space-default";
 const DEFAULT_PROFILE_ID = "profile-default";
 
@@ -59,7 +59,6 @@ let statusBarClockInterval: number | undefined;
 let pendingFitFrame: number | undefined;
 let activeResize: SplitResizeState | null = null;
 let terminalRuntimeReady = false;
-let debugShell: DebugShellState | null = null;
 let listedSessions: TerminalSession[] = [];
 let listedSpaces: Space[] = [];
 let listedProfiles: Profile[] = [];
@@ -393,9 +392,7 @@ async function boot(): Promise<void> {
 
   await registerServiceWorker();
 
-  if (isDebugShellEnabled()) {
-    installDebugShell();
-  }
+  initDebugShell(appRoot, renderCurrentRoute);
 
   await renderCurrentRoute();
   updateDiagnosticsTimer();
@@ -438,7 +435,7 @@ function createTerminal(): Terminal {
     scrollback: settings.scrollback,
     smoothScrollDuration: 0,
     scrollbarWidth: 0,
-    theme: terminalTheme(settings.theme),
+    theme: getThemePalette(settings.theme),
   });
 
   nextTerm.attachCustomKeyEventHandler(
@@ -1352,7 +1349,7 @@ function renderSettingsPage(): void {
       if (!customThemeJson.value.trim()) {
         const palette = settings.theme.preset === "custom"
           ? (settings.theme as { preset: "custom"; palette: TerminalPalette }).palette
-          : terminalTheme(settings.theme);
+          : getThemePalette(settings.theme);
         customThemeJson.value = JSON.stringify(palette, null, 2);
       }
     } else {
@@ -1400,10 +1397,10 @@ function renderSettingsPage(): void {
       try {
         paletteToExport = JSON.parse(customThemeJson.value);
       } catch {
-        paletteToExport = terminalTheme(settings.theme);
+        paletteToExport = getThemePalette(settings.theme);
       }
     } else {
-      paletteToExport = terminalTheme({ preset: theme.value });
+      paletteToExport = getThemePalette({ preset: theme.value });
     }
     const blob = new Blob([JSON.stringify(paletteToExport, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -2067,197 +2064,6 @@ function openShortcutsDialog(): void {
 
 function isSettingsRoute(): boolean {
   return window.location.pathname === "/" || window.location.pathname === "/index.html";
-}
-
-function isDebugShellEnabled(): boolean {
-  const value = new URL(window.location.href).searchParams.get(DEBUG_SHELL_PARAM);
-  return value === "1" || value === "true";
-}
-
-function appURL(path: string): string {
-  const url = new URL(path, window.location.href);
-  if (isDebugShellEnabled()) url.searchParams.set(DEBUG_SHELL_PARAM, "1");
-  return `${url.pathname}${url.search}${url.hash}`;
-}
-
-function openAppURL(path: string, options: { newTab?: boolean } = {}): void {
-  const url = appURL(path);
-  if (!debugShell) {
-    window.open(url, options.newTab ? "_blank" : "_self");
-    return;
-  }
-  void navigateDebugShell(url, options);
-}
-
-function installDebugShell(): void {
-  if (debugShell) return;
-  appRoot.classList.add("debug-shell");
-  const root = document.createElement("nav");
-  root.className = "debug-pwa-tabs";
-  root.setAttribute("aria-label", "Debug PWA tab strip");
-  appRoot.prepend(root);
-
-  const current = currentAppPath();
-  const menu: DebugShellTab = { id: "debug-menu", title: "App Menu", url: appURL("/") };
-  const tabs = [menu];
-  let activeTabId = menu.id;
-  if (!isSettingsPath(window.location.pathname)) {
-    const terminal: DebugShellTab = { id: "debug-tab-1", title: "Terminal", url: current };
-    tabs.push(terminal);
-    activeTabId = terminal.id;
-  }
-
-  debugShell = { root, tabs, activeTabId, nextTabNumber: 2 };
-  root.addEventListener("click", (event) => {
-    const target = event.target as Element;
-    const closeButton = target.closest<HTMLElement>("[data-debug-close-tab]");
-    if (closeButton?.dataset.debugCloseTab) {
-      event.stopPropagation();
-      void closeDebugTab(closeButton.dataset.debugCloseTab);
-      return;
-    }
-
-    const tabButton = target.closest<HTMLButtonElement>("button[data-debug-tab]");
-    if (tabButton?.dataset.debugTab) {
-      void activateDebugTab(tabButton.dataset.debugTab);
-      return;
-    }
-
-    if (target.closest("button[data-debug-new-tab]")) {
-      void navigateDebugShell(appURL("/terminal.html"), { newTab: true });
-    }
-  });
-  document.addEventListener("click", handleDebugShellLinkClick);
-  window.addEventListener("popstate", () => {
-    syncDebugShellToLocation();
-    void renderCurrentRoute();
-  });
-  renderDebugShell();
-}
-
-function handleDebugShellLinkClick(event: MouseEvent): void {
-  if (!debugShell || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-  const anchor = (event.target as Element).closest<HTMLAnchorElement>("a[href]");
-  if (!anchor || anchor.target || anchor.download) return;
-  const url = new URL(anchor.href);
-  if (url.origin !== window.location.origin || !isAppPath(url.pathname)) return;
-  event.preventDefault();
-  void navigateDebugShell(`${url.pathname}${url.search}${url.hash}`, { newTab: !isSettingsPath(url.pathname) });
-}
-
-async function navigateDebugShell(path: string, options: { newTab?: boolean } = {}): Promise<void> {
-  if (!debugShell) return;
-  const url = appURL(path);
-  const pathname = new URL(url, window.location.href).pathname;
-  let tab = options.newTab ? undefined : debugShell.tabs.find((candidate) => candidate.url === url);
-  if (!tab && isSettingsPath(pathname)) {
-    tab = debugShell.tabs.find((candidate) => candidate.id === "debug-menu");
-  }
-  if (!tab) {
-    tab = {
-      id: `debug-tab-${debugShell.nextTabNumber++}`,
-      title: isSettingsPath(pathname) ? "App Menu" : "Terminal",
-      url,
-    };
-    debugShell.tabs.push(tab);
-  }
-  tab.url = url;
-  debugShell.activeTabId = tab.id;
-  history.pushState(null, "", url);
-  renderDebugShell();
-  await renderCurrentRoute();
-}
-
-async function activateDebugTab(tabId: string): Promise<void> {
-  if (!debugShell) return;
-  const tab = debugShell.tabs.find((candidate) => candidate.id === tabId);
-  if (!tab) return;
-  debugShell.activeTabId = tab.id;
-  history.pushState(null, "", tab.url);
-  renderDebugShell();
-  await renderCurrentRoute();
-}
-
-async function closeDebugTab(tabId: string): Promise<void> {
-  if (!debugShell || tabId === "debug-menu") return;
-  const index = debugShell.tabs.findIndex((tab) => tab.id === tabId);
-  if (index < 0) return;
-  const closingActive = debugShell.activeTabId === tabId;
-  debugShell.tabs.splice(index, 1);
-  if (closingActive) {
-    const fallback = debugShell.tabs[Math.max(0, index - 1)] ?? debugShell.tabs[0];
-    debugShell.activeTabId = fallback.id;
-    history.pushState(null, "", fallback.url);
-    await renderCurrentRoute();
-  }
-  renderDebugShell();
-}
-
-function syncDebugShellToLocation(): void {
-  if (!debugShell) return;
-  const current = currentAppPath();
-  let tab = debugShell.tabs.find((candidate) => candidate.url === current);
-  if (!tab && isSettingsPath(window.location.pathname)) {
-    tab = debugShell.tabs.find((candidate) => candidate.id === "debug-menu");
-  }
-  if (!tab) {
-    tab = { id: `debug-tab-${debugShell.nextTabNumber++}`, title: "Terminal", url: current };
-    debugShell.tabs.push(tab);
-  }
-  debugShell.activeTabId = tab.id;
-  tab.url = current;
-  renderDebugShell();
-}
-
-function updateDebugShellFromLocation(title: string): void {
-  if (!debugShell) return;
-  const active = debugShell.tabs.find((tab) => tab.id === debugShell?.activeTabId);
-  if (!active) return;
-  active.url = currentAppPath();
-  active.title = title;
-  renderDebugShell();
-}
-
-function updateActiveDebugTabTitle(title: string): void {
-  if (!debugShell) return;
-  const active = debugShell.tabs.find((tab) => tab.id === debugShell?.activeTabId);
-  if (!active || active.id === "debug-menu") return;
-  active.title = title;
-  renderDebugShell();
-}
-
-function renderDebugShell(): void {
-  if (!debugShell) return;
-  debugShell.root.innerHTML = `
-    <div class="debug-pwa-tabs-list" role="tablist" aria-label="Debug PWA tabs">
-      ${debugShell.tabs
-        .map((tab) => {
-          const selected = tab.id === debugShell?.activeTabId;
-          return `
-            <div class="debug-pwa-tab-item" data-selected="${selected ? "true" : "false"}">
-              <button class="debug-pwa-tab" type="button" role="tab" aria-selected="${selected ? "true" : "false"}" data-debug-tab="${escapeAttribute(tab.id)}">
-                <span>${escapeHTML(tab.title)}</span>
-              </button>
-              ${tab.id === "debug-menu" ? "" : `<button class="debug-pwa-tab-close" type="button" title="Close ${escapeAttribute(tab.title)}" aria-label="Close ${escapeAttribute(tab.title)}" data-debug-close-tab="${escapeAttribute(tab.id)}">x</button>`}
-            </div>
-          `;
-        })
-        .join("")}
-    </div>
-    <button class="debug-pwa-new-tab" type="button" title="New terminal tab" aria-label="New terminal tab" data-debug-new-tab>+</button>
-  `;
-}
-
-function currentAppPath(): string {
-  return `${window.location.pathname}${window.location.search}${window.location.hash}`;
-}
-
-function isAppPath(pathname: string): boolean {
-  return isSettingsPath(pathname) || pathname === "/terminal.html" || pathname === "/terminal";
-}
-
-function isSettingsPath(pathname: string): boolean {
-  return pathname === "/" || pathname === "/index.html";
 }
 
 function updateDiagnosticsTimer(): void {

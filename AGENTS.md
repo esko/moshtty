@@ -124,3 +124,44 @@ See `docs/sessions.md` for the API shapes.
 - Prefer small focused modules under `web/src`.
 - Keep terminal control keys working in the shell while passing ChromeOS/PWA shortcuts through `web/src/shortcuts.ts`.
 - Do not add new frontend stacks or renderer experiments without an explicit user request.
+
+## Module Map
+
+| Module | Purpose |
+|--------|---------|
+| `web/src/main.ts` | App bootstrap, workspace rendering, layout, panes, context menu, settings page |
+| `web/src/actions.ts` | Action registry, key chord parser/matcher, keyboard shortcut mapping |
+| `web/src/palette.ts` | Command palette overlay (`Ctrl+Shift+P`), fuzzy search, keyboard navigation |
+| `web/src/themes.ts` | Theme preset gallery (8 themes), `getThemePalette()` for color table lookup |
+| `web/src/debug-shell.ts` | In-app PWA tab strip for MCP automation (`?debug-shell=1`) |
+| `web/src/statusbar.ts` | Status bar DOM helpers (render, clock, highlight) — extraction in progress |
+| `web/src/settings.ts` | `loadSettings()`/`saveSettings()`/`normalizeSettings()`, font loading, app appearance |
+| `web/src/types.ts` | All TypeScript types: settings, sessions, spaces, profiles, layout nodes, API shapes |
+| `web/src/shortcuts.ts` | System shortcut passthrough, pane shortcut detection |
+| `web/src/layout.ts` | Split layout math: leaves, ratios, pointer/keyboard resize, spatial navigation |
+| `web/src/api.ts` | HTTP helpers (`getJSON`, `postJSON`, `patchJSON`), token fetch, WebSocket URL builder |
+| `web/src/dom.ts` | DOM utilities: clamp, escape, byte concat, socket state, typed query |
+| `web/src/styles.css` | Full app stylesheet with CSS variables for theming |
+| `agent/main.go` | HTTP server, routing, WebSocket PTY handler, security middleware |
+| `agent/sessions.go` | Session manager: CRUD for spaces, tabs, panes, profiles, layouts |
+| `agent/worker.go` | Worker process: PTY owner, output capture, client broadcast |
+
+## Agent Workflow
+
+When using the `agy` CLI with Gemini for multi-agent parallel work:
+
+1. **Write agent docs** in `docs/agents/` with precise instructions, file paths, and validation steps.
+2. **Launch agents** with `agy --add-dir <workdir> --print-timeout 12m --print "$(cat docs/agents/N-*.md)"`.
+3. **Avoid parallel worktrees for extraction** — agents overwrite each other's changes. Use worktrees only for fully independent features.
+4. **Always run** `cd web && bun run test && bun run build` after agent work to verify.
+5. **Commit conventions:** `feat:` for features, `chore:` for dist/assets, `refactor:` for extractions.
+6. **Separate source and dist commits** — source changes first, then `web/dist/` assets.
+
+## Pre-commit Checklist
+
+```bash
+bun run test          # 19 tests across 3 files
+bun run build         # TypeScript + Vite bundle
+git diff --check      # No trailing whitespace
+gofmt -w agent/*.go   # Format Go code if agent changed
+```

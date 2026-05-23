@@ -214,7 +214,3 @@ function fontFormat(url: string): string {
   if (path.endsWith(".otf")) return "opentype";
   return "truetype";
 }
-
-export function terminalTheme(theme: TerminalTheme): TerminalPalette {
-  return getThemePalette(theme);
-}
