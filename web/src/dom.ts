@@ -14,10 +14,14 @@ export function escapeHTML(value: string): string {
 
 export function concatBytes(chunks: Uint8Array[]): Uint8Array {
   if (chunks.length === 1) return chunks[0];
-  const totalLength = chunks.reduce((total, chunk) => total + chunk.length, 0);
+  let totalLength = 0;
+  for (let i = 0; i < chunks.length; i++) {
+    totalLength += chunks[i].length;
+  }
   const merged = new Uint8Array(totalLength);
   let offset = 0;
-  for (const chunk of chunks) {
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
     merged.set(chunk, offset);
     offset += chunk.length;
   }
