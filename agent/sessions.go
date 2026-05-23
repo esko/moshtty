@@ -1457,6 +1457,59 @@ func (m *sessionManager) detachPane(ctx context.Context, parentID, sessionID str
 	return session, nil
 }
 
+func (m *sessionManager) joinPaneToWorkspace(ctx context.Context, targetWorkspaceID, sourceSessionID string) (*workspaceResponse, error) {
+	sourceMetadata, err := m.readMetadata(sourceSessionID)
+	if err != nil {
+		return nil, err
+	}
+	if sourceMetadata.ParentID == "" {
+		return nil, fmt.Errorf("source pane %q is not a child pane", sourceSessionID)
+	}
+	if sourceMetadata.ParentID == targetWorkspaceID {
+		return nil, fmt.Errorf("source pane %q is already in the target workspace", sourceSessionID)
+	}
+	targetMetadata, err := m.readMetadata(targetWorkspaceID)
+	if err != nil {
+		return nil, err
+	}
+	if targetMetadata.ParentID != "" {
+		return nil, fmt.Errorf("target session %q is not a parent tab", targetWorkspaceID)
+	}
+
+	// Remove from old parent layout
+	oldParentID := sourceMetadata.ParentID
+	if err := m.removePaneFromParent(ctx, oldParentID, sourceSessionID, false, false); err != nil {
+		return nil, err
+	}
+
+	// Update metadata
+	sourceMetadata.ParentID = targetWorkspaceID
+	sourceMetadata.UpdatedAt = time.Now().UTC()
+	if err := m.writeMetadata(sourceMetadata); err != nil {
+		return nil, err
+	}
+
+	// Append to target layout as a new horizontal split at the root
+	targetLayout, err := m.ensureLayout(targetWorkspaceID)
+	if err != nil {
+		return nil, err
+	}
+
+	newLayout := &sessionLayoutNode{
+		Type:      "split",
+		Direction: "horizontal",
+		Ratio:     0.5,
+		First:     targetLayout,
+		Second:    singlePaneLayout(sourceSessionID),
+	}
+
+	if err := m.writeLayout(targetWorkspaceID, newLayout); err != nil {
+		return nil, err
+	}
+
+	return m.workspace(ctx, targetWorkspaceID)
+}
+
 func (m *sessionManager) removePaneFromParent(ctx context.Context, parentID, sessionID string, stopPane, deletePane bool) error {
 	layout, err := m.ensureLayout(parentID)
 	if err != nil {
@@ -1721,6 +1774,18 @@ func (s *server) handleTab(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusCreated, workspace)
 		case "restart":
 			workspace, err := s.sessions.restartTab(r.Context(), id)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, http.StatusOK, workspace)
+		case "join":
+			sourcePaneID := r.URL.Query().Get("pane")
+			if sourcePaneID == "" || !validSessionID(sourcePaneID) {
+				http.Error(w, "invalid or missing pane query parameter", http.StatusBadRequest)
+				return
+			}
+			workspace, err := s.sessions.joinPaneToWorkspace(r.Context(), id, sourcePaneID)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return

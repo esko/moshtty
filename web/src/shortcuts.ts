@@ -38,7 +38,12 @@ export type PaneShortcut =
   | "focus-previous"
   | "focus-next"
   | "close-pane"
-  | "detach-pane";
+  | "detach-pane"
+  | "zoom-pane"
+  | "focus-left"
+  | "focus-right"
+  | "focus-up"
+  | "focus-down";
 
 export function shouldPassThroughSystemShortcut(event: KeyboardEvent): boolean {
   if (CHROMEOS_SYSTEM_KEYS.has(event.key) || CHROMEOS_SYSTEM_KEYS.has(event.code)) {
@@ -67,8 +72,23 @@ export function shouldPassThroughSystemShortcut(event: KeyboardEvent): boolean {
 }
 
 export function paneShortcutForEvent(event: KeyboardEvent): PaneShortcut | undefined {
-  if (!event.ctrlKey || !event.shiftKey || event.altKey || event.metaKey) {
+  if (!event.ctrlKey || !event.shiftKey || event.metaKey) {
     return undefined;
+  }
+
+  if (event.altKey) {
+    switch (event.code) {
+      case "ArrowLeft":
+        return "focus-left";
+      case "ArrowRight":
+        return "focus-right";
+      case "ArrowUp":
+        return "focus-up";
+      case "ArrowDown":
+        return "focus-down";
+      default:
+        return undefined;
+    }
   }
 
   switch (event.code) {
@@ -84,6 +104,8 @@ export function paneShortcutForEvent(event: KeyboardEvent): PaneShortcut | undef
       return "close-pane";
     case "KeyD":
       return "detach-pane";
+    case "KeyZ":
+      return "zoom-pane";
     default:
       return undefined;
   }

@@ -12,8 +12,10 @@ import {
   terminalFontFamily,
   terminalTheme,
 } from "./settings";
-import { paneShortcutForEvent, shouldPassThroughSystemShortcut, type PaneShortcut } from "./shortcuts";
-import type { AgentMessage, EnvVars, OrphanCleanup, Profile, SessionLayoutNode, Space, TerminalSession, TerminalSettings, Workspace } from "./types";
+import { shouldPassThroughSystemShortcut } from "./shortcuts";
+import { registerAction, getAction, getAllActions, matchKeyChord, eventToChordString, type Action } from "./actions";
+import { initPalette, openPalette, isPaletteOpen } from "./palette";
+import type { AgentMessage, EnvVars, OrphanCleanup, Profile, SessionLayoutNode, Space, TerminalSession, TerminalSettings, Workspace, TerminalTheme, TerminalPalette } from "./types";
 import "./styles.css";
 
 const APP_TITLE = "Crostini Ghostty";
@@ -53,6 +55,7 @@ let currentWorkspace: Workspace | null = null;
 let parentSessionId = "";
 let activePaneId = "";
 let diagnosticsTimer: number | undefined;
+let statusBarClockInterval: number | undefined;
 let pendingFitFrame: number | undefined;
 let activeResize: SplitResizeState | null = null;
 let terminalRuntimeReady = false;
@@ -109,7 +112,7 @@ document.addEventListener("pointerdown", (event) => {
 document.addEventListener(
   "keydown",
   (event) => {
-    if (handlePaneShortcut(event)) return;
+    if (handleActionShortcut(event)) return;
   },
   { capture: true },
 );
@@ -382,6 +385,12 @@ class TerminalPane {
 }
 
 async function boot(): Promise<void> {
+  initActions();
+  initPalette();
+  window.addEventListener("command-palette-closed", () => {
+    activePane()?.focus();
+  });
+
   await registerServiceWorker();
 
   if (isDebugShellEnabled()) {
@@ -423,7 +432,7 @@ function createTerminal(): Terminal {
     cols: 80,
     rows: 24,
     cursorBlink: settings.cursorBlink,
-    cursorStyle: "block",
+    cursorStyle: settings.cursorStyle,
     fontFamily: terminalFontFamily(settings),
     fontSize: settings.fontSize,
     scrollback: settings.scrollback,
@@ -445,7 +454,14 @@ function renderWorkspace(workspace: Workspace, focusSessionId: string): void {
   currentWorkspace = workspace;
   parentSessionId = workspace.session.id;
   disposePanes();
-  terminalRoot.replaceChildren(renderLayoutNode(workspace.layout));
+  const body = document.createElement("div");
+  body.className = "workspace-body";
+  body.append(renderLayoutNode(workspace.layout));
+  terminalRoot.replaceChildren(body);
+  if (settings.statusBarPosition !== "hidden") {
+    terminalRoot.append(renderStatusBar(workspace));
+    startStatusBarClock();
+  }
   const focusId = panes.has(focusSessionId) ? focusSessionId : firstLeaf(workspace.layout);
   setActivePane(focusId);
   for (const pane of panes.values()) {
@@ -621,18 +637,44 @@ async function handleContextAction(action: string): Promise<void> {
   }
 }
 
-function handlePaneShortcut(event: KeyboardEvent): boolean {
+function handleActionShortcut(event: KeyboardEvent): boolean {
   if (!shouldHandleAppShortcut(event)) return false;
-  const shortcut = paneShortcutForEvent(event);
-  if (!shortcut) return false;
+
+  const allActions = getAllActions();
+  let matchedAction: Action | undefined;
+
+  for (const action of allActions) {
+    const customChord = settings.keybindings?.[action.id];
+    if (customChord && matchKeyChord(event, customChord)) {
+      matchedAction = action;
+      break;
+    }
+  }
+
+  if (!matchedAction) {
+    for (const action of allActions) {
+      const customChord = settings.keybindings?.[action.id];
+      if (customChord === undefined && action.defaultKeys && matchKeyChord(event, action.defaultKeys)) {
+        matchedAction = action;
+        break;
+      }
+    }
+  }
+
+  if (!matchedAction) return false;
+
+  const isEnabled = matchedAction.enabled ? matchedAction.enabled() : true;
+  if (!isEnabled) return false;
+
   event.preventDefault();
   event.stopPropagation();
-  void runPaneShortcut(shortcut);
+  void matchedAction.handler();
   return true;
 }
 
 function shouldHandleAppShortcut(event: KeyboardEvent): boolean {
   if (event.defaultPrevented || isSettingsRoute() || !currentWorkspace) return false;
+  if (isPaletteOpen()) return false;
   if (document.querySelector("dialog[open]")) return false;
   const target = event.target;
   return !(target instanceof Element && isEditableShortcutTarget(target) && !terminalRoot.contains(target));
@@ -644,29 +686,6 @@ function isEditableShortcutTarget(target: Element): boolean {
   return Boolean(editable?.isContentEditable);
 }
 
-async function runPaneShortcut(shortcut: PaneShortcut): Promise<void> {
-  switch (shortcut) {
-    case "split-right":
-      await splitActivePane("horizontal");
-      break;
-    case "split-down":
-      await splitActivePane("vertical");
-      break;
-    case "focus-previous":
-      focusAdjacentPane(-1);
-      break;
-    case "focus-next":
-      focusAdjacentPane(1);
-      break;
-    case "close-pane":
-      await closeActivePane();
-      break;
-    case "detach-pane":
-      await detachActivePane();
-      break;
-  }
-}
-
 function focusAdjacentPane(delta: -1 | 1): void {
   if (!currentWorkspace) return;
   const leaves = layoutLeaves(currentWorkspace.layout);
@@ -675,6 +694,167 @@ function focusAdjacentPane(delta: -1 | 1): void {
   const currentIndex = index >= 0 ? index : 0;
   const nextIndex = (currentIndex + delta + leaves.length) % leaves.length;
   setActivePane(leaves[nextIndex]);
+}
+
+function focusSpatialPane(direction: "left" | "right" | "up" | "down"): void {
+  const active = activePane();
+  if (!active) return;
+  const activeRect = active.root.getBoundingClientRect();
+  const activeCenter = {
+    x: activeRect.left + activeRect.width / 2,
+    y: activeRect.top + activeRect.height / 2
+  };
+
+  let bestPaneId: string | null = null;
+  let bestDistance = Infinity;
+
+  for (const [id, pane] of panes) {
+    if (id === activePaneId) continue;
+    const rect = pane.root.getBoundingClientRect();
+    const center = {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2
+    };
+
+    let isCandidate = false;
+    if (direction === "left" && center.x < activeCenter.x - 5) isCandidate = true;
+    else if (direction === "right" && center.x > activeCenter.x + 5) isCandidate = true;
+    else if (direction === "up" && center.y < activeCenter.y - 5) isCandidate = true;
+    else if (direction === "down" && center.y > activeCenter.y + 5) isCandidate = true;
+
+    if (isCandidate) {
+      const dx = center.x - activeCenter.x;
+      const dy = center.y - activeCenter.y;
+      const dist = (direction === "left" || direction === "right")
+        ? dx * dx + 4 * dy * dy
+        : 4 * dx * dx + dy * dy;
+
+      if (dist < bestDistance) {
+        bestDistance = dist;
+        bestPaneId = id;
+      }
+    }
+  }
+
+  if (bestPaneId) {
+    for (const pane of panes.values()) {
+      pane.root.classList.remove("zoomed");
+    }
+    setActivePane(bestPaneId);
+    scheduleFit();
+  }
+}
+
+function toggleZoomActivePane(): void {
+  const active = activePane();
+  if (!active) return;
+  const wasZoomed = active.root.classList.contains("zoomed");
+  for (const pane of panes.values()) {
+    pane.root.classList.remove("zoomed");
+  }
+  if (!wasZoomed) {
+    active.root.classList.add("zoomed");
+  }
+  scheduleFit();
+}
+
+async function navigateWorkspaceTab(delta: -1 | 1): Promise<void> {
+  if (!currentWorkspace?.session?.spaceId) return;
+  try {
+    const spaces = await getJSON<Space[]>("/api/spaces");
+    const space = spaces.find(s => s.id === currentWorkspace?.session?.spaceId);
+    if (!space || space.tabs.length <= 1) return;
+
+    const currentIndex = space.tabs.findIndex(t => t.id === parentSessionId);
+    if (currentIndex === -1) return;
+
+    const nextIndex = (currentIndex + delta + space.tabs.length) % space.tabs.length;
+    const nextTab = space.tabs[nextIndex];
+    openAppURL(`/terminal.html?tab=${encodeURIComponent(nextTab.id)}`);
+  } catch (error) {
+    console.error("navigate workspace tab failed", error);
+  }
+}
+
+async function pasteToActivePane(): Promise<void> {
+  const text = await navigator.clipboard?.readText();
+  if (text) activePane()?.term.paste(text);
+}
+
+function toggleDiagnosticsPanel(): void {
+  diagnosticsPanel.hidden = !diagnosticsPanel.hidden;
+  updateDiagnosticsTimer();
+}
+
+function renderStatusBar(workspace: Workspace): HTMLElement {
+  const bar = document.createElement("nav");
+  bar.className = "status-bar";
+  bar.id = "workspaceStatusBar";
+
+  const left = document.createElement("span");
+  left.className = "status-bar-left";
+  left.textContent = workspace.session.title || "Terminal";
+  bar.appendChild(left);
+
+  if (settings.statusBarShowPanes) {
+    const center = document.createElement("span");
+    center.className = "status-bar-panes";
+
+    const leaves = layoutLeaves(workspace.layout);
+    leaves.forEach(paneId => {
+      const paneSession = sessionForPane(paneId);
+      const title = paneSession ? sessionTitle(paneSession) : "Terminal";
+
+      const btn = document.createElement("button");
+      btn.className = `status-bar-pane-button${paneId === activePaneId ? " active" : ""}`;
+      btn.type = "button";
+      btn.textContent = title;
+      btn.addEventListener("click", () => {
+        setActivePane(paneId);
+      });
+      center.appendChild(btn);
+    });
+    bar.appendChild(center);
+  }
+
+  if (settings.statusBarShowClock) {
+    const right = document.createElement("span");
+    right.className = "status-bar-right";
+    right.id = "statusBarClock";
+    right.textContent = getClockTimeString();
+    bar.appendChild(right);
+  }
+
+  return bar;
+}
+
+function getClockTimeString(): string {
+  return new Date().toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  });
+}
+
+function startStatusBarClock(): void {
+  if (statusBarClockInterval !== undefined) {
+    window.clearInterval(statusBarClockInterval);
+  }
+  statusBarClockInterval = window.setInterval(() => {
+    const clockEl = document.querySelector("#statusBarClock");
+    if (clockEl) {
+      clockEl.textContent = getClockTimeString();
+    }
+  }, 30000) as unknown as number;
+}
+
+function updateStatusBarHighlight(): void {
+  if (settings.statusBarPosition === "hidden" || !currentWorkspace) return;
+  const oldBar = document.querySelector("#workspaceStatusBar");
+  if (oldBar) {
+    const newBar = renderStatusBar(currentWorkspace);
+    oldBar.replaceWith(newBar);
+  }
 }
 
 async function splitActivePane(direction: "horizontal" | "vertical"): Promise<void> {
@@ -756,6 +936,7 @@ function setActivePane(sessionId: string): void {
     pane.root.classList.toggle("active", id === sessionId);
   }
   activePane()?.focus();
+  updateStatusBarHighlight();
 }
 
 function activePane(): TerminalPane | undefined {
@@ -1015,10 +1196,26 @@ function renderSettingsPage(): void {
           <span><strong>Terminal palette</strong><small>Choose the terminal colors used by new tabs.</small></span>
           <select id="theme" name="theme">
             <option value="dark">Dark</option>
-            <option value="highContrast">High contrast</option>
-            <option value="soft">Soft</option>
+            <option value="highContrast">High Contrast</option>
+            <option value="soft">Soft Dark</option>
+            <option value="light">Light</option>
+            <option value="solarizedLight">Solarized Light</option>
+            <option value="catppuccinLatte">Catppuccin Latte</option>
+            <option value="tokyoNight">Tokyo Night</option>
+            <option value="dracula">Dracula</option>
+            <option value="custom">Custom</option>
           </select>
         </label>
+        <div id="customThemeContainer" style="display: none; padding: 14px 15px; border-bottom: 1px solid var(--color-border-subtle); grid-column: 1 / -1; display: grid; gap: 8px;">
+          <span><strong>Custom palette JSON</strong><small>Edit palette colors as JSON.</small></span>
+          <textarea id="customThemeJson" style="width: 100%; min-height: 120px; font-family: var(--font-mono); font-size: 11px; padding: 8px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); background: var(--color-app-bg); color: var(--color-text-bright); resize: vertical;" spellcheck="false"></textarea>
+          <div style="display: flex; gap: 8px; justify-content: flex-end; align-items: center; width: 100%;">
+            <span id="customThemeError" style="color: var(--color-danger); font-size: 11px; margin-right: auto; display: none;"></span>
+            <input type="file" id="importThemeFile" accept=".json" style="display: none;" />
+            <button type="button" class="secondary-button compact-button" id="importThemeBtn">Import</button>
+            <button type="button" class="secondary-button compact-button" id="exportThemeBtn">Export</button>
+          </div>
+        </div>
         <label class="setting-row">
           <span><strong>App accent</strong><small>Changes controls, focus rings, and status highlights.</small></span>
           <select id="accent" name="accent">
@@ -1037,6 +1234,21 @@ function renderSettingsPage(): void {
         <label class="setting-row">
           <span><strong>Blinking cursor</strong><small>Disable this if cursor blinking is distracting.</small></span>
           <input id="cursorBlink" name="cursorBlink" type="checkbox" />
+        </label>
+        <label class="setting-row">
+          <span><strong>Cursor style</strong><small>Choose the terminal cursor shape.</small></span>
+          <select id="cursorStyle" name="cursorStyle">
+            <option value="block">Block</option>
+            <option value="underline">Underline</option>
+            <option value="bar">Bar</option>
+          </select>
+        </label>
+        <label class="setting-row">
+          <span><strong>Terminal padding</strong><small>Inner padding around the terminal view (0–32px).</small></span>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <input id="terminalPadding" name="terminalPadding" type="range" min="0" max="32" step="1" value="${settings.terminalPadding}" />
+            <span id="terminalPaddingValue" style="min-width: 32px; font-family: var(--font-mono); font-size: 13px; text-align: right;">${settings.terminalPadding}px</span>
+          </div>
         </label>
       </section>
 
@@ -1057,6 +1269,33 @@ function renderSettingsPage(): void {
         </label>
       </section>
 
+      <section class="settings-section">
+        <h2>Status Bar</h2>
+        <label class="setting-row">
+          <span><strong>Status bar position</strong><small>Show or hide the terminal status bar.</small></span>
+          <select id="statusBarPosition" name="statusBarPosition">
+            <option value="bottom">Bottom</option>
+            <option value="hidden">Hidden</option>
+          </select>
+        </label>
+        <label class="setting-row">
+          <span><strong>Show panes</strong><small>Show pane list in the status bar.</small></span>
+          <input id="statusBarShowPanes" name="statusBarShowPanes" type="checkbox" />
+        </label>
+        <label class="setting-row">
+          <span><strong>Show clock</strong><small>Show clock in the status bar.</small></span>
+          <input id="statusBarShowClock" name="statusBarShowClock" type="checkbox" />
+        </label>
+      </section>
+
+      <section class="settings-section">
+        <h2>Keybindings</h2>
+        <div id="keybindingsList" class="keybindings-list"></div>
+        <div style="margin-top: 12px;">
+          <button class="secondary-button" type="button" id="resetAllKeybindings">Reset all keybindings</button>
+        </div>
+      </section>
+
       <div id="settingsActions" class="settings-actions">
         <button class="secondary-button" type="button" id="resetSettings">Reset defaults</button>
         <button class="primary-button" type="submit">Save settings</button>
@@ -1070,18 +1309,123 @@ function renderSettingsPage(): void {
   const density = requiredElement<HTMLSelectElement>("#density");
   const scrollback = requiredElement<HTMLSelectElement>("#scrollback");
   const cursorBlink = requiredElement<HTMLInputElement>("#cursorBlink");
-  theme.value = settings.theme;
+  const cursorStyle = requiredElement<HTMLSelectElement>("#cursorStyle");
+  const terminalPadding = requiredElement<HTMLInputElement>("#terminalPadding");
+  const terminalPaddingValue = requiredElement<HTMLElement>("#terminalPaddingValue");
+
+  const statusBarPosition = requiredElement<HTMLSelectElement>("#statusBarPosition");
+  const statusBarShowPanes = requiredElement<HTMLInputElement>("#statusBarShowPanes");
+  const statusBarShowClock = requiredElement<HTMLInputElement>("#statusBarShowClock");
+  const keybindingsList = requiredElement<HTMLElement>("#keybindingsList");
+
+  const customThemeContainer = requiredElement<HTMLElement>("#customThemeContainer");
+  const customThemeJson = requiredElement<HTMLTextAreaElement>("#customThemeJson");
+  const customThemeError = requiredElement<HTMLElement>("#customThemeError");
+  const importBtn = requiredElement<HTMLButtonElement>("#importThemeBtn");
+  const importFile = requiredElement<HTMLInputElement>("#importThemeFile");
+  const exportBtn = requiredElement<HTMLButtonElement>("#exportThemeBtn");
+
+  theme.value = settings.theme.preset;
   accent.value = settings.accent;
   density.value = settings.density;
   scrollback.value = String(settings.scrollback);
   cursorBlink.checked = settings.cursorBlink;
+  cursorStyle.value = settings.cursorStyle;
+  terminalPadding.value = String(settings.terminalPadding);
+  terminalPaddingValue.textContent = `${settings.terminalPadding}px`;
+
+  statusBarPosition.value = settings.statusBarPosition;
+  statusBarShowPanes.checked = settings.statusBarShowPanes;
+  statusBarShowClock.checked = settings.statusBarShowClock;
+
+  renderKeybindingsList(keybindingsList);
+
+  requiredElement<HTMLButtonElement>("#resetAllKeybindings").addEventListener("click", () => {
+    settings.keybindings = {};
+    saveSettings(settings);
+    renderKeybindingsList(keybindingsList);
+  });
+
+  const updateCustomThemeVisibility = () => {
+    if (theme.value === "custom") {
+      customThemeContainer.style.display = "grid";
+      if (!customThemeJson.value.trim()) {
+        const palette = settings.theme.preset === "custom"
+          ? (settings.theme as { preset: "custom"; palette: TerminalPalette }).palette
+          : terminalTheme(settings.theme);
+        customThemeJson.value = JSON.stringify(palette, null, 2);
+      }
+    } else {
+      customThemeContainer.style.display = "none";
+    }
+  };
+
+  theme.addEventListener("change", updateCustomThemeVisibility);
+  updateCustomThemeVisibility();
+
+  terminalPadding.addEventListener("input", () => {
+    terminalPaddingValue.textContent = `${terminalPadding.value}px`;
+  });
+
+  importBtn.addEventListener("click", () => {
+    importFile.click();
+  });
+
+  importFile.addEventListener("change", () => {
+    const file = importFile.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result;
+        if (typeof text !== "string") return;
+        const parsed = JSON.parse(text);
+        customThemeJson.value = JSON.stringify(parsed, null, 2);
+        customThemeError.style.display = "none";
+        customThemeError.textContent = "";
+        theme.value = "custom";
+        updateCustomThemeVisibility();
+      } catch (err: any) {
+        customThemeError.textContent = `Import failed: ${err.message}`;
+        customThemeError.style.display = "block";
+      }
+    };
+    reader.readAsText(file);
+    importFile.value = "";
+  });
+
+  exportBtn.addEventListener("click", () => {
+    let paletteToExport;
+    if (theme.value === "custom") {
+      try {
+        paletteToExport = JSON.parse(customThemeJson.value);
+      } catch {
+        paletteToExport = terminalTheme(settings.theme);
+      }
+    } else {
+      paletteToExport = terminalTheme({ preset: theme.value });
+    }
+    const blob = new Blob([JSON.stringify(paletteToExport, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${paletteToExport.name || "theme"}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    settings = readSettingsForm();
-    saveSettings(settings);
-    applyAppAppearance(settings);
+    const nextSettings = readSettingsForm();
+    if (nextSettings) {
+      settings = nextSettings;
+      saveSettings(settings);
+      applyAppAppearance(settings);
+    }
   });
+
   const reset = () => {
     settings = { ...DEFAULT_SETTINGS };
     saveSettings(settings);
@@ -1645,7 +1989,38 @@ async function createTabInSpace(spaceId: string, profileId = settings.defaultPro
   if (!settingsRoot.hidden) await renderSpaceList();
 }
 
-function readSettingsForm(): TerminalSettings {
+function readSettingsForm(): TerminalSettings | null {
+  const themePreset = requiredElement<HTMLSelectElement>("#theme").value;
+  let themeObj: TerminalTheme = { preset: themePreset };
+
+  if (themePreset === "custom") {
+    const jsonText = requiredElement<HTMLTextAreaElement>("#customThemeJson").value;
+    const errorEl = requiredElement<HTMLElement>("#customThemeError");
+    errorEl.style.display = "none";
+    errorEl.textContent = "";
+
+    try {
+      const parsed = JSON.parse(jsonText);
+      const requiredFields = [
+        "name", "kind", "background", "foreground", "cursor", "selectionBackground",
+        "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
+        "brightBlack", "brightRed", "brightGreen", "brightYellow", "brightBlue",
+        "brightMagenta", "brightCyan", "brightWhite"
+      ];
+      for (const field of requiredFields) {
+        if (typeof parsed[field] !== "string" || !parsed[field].trim()) {
+          throw new Error(`Missing or invalid color field: "${field}"`);
+        }
+      }
+      themeObj = { preset: "custom", palette: parsed };
+    } catch (err: any) {
+      errorEl.textContent = `Invalid palette JSON: ${err.message}`;
+      errorEl.style.display = "block";
+      requiredElement<HTMLElement>("#customThemeJson").focus();
+      return null;
+    }
+  }
+
   return normalizeSettings({
     fontFamily: requiredElement<HTMLInputElement>("#fontFamily").value,
     customFontName: requiredElement<HTMLInputElement>("#customFontName").value,
@@ -1655,9 +2030,15 @@ function readSettingsForm(): TerminalSettings {
     cursorBlink: requiredElement<HTMLInputElement>("#cursorBlink").checked,
     accent: requiredElement<HTMLSelectElement>("#accent").value,
     density: requiredElement<HTMLSelectElement>("#density").value,
-    theme: requiredElement<HTMLSelectElement>("#theme").value,
+    theme: themeObj,
+    cursorStyle: requiredElement<HTMLSelectElement>("#cursorStyle").value as any,
+    terminalPadding: Number(requiredElement<HTMLInputElement>("#terminalPadding").value),
     scrollSensitivity: Number(requiredElement<HTMLInputElement>("#scrollSensitivity").value),
     defaultProfileId: settings.defaultProfileId,
+    keybindings: settings.keybindings,
+    statusBarShowClock: requiredElement<HTMLInputElement>("#statusBarShowClock").checked,
+    statusBarShowPanes: requiredElement<HTMLInputElement>("#statusBarShowPanes").checked,
+    statusBarPosition: requiredElement<HTMLSelectElement>("#statusBarPosition").value as any,
   });
 }
 
@@ -1898,4 +2279,336 @@ async function registerServiceWorker(): Promise<void> {
   } catch (error) {
     console.warn("service worker registration failed", error);
   }
+}
+
+function initActions(): void {
+  // Pane actions
+  registerAction({
+    id: "split-right",
+    label: "Split Right",
+    category: "pane",
+    defaultKeys: "Ctrl+Shift+Right",
+    handler: () => splitActivePane("horizontal")
+  });
+
+  registerAction({
+    id: "split-down",
+    label: "Split Down",
+    category: "pane",
+    defaultKeys: "Ctrl+Shift+Down",
+    handler: () => splitActivePane("vertical")
+  });
+
+  registerAction({
+    id: "close-pane",
+    label: "Close Pane",
+    category: "pane",
+    defaultKeys: "Ctrl+Shift+Backspace",
+    handler: () => closeActivePane()
+  });
+
+  registerAction({
+    id: "detach-pane",
+    label: "Move Pane to New Tab",
+    category: "pane",
+    defaultKeys: "Ctrl+Shift+KeyD",
+    handler: () => detachActivePane()
+  });
+
+  registerAction({
+    id: "zoom-pane",
+    label: "Toggle Zoom Pane",
+    category: "pane",
+    handler: () => toggleZoomActivePane()
+  });
+
+  registerAction({
+    id: "focus-previous",
+    label: "Focus Previous Pane",
+    category: "pane",
+    defaultKeys: "Ctrl+Shift+Left",
+    handler: () => focusAdjacentPane(-1)
+  });
+
+  registerAction({
+    id: "focus-next",
+    label: "Focus Next Pane",
+    category: "pane",
+    defaultKeys: "Ctrl+Shift+Up",
+    handler: () => focusAdjacentPane(1)
+  });
+
+  registerAction({
+    id: "focus-left",
+    label: "Focus Pane Left",
+    category: "pane",
+    handler: () => focusSpatialPane("left")
+  });
+
+  registerAction({
+    id: "focus-right",
+    label: "Focus Pane Right",
+    category: "pane",
+    handler: () => focusSpatialPane("right")
+  });
+
+  registerAction({
+    id: "focus-up",
+    label: "Focus Pane Up",
+    category: "pane",
+    handler: () => focusSpatialPane("up")
+  });
+
+  registerAction({
+    id: "focus-down",
+    label: "Focus Pane Down",
+    category: "pane",
+    handler: () => focusSpatialPane("down")
+  });
+
+  registerAction({
+    id: "rename-pane",
+    label: "Rename Pane",
+    category: "pane",
+    handler: () => openRenameDialog(activePaneId)
+  });
+
+  registerAction({
+    id: "restart-pane",
+    label: "Restart Pane",
+    category: "pane",
+    handler: () => restartActivePane()
+  });
+
+  registerAction({
+    id: "duplicate-pane",
+    label: "Duplicate Pane",
+    category: "pane",
+    handler: () => splitActivePane("horizontal")
+  });
+
+  registerAction({
+    id: "clear-pane",
+    label: "Clear Pane",
+    category: "pane",
+    handler: () => activePane()?.term.clear()
+  });
+
+  // Tab actions
+  registerAction({
+    id: "new-tab",
+    label: "New Tab",
+    category: "tab",
+    handler: () => openAppURL("/terminal.html", { newTab: true })
+  });
+
+  registerAction({
+    id: "close-tab",
+    label: "Close Tab",
+    category: "tab",
+    handler: () => closeCurrentTab()
+  });
+
+  registerAction({
+    id: "restart-tab",
+    label: "Restart Tab",
+    category: "tab",
+    handler: () => restartCurrentTab()
+  });
+
+  registerAction({
+    id: "rename-tab",
+    label: "Rename Tab",
+    category: "tab",
+    handler: () => openRenameDialog(parentSessionId)
+  });
+
+  // Workspace actions
+  registerAction({
+    id: "next-tab",
+    label: "Next Tab / Workspace",
+    category: "workspace",
+    handler: () => navigateWorkspaceTab(1)
+  });
+
+  registerAction({
+    id: "previous-tab",
+    label: "Previous Tab / Workspace",
+    category: "workspace",
+    handler: () => navigateWorkspaceTab(-1)
+  });
+
+  // View actions
+  registerAction({
+    id: "copy",
+    label: "Copy Selection",
+    category: "view",
+    handler: () => { activePane()?.term.copySelection(); }
+  });
+
+  registerAction({
+    id: "paste",
+    label: "Paste Clipboard",
+    category: "view",
+    handler: () => pasteToActivePane()
+  });
+
+  registerAction({
+    id: "select-all",
+    label: "Select All",
+    category: "view",
+    handler: () => activePane()?.term.selectAll()
+  });
+
+  registerAction({
+    id: "toggle-settings",
+    label: "Toggle Settings Page",
+    category: "view",
+    handler: () => openAppURL("/")
+  });
+
+  registerAction({
+    id: "toggle-diagnostics",
+    label: "Toggle Diagnostics Panel",
+    category: "view",
+    handler: () => toggleDiagnosticsPanel()
+  });
+
+  registerAction({
+    id: "toggle-shortcuts",
+    label: "Show Shortcuts Guide",
+    category: "view",
+    handler: () => openShortcutsDialog()
+  });
+
+  registerAction({
+    id: "command-palette",
+    label: "Open Command Palette",
+    category: "view",
+    defaultKeys: "Ctrl+Shift+P",
+    handler: () => openPalette()
+  });
+}
+
+let recordingActionId: string | null = null;
+let recordingListener: ((event: KeyboardEvent) => void) | null = null;
+
+function renderKeybindingsList(container: HTMLElement): void {
+  container.innerHTML = "";
+
+  const conflicts: Record<string, string[]> = {};
+  const currentChords: Record<string, string> = {};
+  const allActions = getAllActions();
+
+  allActions.forEach(action => {
+    const customChord = settings.keybindings?.[action.id];
+    const chord = customChord !== undefined ? customChord : (action.defaultKeys || "");
+    if (chord) {
+      currentChords[action.id] = chord;
+      if (!conflicts[chord]) {
+        conflicts[chord] = [];
+      }
+      conflicts[chord].push(action.id);
+    }
+  });
+
+  allActions.forEach(action => {
+    const customChord = settings.keybindings?.[action.id];
+    const hasCustom = customChord !== undefined;
+    const chord = customChord !== undefined ? customChord : (action.defaultKeys || "");
+    const actionConflicts = chord ? (conflicts[chord]?.filter(id => id !== action.id) || []) : [];
+    const hasConflict = actionConflicts.length > 0;
+
+    const row = document.createElement("div");
+    row.className = "keybinding-row";
+    row.dataset.actionId = action.id;
+
+    const isRecordingThis = recordingActionId === action.id;
+
+    row.innerHTML = `
+      <div class="keybinding-info">
+        <strong>${escapeHTML(action.label)}</strong>
+        <span class="keybinding-category">${action.category}</span>
+        ${hasConflict ? `<span class="keybinding-conflict-warning">⚠️ Conflicts with: ${actionConflicts.map(id => getAction(id)?.label || id).join(", ")}</span>` : ""}
+      </div>
+      <div class="keybinding-keys" style="margin-right: 16px;">
+        <kbd class="keybinding-kbd${hasConflict ? " conflict" : ""}">${isRecordingThis ? "Press keys..." : (chord || "None")}</kbd>
+      </div>
+      <div class="keybinding-actions">
+        <button class="secondary-button record-btn${isRecordingThis ? " recording" : ""}" type="button" data-record="${escapeAttribute(action.id)}">
+          ${isRecordingThis ? "Recording..." : "Record"}
+        </button>
+        <button class="secondary-button reset-btn" type="button" data-reset="${escapeAttribute(action.id)}"${hasCustom ? "" : " disabled"}>
+          Reset
+        </button>
+      </div>
+    `;
+
+    const recordBtn = row.querySelector<HTMLButtonElement>(".record-btn");
+    const resetBtn = row.querySelector<HTMLButtonElement>(".reset-btn");
+
+    recordBtn?.addEventListener("click", () => {
+      if (recordingActionId) {
+        stopRecordingKeybinding();
+      }
+      startRecordingKeybinding(action.id, container);
+    });
+
+    resetBtn?.addEventListener("click", () => {
+      if (settings.keybindings) {
+        delete settings.keybindings[action.id];
+        saveSettings(settings);
+        renderKeybindingsList(container);
+      }
+    });
+
+    container.appendChild(row);
+  });
+}
+
+function startRecordingKeybinding(actionId: string, container: HTMLElement): void {
+  recordingActionId = actionId;
+  renderKeybindingsList(container);
+
+  const listener = (event: KeyboardEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (["Control", "Alt", "Shift", "Meta"].includes(event.key)) {
+      return;
+    }
+
+    if (!event.ctrlKey && !event.altKey && !event.metaKey) {
+      return;
+    }
+
+    const chord = eventToChordString(event);
+
+    if (shouldPassThroughSystemShortcut(event)) {
+      alert("Cannot override ChromeOS system or browser shortcuts.");
+      stopRecordingKeybinding();
+      renderKeybindingsList(container);
+      return;
+    }
+
+    if (!settings.keybindings) {
+      settings.keybindings = {};
+    }
+    settings.keybindings[actionId] = chord;
+    saveSettings(settings);
+
+    stopRecordingKeybinding();
+    renderKeybindingsList(container);
+  };
+
+  recordingListener = listener;
+  window.addEventListener("keydown", listener, { capture: true });
+}
+
+function stopRecordingKeybinding(): void {
+  if (recordingListener) {
+    window.removeEventListener("keydown", recordingListener, { capture: true });
+    recordingListener = null;
+  }
+  recordingActionId = null;
 }

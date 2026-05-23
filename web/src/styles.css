@@ -10,6 +10,7 @@
   color-scheme: dark;
   --font-ui: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", "Noto Sans Mono", monospace;
+  --terminal-padding: 0px;
   --color-app-bg: #05080b;
   --color-terminal-bg: #000;
   --color-surface-1: #0a1119;
@@ -369,6 +370,7 @@ body {
   height: 100%;
   overflow: hidden;
   background: var(--color-terminal-bg);
+  padding: var(--terminal-padding, 0px);
 }
 
 .terminal-pane.active::after {
@@ -1195,4 +1197,263 @@ body {
   .session-meta {
     justify-items: start;
   }
+}
+
+/* Command Palette Styles */
+.command-palette {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 10vh;
+}
+
+.command-palette[hidden] {
+  display: none;
+}
+
+.command-palette-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+}
+
+.command-palette-dialog {
+  position: relative;
+  width: 100%;
+  max-width: 500px;
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+#commandPaletteInput {
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--color-terminal-bg);
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-terminal-fg);
+  font-family: monospace;
+  font-size: 14px;
+  outline: none;
+}
+
+#commandPaletteResults {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 300px;
+  overflow-y: auto;
+  background: var(--color-surface-1);
+}
+
+.command-palette-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 13px;
+  color: var(--color-foreground-2);
+}
+
+.command-palette-item:hover,
+.command-palette-item.selected {
+  background: var(--color-control-hover);
+  color: var(--color-foreground-1);
+}
+
+.command-palette-item .item-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.command-palette-item .item-category {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--color-surface-3);
+  text-transform: uppercase;
+  color: var(--color-foreground-3);
+}
+
+.command-palette-item .item-keybinding {
+  font-size: 11px;
+  color: var(--color-foreground-3);
+  background: var(--color-surface-3);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+}
+
+.command-palette-empty {
+  padding: 16px;
+  text-align: center;
+  font-family: monospace;
+  font-size: 13px;
+  color: var(--color-foreground-3);
+}
+
+/* Status Bar Styles */
+.workspace-body {
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  position: relative;
+}
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 24px;
+  padding: 0 12px;
+  background: var(--color-surface-1);
+  color: var(--color-foreground-2);
+  font-size: 11px;
+  font-family: monospace;
+  border-top: 1px solid var(--color-border);
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.status-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: bold;
+}
+
+.status-bar-panes {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  justify-content: center;
+}
+
+.status-bar-pane-button {
+  background: transparent;
+  border: none;
+  color: var(--color-foreground-2);
+  padding: 2px 8px;
+  font-family: monospace;
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.status-bar-pane-button:hover {
+  background: var(--color-control-hover);
+  color: var(--color-foreground-1);
+}
+
+.status-bar-pane-button.active {
+  background: var(--color-accent);
+  color: #000000;
+  font-weight: bold;
+}
+
+.status-bar-right {
+  display: flex;
+  align-items: center;
+}
+
+/* Zoomed Pane Styles */
+.terminal-pane.zoomed {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 10;
+}
+
+/* Keybindings UI in Settings */
+.keybindings-list {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  margin-top: 8px;
+}
+
+.keybinding-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--color-border);
+  gap: 16px;
+}
+
+.keybinding-row:last-child {
+  border-bottom: none;
+}
+
+.keybinding-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.keybinding-category {
+  font-size: 9px;
+  text-transform: uppercase;
+  color: var(--color-foreground-3);
+  margin-top: 2px;
+  font-weight: bold;
+}
+
+.keybinding-keys {
+  display: flex;
+  align-items: center;
+}
+
+.keybinding-kbd {
+  font-family: monospace;
+  font-size: 12px;
+  background: var(--color-surface-3);
+  color: var(--color-foreground-1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+}
+
+.keybinding-kbd.conflict {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+.keybinding-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.record-btn.recording {
+  background: var(--color-danger);
+  color: white;
+  animation: keybinding-pulse 1.5s infinite;
+}
+
+.keybinding-conflict-warning {
+  color: var(--color-danger);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+@keyframes keybinding-pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.6; }
+  100% { opacity: 1; }
 }

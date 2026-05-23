@@ -1,5 +1,6 @@
 import { clamp } from "./dom";
-import type { TerminalSettings } from "./types";
+import type { TerminalSettings, TerminalTheme, TerminalPalette } from "./types";
+import { getThemePalette, THEME_PRESETS } from "./themes";
 
 export const SETTINGS_KEY = "crostini-ghostty-terminal-settings";
 
@@ -12,9 +13,15 @@ export const DEFAULT_SETTINGS: TerminalSettings = {
   cursorBlink: true,
   accent: "green",
   density: "comfortable",
-  theme: "dark",
+  theme: { preset: "dark" },
+  cursorStyle: "block",
+  terminalPadding: 0,
   scrollSensitivity: 1,
   defaultProfileId: "profile-default",
+  keybindings: {},
+  statusBarShowClock: true,
+  statusBarShowPanes: true,
+  statusBarPosition: "bottom",
 };
 
 export function loadSettings(): TerminalSettings {
@@ -33,6 +40,7 @@ export function saveSettings(nextSettings: TerminalSettings): void {
 export function applyAppAppearance(nextSettings: TerminalSettings): void {
   document.documentElement.dataset.accent = nextSettings.accent;
   document.documentElement.dataset.density = nextSettings.density;
+  document.documentElement.style.setProperty("--terminal-padding", `${nextSettings.terminalPadding}px`);
 }
 
 export async function loadCustomFont(nextSettings: TerminalSettings): Promise<void> {
@@ -75,7 +83,54 @@ export function normalizeSettings(value: Partial<TerminalSettings> | Record<stri
   const scrollSensitivity = Number(value.scrollSensitivity);
   const accent = value.accent === "blue" || value.accent === "amber" ? value.accent : "green";
   const density = value.density === "compact" ? value.density : "comfortable";
-  const theme = value.theme === "highContrast" || value.theme === "soft" ? value.theme : "dark";
+
+  let theme: TerminalTheme = { preset: "dark" };
+  if (value.theme && typeof value.theme === "object") {
+    const valTheme = value.theme as any;
+    if (valTheme.preset === "custom" && valTheme.palette && typeof valTheme.palette === "object") {
+      const pal = valTheme.palette;
+      theme = {
+        preset: "custom",
+        palette: {
+          name: normalizeText(pal.name, "Custom", 40),
+          kind: pal.kind === "light" ? "light" : "dark",
+          background: normalizeHexColor(pal.background, "#000000"),
+          foreground: normalizeHexColor(pal.foreground, "#d7e0ea"),
+          cursor: normalizeHexColor(pal.cursor, "#d7e0ea"),
+          selectionBackground: normalizeHexColor(pal.selectionBackground, "#2f5f91"),
+          black: normalizeHexColor(pal.black, "#101820"),
+          red: normalizeHexColor(pal.red, "#ff6b7a"),
+          green: normalizeHexColor(pal.green, "#7bd88f"),
+          yellow: normalizeHexColor(pal.yellow, "#f7c76b"),
+          blue: normalizeHexColor(pal.blue, "#6ccff6"),
+          magenta: normalizeHexColor(pal.magenta, "#c792ea"),
+          cyan: normalizeHexColor(pal.cyan, "#5de4c7"),
+          white: normalizeHexColor(pal.white, "#d7e0ea"),
+          brightBlack: normalizeHexColor(pal.brightBlack, "#52677a"),
+          brightRed: normalizeHexColor(pal.brightRed, "#ff8fa0"),
+          brightGreen: normalizeHexColor(pal.brightGreen, "#a5f3b1"),
+          brightYellow: normalizeHexColor(pal.brightYellow, "#ffe08a"),
+          brightBlue: normalizeHexColor(pal.brightBlue, "#9adfff"),
+          brightMagenta: normalizeHexColor(pal.brightMagenta, "#d6a9ff"),
+          brightCyan: normalizeHexColor(pal.brightCyan, "#8df2dc"),
+          brightWhite: normalizeHexColor(pal.brightWhite, "#f0f4f8"),
+        },
+      };
+    } else if (typeof valTheme.preset === "string" && THEME_PRESETS.has(valTheme.preset)) {
+      theme = { preset: valTheme.preset };
+    }
+  } else if (typeof value.theme === "string" && THEME_PRESETS.has(value.theme)) {
+    theme = { preset: value.theme };
+  }
+
+  const cursorStyle = value.cursorStyle === "underline" || value.cursorStyle === "bar" ? value.cursorStyle : "block";
+  const terminalPadding = Number(value.terminalPadding);
+
+  const keybindings = normalizeKeybindings(value.keybindings);
+  const statusBarShowClock = typeof value.statusBarShowClock === "boolean" ? value.statusBarShowClock : DEFAULT_SETTINGS.statusBarShowClock;
+  const statusBarShowPanes = typeof value.statusBarShowPanes === "boolean" ? value.statusBarShowPanes : DEFAULT_SETTINGS.statusBarShowPanes;
+  const statusBarPosition = value.statusBarPosition === "hidden" ? "hidden" : "bottom";
+
   const defaultProfileId =
     typeof value.defaultProfileId === "string" && /^[a-z0-9][a-z0-9-]{2,63}$/.test(value.defaultProfileId)
       ? value.defaultProfileId
@@ -90,15 +145,43 @@ export function normalizeSettings(value: Partial<TerminalSettings> | Record<stri
     accent,
     density,
     theme,
+    cursorStyle,
+    terminalPadding: Number.isFinite(terminalPadding) ? clamp(Math.round(terminalPadding), 0, 32) : DEFAULT_SETTINGS.terminalPadding,
     scrollSensitivity: Number.isFinite(scrollSensitivity) ? clamp(scrollSensitivity, 0.5, 2) : DEFAULT_SETTINGS.scrollSensitivity,
     defaultProfileId,
+    keybindings,
+    statusBarShowClock,
+    statusBarShowPanes,
+    statusBarPosition,
   };
+}
+
+function normalizeKeybindings(value: unknown): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    for (const [actionId, chord] of Object.entries(record)) {
+      if (typeof chord === "string" && typeof actionId === "string") {
+        result[actionId] = chord.trim();
+      }
+    }
+  }
+  return result;
 }
 
 function normalizeText(value: unknown, fallback: string, maxLength: number): string {
   if (typeof value !== "string") return fallback;
   const nextValue = value.trim();
   return nextValue ? nextValue.slice(0, maxLength) : fallback;
+}
+
+function normalizeHexColor(value: unknown, fallback: string): string {
+  if (typeof value !== "string") return fallback;
+  const cleaned = value.trim();
+  if (/^#[0-9A-Fa-f]{3}$|^#[0-9A-Fa-f]{4}$|^#[0-9A-Fa-f]{6}$|^#[0-9A-Fa-f]{8}$/.test(cleaned)) {
+    return cleaned;
+  }
+  return fallback;
 }
 
 function normalizeFontUrl(value: unknown): string {
@@ -132,75 +215,6 @@ function fontFormat(url: string): string {
   return "truetype";
 }
 
-export function terminalTheme(theme: TerminalSettings["theme"]) {
-  if (theme === "highContrast") {
-    return {
-      background: "#000000",
-      foreground: "#ffffff",
-      cursor: "#ffffff",
-      selectionBackground: "#345f9f",
-      black: "#000000",
-      red: "#ff5c57",
-      green: "#5af78e",
-      yellow: "#f3f99d",
-      blue: "#57c7ff",
-      magenta: "#ff6ac1",
-      cyan: "#9aedfe",
-      white: "#f1f1f0",
-      brightBlack: "#686868",
-      brightRed: "#ff5c57",
-      brightGreen: "#5af78e",
-      brightYellow: "#f3f99d",
-      brightBlue: "#57c7ff",
-      brightMagenta: "#ff6ac1",
-      brightCyan: "#9aedfe",
-      brightWhite: "#ffffff",
-    };
-  }
-  if (theme === "soft") {
-    return {
-      background: "#080d12",
-      foreground: "#d8dee9",
-      cursor: "#e5edf5",
-      selectionBackground: "#334b5f",
-      black: "#1b2632",
-      red: "#e06c75",
-      green: "#98c379",
-      yellow: "#d19a66",
-      blue: "#61afef",
-      magenta: "#c678dd",
-      cyan: "#56b6c2",
-      white: "#d8dee9",
-      brightBlack: "#607080",
-      brightRed: "#ef7b84",
-      brightGreen: "#a7d388",
-      brightYellow: "#e0aa75",
-      brightBlue: "#70befd",
-      brightMagenta: "#d587ec",
-      brightCyan: "#65c5d1",
-      brightWhite: "#eef4fb",
-    };
-  }
-  return {
-    background: "#000000",
-    foreground: "#d7e0ea",
-    cursor: "#d7e0ea",
-    selectionBackground: "#2f5f91",
-    black: "#101820",
-    red: "#ff6b7a",
-    green: "#7bd88f",
-    yellow: "#f7c76b",
-    blue: "#6ccff6",
-    magenta: "#c792ea",
-    cyan: "#5de4c7",
-    white: "#d7e0ea",
-    brightBlack: "#52677a",
-    brightRed: "#ff8fa0",
-    brightGreen: "#a5f3b1",
-    brightYellow: "#ffe08a",
-    brightBlue: "#9adfff",
-    brightMagenta: "#d6a9ff",
-    brightCyan: "#8df2dc",
-    brightWhite: "#f0f4f8",
-  };
+export function terminalTheme(theme: TerminalTheme): TerminalPalette {
+  return getThemePalette(theme);
 }

@@ -1238,3 +1238,52 @@ func newTestSessionManager(t *testing.T) *sessionManager {
 	}
 	return m
 }
+
+func TestSessionManagerJoinPane(t *testing.T) {
+	m := newTestSessionManager(t)
+	ctx := context.Background()
+
+	parent1, err := m.create(ctx)
+	if err != nil {
+		t.Fatalf("create parent1 session: %v", err)
+	}
+	parent2, err := m.create(ctx)
+	if err != nil {
+		t.Fatalf("create parent2 session: %v", err)
+	}
+
+	workspace1, err := m.createSplit(ctx, parent1.ID, parent1.ID, "horizontal", "")
+	if err != nil {
+		t.Fatalf("create split on parent1: %v", err)
+	}
+	childID := workspace1.Layout.Second.SessionID
+
+	// Join childID to parent2
+	workspace2, err := m.joinPaneToWorkspace(ctx, parent2.ID, childID)
+	if err != nil {
+		t.Fatalf("join pane to parent2: %v", err)
+	}
+
+	// Verify childID parent ID updated
+	childMeta, err := m.readMetadata(childID)
+	if err != nil {
+		t.Fatalf("read child metadata: %v", err)
+	}
+	if childMeta.ParentID != parent2.ID {
+		t.Fatalf("expected child parent ID to be %q, got %q", parent2.ID, childMeta.ParentID)
+	}
+
+	// Verify parent1 layout does not contain childID anymore
+	layout1, err := m.readLayout(parent1.ID)
+	if err != nil {
+		t.Fatalf("read parent1 layout: %v", err)
+	}
+	if layoutContains(layout1, childID) {
+		t.Fatal("expected parent1 layout not to contain childID")
+	}
+
+	// Verify parent2 layout contains childID
+	if !layoutContains(&workspace2.Layout, childID) {
+		t.Fatal("expected parent2 layout to contain childID")
+	}
+}

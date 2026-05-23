@@ -68,6 +68,33 @@ export type AgentMessage = {
   code?: number;
 };
 
+export type TerminalPalette = {
+  name: string;
+  kind: "dark" | "light";
+  background: string;
+  foreground: string;
+  cursor: string;
+  selectionBackground: string;
+  black: string;
+  red: string;
+  green: string;
+  yellow: string;
+  blue: string;
+  magenta: string;
+  cyan: string;
+  white: string;
+  brightBlack: string;
+  brightRed: string;
+  brightGreen: string;
+  brightYellow: string;
+  brightBlue: string;
+  brightMagenta: string;
+  brightCyan: string;
+  brightWhite: string;
+};
+
+export type TerminalTheme = { preset: string } | { preset: "custom"; palette: TerminalPalette };
+
 export type TerminalSettings = {
   fontFamily: string;
   customFontName: string;
@@ -77,7 +104,13 @@ export type TerminalSettings = {
   cursorBlink: boolean;
   accent: "green" | "blue" | "amber";
   density: "comfortable" | "compact";
-  theme: "dark" | "highContrast" | "soft";
+  theme: TerminalTheme;
+  cursorStyle: "block" | "underline" | "bar";
+  terminalPadding: number;
   scrollSensitivity: number;
   defaultProfileId: string;
+  keybindings: Record<string, string>;
+  statusBarShowClock: boolean;
+  statusBarShowPanes: boolean;
+  statusBarPosition: "bottom" | "hidden";
 };

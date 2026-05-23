@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { paneShortcutForEvent, shouldPassThroughSystemShortcut } from "./shortcuts";
+import { parseKeyChord, matchKeyChord, eventToChordString } from "./actions";
 
 function keyEvent(init: Partial<KeyboardEvent>): KeyboardEvent {
   return init as KeyboardEvent;
@@ -55,7 +56,50 @@ describe("pane shortcut classification", () => {
   it("requires exactly Ctrl+Shift without platform or Alt modifiers", () => {
     expect(paneShortcutForEvent(keyEvent({ code: "ArrowRight", ctrlKey: true }))).toBeUndefined();
     expect(paneShortcutForEvent(keyEvent({ code: "ArrowRight", shiftKey: true }))).toBeUndefined();
-    expect(paneShortcutForEvent(keyEvent({ code: "ArrowRight", ctrlKey: true, shiftKey: true, altKey: true }))).toBeUndefined();
+    expect(paneShortcutForEvent(keyEvent({ code: "ArrowRight", ctrlKey: true, shiftKey: true, altKey: true }))).toBe("focus-right");
+    expect(paneShortcutForEvent(keyEvent({ code: "ArrowLeft", ctrlKey: true, shiftKey: true, altKey: true }))).toBe("focus-left");
+    expect(paneShortcutForEvent(keyEvent({ code: "ArrowUp", ctrlKey: true, shiftKey: true, altKey: true }))).toBe("focus-up");
+    expect(paneShortcutForEvent(keyEvent({ code: "ArrowDown", ctrlKey: true, shiftKey: true, altKey: true }))).toBe("focus-down");
     expect(paneShortcutForEvent(keyEvent({ code: "ArrowRight", ctrlKey: true, shiftKey: true, metaKey: true }))).toBeUndefined();
+  });
+});
+
+describe("key chord parsing and matching", () => {
+  it("parses chords correctly", () => {
+    expect(parseKeyChord("Ctrl+Shift+Right")).toEqual({
+      ctrlKey: true,
+      shiftKey: true,
+      altKey: false,
+      metaKey: false,
+      key: "Right"
+    });
+    expect(parseKeyChord("Ctrl+Shift+KeyD")).toEqual({
+      ctrlKey: true,
+      shiftKey: true,
+      altKey: false,
+      metaKey: false,
+      key: "KeyD"
+    });
+    expect(parseKeyChord("Alt+Enter")).toEqual({
+      ctrlKey: false,
+      shiftKey: false,
+      altKey: true,
+      metaKey: false,
+      key: "Enter"
+    });
+  });
+
+  it("matches keyboard events against chords", () => {
+    expect(matchKeyChord(keyEvent({ code: "ArrowRight", ctrlKey: true, shiftKey: true }), "Ctrl+Shift+Right")).toBe(true);
+    expect(matchKeyChord(keyEvent({ code: "KeyD", ctrlKey: true, shiftKey: true }), "Ctrl+Shift+KeyD")).toBe(true);
+    expect(matchKeyChord(keyEvent({ code: "KeyD", ctrlKey: true, shiftKey: true }), "Ctrl+Shift+D")).toBe(true);
+    expect(matchKeyChord(keyEvent({ code: "Enter", altKey: true }), "Alt+Enter")).toBe(true);
+    expect(matchKeyChord(keyEvent({ code: "ArrowRight", ctrlKey: true }), "Ctrl+Shift+Right")).toBe(false);
+  });
+
+  it("converts events to chord strings", () => {
+    expect(eventToChordString(keyEvent({ code: "ArrowRight", ctrlKey: true, shiftKey: true }))).toBe("Ctrl+Shift+Right");
+    expect(eventToChordString(keyEvent({ code: "KeyD", ctrlKey: true, shiftKey: true }))).toBe("Ctrl+Shift+D");
+    expect(eventToChordString(keyEvent({ code: "Enter", altKey: true }))).toBe("Alt+Enter");
   });
 });
