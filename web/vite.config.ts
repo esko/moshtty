@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
@@ -23,5 +24,8 @@ export default defineConfig({
         ws: true,
       },
     },
+  },
+  test: {
+    exclude: ["e2e/**", "node_modules/**"],
   },
 });

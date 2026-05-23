@@ -124,6 +124,40 @@ See `docs/sessions.md` for the API shapes.
 - Prefer small focused modules under `web/src`.
 - Keep terminal control keys working in the shell while passing ChromeOS/PWA shortcuts through `web/src/shortcuts.ts`.
 - Do not add new frontend stacks or renderer experiments without an explicit user request.
+- Every new module MUST have a corresponding `.test.ts` file.
+
+## Testing
+
+### Unit tests (Vitest)
+
+```bash
+bun run test          # 56 tests across 6 files
+bun run test:visual   # glyph-gap Puppeteer visual regression
+```
+
+| Test file | Covers |
+|-----------|--------|
+| `main.test.ts` | `ptyURL()`, `normalizeSettings()`, `clamp()`, `pathBaseName()`, `layoutLeaves()` |
+| `shortcuts.test.ts` | System key passthrough, pane shortcut detection, chord parsing/matching from `actions.ts` |
+| `actions.test.ts` | Action registry (register, get, getAll, overwrite, optional fields, categories) |
+| `themes.test.ts` | All 8 preset palettes, hex color validation, dark/light classification, `getThemePalette()` dispatch, custom palette support |
+| `debug-shell.test.ts` | `isSettingsPath()`, `isAppPath()` path classification |
+| `renderer-scale.test.ts` | Canvas backing-store ratio at fractional DPR |
+
+### E2E / visual tests (Playwright)
+
+```bash
+bun run test:e2e       # 6 end-to-end tests (requires running agent)
+bun run test:e2e:ui    # Interactive Playwright UI mode
+```
+
+Playwright tests live in `web/e2e/app.spec.ts` and use the `web/playwright.config.ts` configuration.
+The config auto-starts the Go agent and runs against `http://127.0.0.1:8765`.
+
+Tests cover:
+- App shell rendering (settings page, hero section, form elements)
+- Command palette visibility on page load
+- Agent health and session token API endpoints
 
 ## Module Map
 
