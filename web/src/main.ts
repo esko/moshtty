@@ -1224,6 +1224,9 @@ function renderSpace(space: Space): HTMLElement {
         <button class="icon-button" type="button" title="Rename space" aria-label="Rename ${escapeAttribute(space.title)}" data-rename-space="${escapeAttribute(space.id)}">
           <span aria-hidden="true">✎</span>
         </button>
+        <button class="icon-button" type="button" title="Copy space ID" aria-label="Copy space ID for ${escapeAttribute(space.title)}" data-copy-space-id="${escapeAttribute(space.id)}">
+          <span aria-hidden="true">#</span>
+        </button>
         <button class="icon-button danger" type="button" title="${escapeAttribute(deleteTitle)}" aria-label="${escapeAttribute(deleteTitle)}" data-delete-space="${escapeAttribute(space.id)}"${canDelete ? "" : " disabled"}>
           <span aria-hidden="true">${trashIcon()}</span>
         </button>
@@ -1343,6 +1346,11 @@ document.addEventListener("click", (event) => {
   const deleteSpaceButton = (event.target as Element).closest<HTMLButtonElement>("button[data-delete-space]");
   if (deleteSpaceButton?.dataset.deleteSpace) {
     void deleteSpace(deleteSpaceButton.dataset.deleteSpace);
+    return;
+  }
+  const copySpaceIdButton = (event.target as Element).closest<HTMLButtonElement>("button[data-copy-space-id]");
+  if (copySpaceIdButton?.dataset.copySpaceId) {
+    void copyToClipboard(copySpaceIdButton.dataset.copySpaceId);
     return;
   }
   const renameButton = (event.target as Element).closest<HTMLButtonElement>("button[data-rename-session]");
