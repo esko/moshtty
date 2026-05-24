@@ -94,9 +94,9 @@ describe("normalizeSettings", () => {
     expect(result.theme).toEqual({ preset: "tokyoNight" });
   });
 
-  it("falls back to dark theme for unknown preset", () => {
+  it("falls back to system theme for unknown preset", () => {
     const result = normalizeSettings({ theme: "nonexistent" });
-    expect(result.theme).toEqual({ preset: "dark" });
+    expect(result.theme).toEqual({ preset: "system" });
   });
 
   it("normalizes custom theme with all color fields", () => {

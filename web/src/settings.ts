@@ -13,7 +13,7 @@ export const DEFAULT_SETTINGS: TerminalSettings = {
   cursorBlink: true,
   accent: "green",
   density: "comfortable",
-  theme: { preset: "dark" },
+  theme: { preset: "system" },
   cursorStyle: "block",
   terminalPadding: 0,
   scrollSensitivity: 1,
@@ -89,7 +89,7 @@ export function normalizeSettings(value: Partial<TerminalSettings> | Record<stri
   const accent = value.accent === "blue" || value.accent === "amber" ? value.accent : "green";
   const density = value.density === "compact" ? value.density : "comfortable";
 
-  let theme: TerminalTheme = { preset: "dark" };
+  let theme: TerminalTheme = { preset: "system" };
   if (value.theme && typeof value.theme === "object") {
     const valTheme = value.theme as any;
     if (valTheme.preset === "custom" && valTheme.palette && typeof valTheme.palette === "object") {
@@ -121,9 +121,13 @@ export function normalizeSettings(value: Partial<TerminalSettings> | Record<stri
           brightWhite: normalizeHexColor(pal.brightWhite, "#f0f4f8"),
         },
       };
+    } else if (valTheme.preset === "system") {
+      theme = { preset: "system" };
     } else if (typeof valTheme.preset === "string" && THEME_PRESETS.has(valTheme.preset)) {
       theme = { preset: valTheme.preset };
     }
+  } else if (value.theme === "system") {
+    theme = { preset: "system" };
   } else if (typeof value.theme === "string" && THEME_PRESETS.has(value.theme)) {
     theme = { preset: value.theme };
   }

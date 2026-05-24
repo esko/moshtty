@@ -223,7 +223,11 @@ export function getThemePalette(theme: TerminalTheme): TerminalPalette {
   if (theme && theme.preset === "custom") {
     return (theme as { preset: "custom"; palette: TerminalPalette }).palette;
   }
-  const presetKey = (theme && theme.preset) || "dark";
+  let presetKey = (theme && theme.preset) || "system";
+  if (presetKey === "system") {
+    const isDark = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    presetKey = isDark ? "dark" : "light";
+  }
   const preset = THEME_PRESETS.get(presetKey) || THEME_PRESETS.get("dark");
   if (!preset) {
     throw new Error("Default preset theme not found");

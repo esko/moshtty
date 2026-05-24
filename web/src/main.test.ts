@@ -30,7 +30,7 @@ describe("settings normalization", () => {
     expect(settings.cursorBlink).toBe(false);
     expect(settings.accent).toBe("green");
     expect(settings.density).toBe("comfortable");
-    expect(settings.theme).toEqual({ preset: "dark" });
+    expect(settings.theme).toEqual({ preset: "system" });
     expect(settings.defaultProfileId).toBe("profile-default");
   });
 });
