@@ -48,6 +48,7 @@ const profileError = requiredElement<HTMLElement>("#profileError");
 const spaceDialog = requiredElement<HTMLDialogElement>("#spaceDialog");
 const spaceTitleInput = requiredElement<HTMLInputElement>("#spaceTitle");
 const shortcutsDialog = requiredElement<HTMLDialogElement>("#shortcutsDialog");
+const appDialogs = document.getElementsByTagName("dialog");
 
 let settings = loadSettings();
 applyAppAppearance(settings);
@@ -672,7 +673,9 @@ function handleActionShortcut(event: KeyboardEvent): boolean {
 function shouldHandleAppShortcut(event: KeyboardEvent): boolean {
   if (event.defaultPrevented || isSettingsRoute() || !currentWorkspace) return false;
   if (isPaletteOpen()) return false;
-  if (document.querySelector("dialog[open]")) return false;
+  for (let i = 0; i < appDialogs.length; i++) {
+    if (appDialogs[i].open) return false;
+  }
   const target = event.target;
   return !(target instanceof Element && isEditableShortcutTarget(target) && !terminalRoot.contains(target));
 }
