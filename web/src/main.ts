@@ -52,6 +52,13 @@ const shortcutsDialog = requiredElement<HTMLDialogElement>("#shortcutsDialog");
 
 let settings = loadSettings();
 applyAppAppearance(settings);
+
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  if (settings.theme.preset === "system") {
+    applyAppAppearance(settings);
+  }
+});
+
 let currentWorkspace: Workspace | null = null;
 let parentSessionId = "";
 let activePaneId = "";
@@ -1060,7 +1067,11 @@ async function renameSession(sessionId: string, title: string): Promise<void> {
       if (pane.id === activePaneId) pane.focus();
     }
   } else {
-    await renderSpaceList();
+    if (!settingsRoot.hidden) {
+      await refreshLandingData();
+    } else {
+      await renderSpaceList();
+    }
   }
 }
 
@@ -1219,6 +1230,10 @@ function renderSettingsPage(): void {
     </div>
 
     <form id="settingsForm" class="settings-form">
+      <button type="button" class="settings-back" id="settingsBackBtn">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M10 2L4 8l6 6"/></svg>
+        Back to spaces
+      </button>
       <section class="settings-section">
         <h2>Display</h2>
         <label class="setting-row">
@@ -1240,6 +1255,7 @@ function renderSettingsPage(): void {
         <label class="setting-row">
           <span><strong>Terminal palette</strong><small>Choose the terminal colors used by new tabs.</small></span>
           <select id="theme" name="theme">
+            <option value="system">Follow System</option>
             <option value="dark">Dark</option>
             <option value="highContrast">High Contrast</option>
             <option value="soft">Soft Dark</option>
@@ -1331,6 +1347,14 @@ function renderSettingsPage(): void {
           <span><strong>Show clock</strong><small>Show clock in the status bar.</small></span>
           <input id="statusBarShowClock" name="statusBarShowClock" type="checkbox" />
         </label>
+      </section>
+
+      <section class="settings-section">
+        <h2>Launch Profiles</h2>
+        <div id="profileList" class="session-list"></div>
+        <div style="margin-top: 12px; padding: 0 15px 15px;">
+          <button class="primary-button" type="button" data-create-profile>New profile</button>
+        </div>
       </section>
 
       <section class="settings-section">
@@ -1479,10 +1503,24 @@ function renderSettingsPage(): void {
   requiredElement<HTMLButtonElement>("#resetSettings").addEventListener("click", reset);
 
   requiredElement<HTMLButtonElement>("#settingsGearBtn").addEventListener("click", () => {
+    const landing = document.querySelector<HTMLElement>(".landing");
     const form = document.querySelector<HTMLElement>("#settingsForm");
     const settingsEl = document.querySelector<HTMLElement>("#settings");
-    if (form && settingsEl) {
-      settingsEl.scrollTo({ top: form.offsetTop - 12, behavior: "smooth" });
+    if (landing && form && settingsEl) {
+      landing.style.display = "none";
+      form.classList.add("visible");
+      settingsEl.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  });
+
+  requiredElement<HTMLButtonElement>("#settingsBackBtn").addEventListener("click", () => {
+    const landing = document.querySelector<HTMLElement>(".landing");
+    const form = document.querySelector<HTMLElement>("#settingsForm");
+    const settingsEl = document.querySelector<HTMLElement>("#settings");
+    if (landing && form && settingsEl) {
+      form.classList.remove("visible");
+      landing.style.display = "";
+      settingsEl.scrollTo({ top: 0, behavior: "smooth" });
     }
   });
 
@@ -1502,6 +1540,7 @@ function renderSettingsPage(): void {
 
   void renderLandingSpaceList(spaceList);
   void renderLandingRecentSessions();
+  void renderProfileList();
 }
 
 function getSpaceBadgeColors(title: string): { bg: string; fg: string } {
@@ -1756,7 +1795,8 @@ async function renderClosedTabList(container: HTMLElement): Promise<void> {
 }
 
 async function renderSpaceList(): Promise<void> {
-  const list = requiredElement<HTMLElement>("#sessionList");
+  const list = document.querySelector<HTMLElement>("#sessionList");
+  if (!list) return;
   list.innerHTML = `<div class="session-empty">Loading spaces</div>`;
   try {
     const spaces = await getJSON<Space[]>("/api/spaces");
@@ -1776,7 +1816,8 @@ async function renderSpaceList(): Promise<void> {
 }
 
 async function renderProfileList(): Promise<void> {
-  const list = requiredElement<HTMLElement>("#profileList");
+  const list = document.querySelector<HTMLElement>("#profileList");
+  if (!list) return;
   list.innerHTML = `<div class="session-empty">Loading profiles</div>`;
   try {
     const profiles = await getJSON<Profile[]>("/api/profiles");
@@ -2036,7 +2077,11 @@ async function deleteTerminalSession(sessionId: string): Promise<void> {
     return;
   }
   if (session) addClosedTab(session);
-  await renderSpaceList();
+  if (!settingsRoot.hidden) {
+    await refreshLandingData();
+  } else {
+    await renderSpaceList();
+  }
 }
 
 async function restartListedTab(sessionId: string): Promise<void> {
@@ -2049,7 +2094,11 @@ async function restartListedTab(sessionId: string): Promise<void> {
     console.error(`restart tab ${sessionId} failed with ${response.status}`);
     return;
   }
-  await renderSpaceList();
+  if (!settingsRoot.hidden) {
+    await refreshLandingData();
+  } else {
+    await renderSpaceList();
+  }
 }
 
 async function duplicateListedTab(sessionId: string): Promise<void> {
@@ -2078,7 +2127,11 @@ async function moveListedTab(sessionId: string, spaceId: string): Promise<void> 
   if (!response.ok) {
     console.error(`move tab ${sessionId} failed with ${response.status}`);
   }
-  await renderSpaceList();
+  if (!settingsRoot.hidden) {
+    await refreshLandingData();
+  } else {
+    await renderSpaceList();
+  }
 }
 
 async function renderOrphanPanel(): Promise<void> {
@@ -2251,12 +2304,20 @@ function openCreateSpaceDialog(): void {
 
 async function createSpace(title: string): Promise<void> {
   await postJSON<Space>("/api/spaces", { title: title.trim() || undefined });
-  await renderSpaceList();
+  if (!settingsRoot.hidden) {
+    await refreshLandingData();
+  } else {
+    await renderSpaceList();
+  }
 }
 
 async function renameSpace(spaceId: string, title: string): Promise<void> {
   await patchJSON<Space>(`/api/spaces/${encodeURIComponent(spaceId)}`, { title });
-  await renderSpaceList();
+  if (!settingsRoot.hidden) {
+    await refreshLandingData();
+  } else {
+    await renderSpaceList();
+  }
 }
 
 async function deleteSpace(spaceId: string): Promise<void> {
