@@ -87,6 +87,83 @@ export function matchKeyChord(event: KeyboardEvent, chord: string): boolean {
   return false;
 }
 
+export function parseBindingSequence(binding: string): string[] {
+  return binding.trim().split(/\s+/).filter(Boolean);
+}
+
+export function isMultiChordBinding(binding: string): boolean {
+  return parseBindingSequence(binding).length > 1;
+}
+
+const SEQUENCE_TIMEOUT_MS = 2000;
+
+type ActiveSequence = {
+  actionId: string;
+  chords: string[];
+  currentIndex: number;
+  timer: ReturnType<typeof setTimeout> | null;
+};
+
+let activeSequence: ActiveSequence | null = null;
+
+export function startSequence(actionId: string, binding: string): void {
+  cancelSequence();
+  const chords = parseBindingSequence(binding);
+  if (chords.length <= 1) return;
+  activeSequence = {
+    actionId,
+    chords,
+    currentIndex: 1,
+    timer: setTimeout(() => cancelSequence(), SEQUENCE_TIMEOUT_MS),
+  };
+}
+
+export type AdvanceResult =
+  | { status: "continue"; progress: string }
+  | { status: "complete"; actionId: string }
+  | { status: "mismatch" };
+
+export function advanceSequence(event: KeyboardEvent): AdvanceResult {
+  if (!activeSequence) return { status: "mismatch" };
+
+  const expectedChord = activeSequence.chords[activeSequence.currentIndex];
+  if (!matchKeyChord(event, expectedChord)) {
+    cancelSequence();
+    return { status: "mismatch" };
+  }
+
+  if (activeSequence.timer) clearTimeout(activeSequence.timer);
+
+  activeSequence.currentIndex++;
+
+  if (activeSequence.currentIndex >= activeSequence.chords.length) {
+    const actionId = activeSequence.actionId;
+    cancelSequence();
+    return { status: "complete", actionId };
+  }
+
+  activeSequence.timer = setTimeout(() => cancelSequence(), SEQUENCE_TIMEOUT_MS);
+  return {
+    status: "continue",
+    progress: activeSequence.chords.slice(0, activeSequence.currentIndex).join(" "),
+  };
+}
+
+export function cancelSequence(): void {
+  if (!activeSequence) return;
+  if (activeSequence.timer) clearTimeout(activeSequence.timer);
+  activeSequence = null;
+}
+
+export function isSequenceActive(): boolean {
+  return activeSequence !== null;
+}
+
+export function getSequenceProgress(): string {
+  if (!activeSequence) return "";
+  return activeSequence.chords.slice(0, activeSequence.currentIndex).join(" ");
+}
+
 export function eventToChordString(event: KeyboardEvent): string {
   const parts: string[] = [];
   if (event.ctrlKey) parts.push("Ctrl");

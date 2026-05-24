@@ -90,6 +90,17 @@ The browser protocol starts with:
 
 - `GET /api/health`
 - `GET /api/session`
+- `GET/POST /api/profiles`
+- `GET/PATCH/DELETE /api/profiles/{id}`
+- `GET/POST /api/spaces`
+- `GET/PATCH/DELETE /api/spaces/{id}`
+- `POST /api/spaces/{id}/tabs`
+- `GET/PATCH/DELETE /api/tabs/{id}`
+- `POST /api/tabs/{id}/restart`
+- `POST /api/tabs/{id}/splits`
+- `PATCH /api/tabs/{id}/layout`
+- `PATCH/DELETE /api/panes/{id}`
+- `POST /api/panes/{id}/restart`
 - `GET /api/terminal-sessions`
 - `POST /api/terminal-sessions`
 - `GET /api/terminal-sessions/{id}`
@@ -97,6 +108,8 @@ The browser protocol starts with:
 - `POST /api/terminal-sessions/{id}/detach`
 - `PATCH /api/terminal-sessions/{id}/layout`
 - `DELETE /api/terminal-sessions/{id}`
+- `GET /api/terminal-sessions/orphans`
+- `DELETE /api/terminal-sessions/orphans`
 - `GET /pty?token=<session-token>&session=<session-id>&restore=<0|1>&cols=<cols>&rows=<rows>` WebSocket
 
 Session model:
@@ -131,7 +144,7 @@ See `docs/sessions.md` for the API shapes.
 ### Unit tests (Vitest)
 
 ```bash
-bun run test          # 56 tests across 6 files
+bun run test          # 149 tests across 11 files
 bun run test:visual   # glyph-gap Puppeteer visual regression
 ```
 
@@ -139,10 +152,15 @@ bun run test:visual   # glyph-gap Puppeteer visual regression
 |-----------|--------|
 | `main.test.ts` | `ptyURL()`, `normalizeSettings()`, `clamp()`, `pathBaseName()`, `layoutLeaves()` |
 | `shortcuts.test.ts` | System key passthrough, pane shortcut detection, chord parsing/matching from `actions.ts` |
-| `actions.test.ts` | Action registry (register, get, getAll, overwrite, optional fields, categories) |
+| `actions.test.ts` | Action registry (register, get, getAll, overwrite, optional fields, categories), `parseBindingSequence()`, sequence state machine (`startSequence`, `advanceSequence`, `cancelSequence`, timeout) |
 | `themes.test.ts` | All 8 preset palettes, hex color validation, dark/light classification, `getThemePalette()` dispatch, custom palette support |
 | `debug-shell.test.ts` | `isSettingsPath()`, `isAppPath()` path classification |
 | `renderer-scale.test.ts` | Canvas backing-store ratio at fractional DPR |
+| `dom.test.ts` | `clamp()`, `escapeAttribute()`, `escapeHTML()`, `formatNumber()`, `pathBaseName()`, `socketState()`, `concatBytes()` |
+| `layout.test.ts` | `splitRatio()`, `layoutLeaves()`, `firstLeaf()`, `ratioFromKeyboard()` with clamp and shift-step |
+| `api.test.ts` | `ptyURL()` builds ws/wss URLs with all query params, restores, defaults |
+| `settings.test.ts` | `normalizeSettings()` validation for all fields (fontSize, scrollback, accent, density, cursorStyle, theme, custom palette, keybindings, booleans, profileId) |
+| `statusbar.test.ts` | `getClockTimeString()` returns valid 24-hour HH:MM |
 
 ### E2E / visual tests (Playwright)
 
@@ -163,20 +181,20 @@ Tests cover:
 
 | Module | Purpose |
 |--------|---------|
-| `web/src/main.ts` | App bootstrap, workspace rendering, layout, panes, context menu, settings page |
-| `web/src/actions.ts` | Action registry, key chord parser/matcher, keyboard shortcut mapping |
-| `web/src/palette.ts` | Command palette overlay (`Ctrl+Shift+P`), fuzzy search, keyboard navigation |
+| `web/src/main.ts` | App bootstrap, workspace rendering, layout, panes, context menu, settings form (Display, History, Status Bar, Keybindings) and spaces landing page |
+| `web/src/actions.ts` | Action registry, key chord parser/matcher, multi-key sequence state machine, keyboard shortcut mapping |
+| `web/src/palette.ts` | Command palette overlay (`Ctrl+Shift+P`), substring search, keyboard navigation |
 | `web/src/themes.ts` | Theme preset gallery (8 themes), `getThemePalette()` for color table lookup |
 | `web/src/debug-shell.ts` | In-app PWA tab strip for MCP automation (`?debug-shell=1`) |
-| `web/src/statusbar.ts` | Status bar DOM helpers (render, clock, highlight) — extraction in progress |
+| `web/src/statusbar.ts` | Status bar DOM helpers (render, clock, highlight) and chord progress indicator |
 | `web/src/settings.ts` | `loadSettings()`/`saveSettings()`/`normalizeSettings()`, font loading, app appearance |
 | `web/src/types.ts` | All TypeScript types: settings, sessions, spaces, profiles, layout nodes, API shapes |
 | `web/src/shortcuts.ts` | System shortcut passthrough, pane shortcut detection |
 | `web/src/layout.ts` | Split layout math: leaves, ratios, pointer/keyboard resize, spatial navigation |
 | `web/src/api.ts` | HTTP helpers (`getJSON`, `postJSON`, `patchJSON`), token fetch, WebSocket URL builder |
-| `web/src/dom.ts` | DOM utilities: clamp, escape, byte concat, socket state, typed query |
-| `web/src/styles.css` | Full app stylesheet with CSS variables for theming |
-| `agent/main.go` | HTTP server, routing, WebSocket PTY handler, security middleware |
+| `web/src/dom.ts` | DOM utilities: `clamp`, `escapeAttribute`, `escapeHTML`, `formatNumber`, `pathBaseName`, `socketState`, `concatBytes`, `requiredElement` |
+| `web/src/styles.css` | Full app stylesheet with CSS variables for theming, chord indicator pulse animation |
+| `agent/main.go` | HTTP server, routing, WebSocket PTY handler, security middleware, embedded web dist serving |
 | `agent/sessions.go` | Session manager: CRUD for spaces, tabs, panes, profiles, layouts |
 | `agent/worker.go` | Worker process: PTY owner, output capture, client broadcast |
 
@@ -194,7 +212,7 @@ When using the `agy` CLI with Gemini for multi-agent parallel work:
 ## Pre-commit Checklist
 
 ```bash
-bun run test          # 19 tests across 3 files
+bun run test          # 149 tests across 11 files
 bun run build         # TypeScript + Vite bundle
 git diff --check      # No trailing whitespace
 gofmt -w agent/*.go   # Format Go code if agent changed

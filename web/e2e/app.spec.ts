@@ -10,10 +10,12 @@ test.describe("app shell", () => {
     await expect(page.locator(".brand")).toHaveText("Crostini Ghostty");
   });
 
-  test("settings page shows hero section", async ({ page }) => {
+  test("settings page shows project sidebar and sessions panel", async ({ page }) => {
     await page.goto(BASE_URL);
-    await expect(page.locator(".settings-hero h1")).toBeVisible();
-    await expect(page.locator(".quick-grid")).toBeVisible();
+    await expect(page.locator(".landing-brand")).toBeVisible();
+    await expect(page.locator(".space-list")).toBeVisible();
+    await expect(page.locator("#searchSessionsInput")).toBeVisible();
+    await expect(page.locator("#recentSessionsList")).toBeVisible();
   });
 
   test("settings form has expected sections", async ({ page }) => {

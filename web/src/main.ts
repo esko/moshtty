@@ -13,7 +13,8 @@ import {
 } from "./settings";
 import { getThemePalette } from "./themes";
 import { shouldPassThroughSystemShortcut } from "./shortcuts";
-import { registerAction, getAction, getAllActions, matchKeyChord, eventToChordString, type Action } from "./actions";
+import { registerAction, getAction, getAllActions, matchKeyChord, eventToChordString, parseBindingSequence, isMultiChordBinding, startSequence, advanceSequence, cancelSequence, isSequenceActive, getSequenceProgress, type Action } from "./actions";
+import { showChordProgress, showChordRecording, hideChordIndicator } from "./statusbar";
 import { initPalette, openPalette, isPaletteOpen } from "./palette";
 import type { AgentMessage, EnvVars, OrphanCleanup, Profile, SessionLayoutNode, Space, TerminalSession, TerminalSettings, Workspace, TerminalTheme, TerminalPalette } from "./types";
 import "./styles.css";
@@ -62,6 +63,7 @@ let terminalRuntimeReady = false;
 let listedSessions: TerminalSession[] = [];
 let listedSpaces: Space[] = [];
 let listedProfiles: Profile[] = [];
+let selectedSpaceId = DEFAULT_SPACE_ID;
 const panes = new Map<string, TerminalPane>();
 
 type SplitNode = Extract<SessionLayoutNode, { type: "split" }>;
@@ -453,6 +455,10 @@ function renderWorkspace(workspace: Workspace, focusSessionId: string): void {
   disposePanes();
   const body = document.createElement("div");
   body.className = "workspace-body";
+  const header = document.createElement("div");
+  header.className = "workspace-header";
+  header.innerHTML = `<span class="workspace-header-title">${escapeHTML(workspace.session.title || "Terminal")}</span>`;
+  body.append(header);
   body.append(renderLayoutNode(workspace.layout));
   terminalRoot.replaceChildren(body);
   if (settings.statusBarPosition !== "hidden") {
@@ -637,21 +643,80 @@ async function handleContextAction(action: string): Promise<void> {
 function handleActionShortcut(event: KeyboardEvent): boolean {
   if (!shouldHandleAppShortcut(event)) return false;
 
+  // PASS 1: Active sequence in progress?
+  if (isSequenceActive()) {
+    const result = advanceSequence(event);
+    if (result.status === "continue") {
+      showChordProgress(result.progress);
+      event.preventDefault();
+      event.stopPropagation();
+      return true;
+    }
+    if (result.status === "complete") {
+      hideChordIndicator();
+      const action = getAction(result.actionId);
+      if (action) {
+        const isEnabled = action.enabled ? action.enabled() : true;
+        if (!isEnabled) return false;
+        event.preventDefault();
+        event.stopPropagation();
+        void action.handler();
+        return true;
+      }
+    }
+    // mismatch: sequence was cancelled by advanceSequence, fall through
+    hideChordIndicator();
+  }
+
   const allActions = getAllActions();
   let matchedAction: Action | undefined;
 
+  // PASS 2: Custom multi-key (first chord match)
   for (const action of allActions) {
     const customChord = settings.keybindings?.[action.id];
-    if (customChord && matchKeyChord(event, customChord)) {
+    if (customChord && isMultiChordBinding(customChord)) {
+      const chords = parseBindingSequence(customChord);
+      if (chords.length > 0 && matchKeyChord(event, chords[0])) {
+        startSequence(action.id, customChord);
+        showChordProgress(getSequenceProgress());
+        event.preventDefault();
+        event.stopPropagation();
+        return true;
+      }
+    }
+  }
+
+  // PASS 3: Custom single-key
+  for (const action of allActions) {
+    const customChord = settings.keybindings?.[action.id];
+    if (customChord && !isMultiChordBinding(customChord) && matchKeyChord(event, customChord)) {
       matchedAction = action;
       break;
     }
   }
 
+  // PASS 4: Default multi-key (first chord match)
   if (!matchedAction) {
     for (const action of allActions) {
       const customChord = settings.keybindings?.[action.id];
-      if (customChord === undefined && action.defaultKeys && matchKeyChord(event, action.defaultKeys)) {
+      if (customChord === undefined && action.defaultKeys && isMultiChordBinding(action.defaultKeys)) {
+        const chords = parseBindingSequence(action.defaultKeys);
+        if (chords.length > 0 && matchKeyChord(event, chords[0])) {
+          startSequence(action.id, action.defaultKeys);
+          showChordProgress(getSequenceProgress());
+          event.preventDefault();
+          event.stopPropagation();
+          return true;
+        }
+      }
+    }
+  }
+
+  // PASS 5: Default single-key
+  if (!matchedAction) {
+    for (const action of allActions) {
+      const customChord = settings.keybindings?.[action.id];
+      if (customChord === undefined && action.defaultKeys && !isMultiChordBinding(action.defaultKeys) && matchKeyChord(event, action.defaultKeys)) {
         matchedAction = action;
         break;
       }
@@ -1098,77 +1163,60 @@ function renderDiagnostics(): void {
 }
 
 function renderSettingsPage(): void {
-  document.title = `Menu - ${APP_TITLE}`;
+  document.title = `Spaces - ${APP_TITLE}`;
   terminalRoot.hidden = true;
   offlineEl.hidden = true;
   settingsRoot.hidden = false;
-  setStatus("connected", "Menu");
+  setStatus("connected", "Spaces");
 
   settingsRoot.innerHTML = `
-    <section class="settings-hero">
-      <div>
-        <p class="settings-eyebrow">Pinned Home Tab</p>
-        <h1>App Menu</h1>
-        <p class="settings-intro">Open spaces, terminal tabs, and tune defaults for new Crostini shell sessions.</p>
-      </div>
-      <div class="menu-actions">
-        <button class="primary-button" type="button" id="createDefaultTerminal">New terminal</button>
-        <button class="secondary-button" type="button" id="focusSettings">Settings</button>
-      </div>
-    </section>
-
-    <section class="quick-grid" aria-label="Quick actions">
-      <button class="quick-action" type="button" id="createQuickTerminal">
-        <strong>New terminal</strong>
-        <span>Start a fresh Crostini terminal tab.</span>
-      </button>
-      <button class="quick-action" type="button" id="copyLaunchCommand">
-        <strong>Agent command</strong>
-        <span>Copy the local launch command.</span>
-      </button>
-      <button class="quick-action" type="button" id="showShortcuts">
-        <strong>Shortcuts</strong>
-        <span>Review pane keyboard controls.</span>
-      </button>
-      <button class="quick-action" type="button" id="resetSettingsQuick">
-        <strong>Reset profile</strong>
-        <span>Restore terminal defaults.</span>
-      </button>
-    </section>
-
-    <section class="session-panel" aria-labelledby="profilesTitle">
-      <div class="section-heading">
+    <div class="landing">
+      <div class="landing-left">
+        <div class="landing-brand">
+          Crostini Ghostty
+          <span>Terminal spaces</span>
+        </div>
         <div>
-          <h2 id="profilesTitle">Profiles</h2>
-          <p>Choose shell, working directory, and environment defaults for new terminal tabs.</p>
+          <div class="landing-section-header">
+            <p class="landing-section-title">Projects</p>
+            <button class="landing-icon-btn" type="button" id="newSpaceBtn" title="Create Space" aria-label="Create Space">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M2 4a1 1 0 011-1h3.5a1 1 0 01.7.3l1.6 1.6a1 1 0 00.7.3H13a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V4z"/>
+                <path d="M8 6v4M6 8h4"/>
+              </svg>
+            </button>
+          </div>
+          <ul class="space-list" id="spaceList">
+            <li class="landing-empty">Loading spaces</li>
+          </ul>
         </div>
-        <div class="section-actions">
-          <button class="secondary-button" type="button" id="createProfile">New profile</button>
+        <div class="landing-footer">
+          <button class="landing-footer-btn" type="button" id="settingsGearBtn">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg>
+            Settings
+          </button>
+          <button class="landing-footer-btn" type="button" id="helpBtn">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 10.5v-.5M8 8.5C8 7.5 9 7 9 6c0-1.1-.9-2-2-2S5 4.9 5 6"/></svg>
+            Help
+          </button>
         </div>
       </div>
-      <div id="profileList" class="session-list" aria-live="polite">
-        <div class="session-empty">Loading profiles</div>
-      </div>
-    </section>
-
-    <section class="session-panel" aria-labelledby="sessionsTitle">
-      <div class="section-heading">
-        <div>
-          <h2 id="sessionsTitle">Spaces</h2>
-          <p>Open terminal tabs grouped by space or remove tab trees you no longer need.</p>
+      <div class="landing-right">
+        <div class="search-container">
+          <svg class="search-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="7" cy="7" r="4.5"/>
+            <path d="M10.5 10.5l4 4"/>
+          </svg>
+          <input type="text" id="searchSessionsInput" placeholder="Search sessions" autocomplete="off" />
         </div>
-        <div class="section-actions">
-          <button class="secondary-button" type="button" id="createSpace">New space</button>
-          <button class="secondary-button" type="button" id="refreshSessions">Refresh</button>
+        <div class="recent-sessions-container">
+          <p class="landing-section-title">Recent sessions</p>
+          <ul class="recent-sessions-list" id="recentSessionsList">
+            <li class="landing-empty">Loading sessions</li>
+          </ul>
         </div>
       </div>
-      <div id="sessionList" class="session-list" aria-live="polite">
-        <div class="session-empty">Loading spaces</div>
-      </div>
-      <div id="orphanPanel" class="orphan-panel" aria-live="polite">
-        <span>Checking orphan panes</span>
-      </div>
-    </section>
+    </div>
 
     <form id="settingsForm" class="settings-form">
       <section class="settings-section">
@@ -1203,10 +1251,10 @@ function renderSettingsPage(): void {
             <option value="custom">Custom</option>
           </select>
         </label>
-        <div id="customThemeContainer" style="display: none; padding: 14px 15px; border-bottom: 1px solid var(--color-border-subtle); grid-column: 1 / -1; display: grid; gap: 8px;">
+        <div id="customThemeContainer" style="display: none; padding: 14px 15px; border-bottom: 1px solid var(--color-border-subtle); grid-column: 1 / -1;">
           <span><strong>Custom palette JSON</strong><small>Edit palette colors as JSON.</small></span>
-          <textarea id="customThemeJson" style="width: 100%; min-height: 120px; font-family: var(--font-mono); font-size: 11px; padding: 8px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); background: var(--color-app-bg); color: var(--color-text-bright); resize: vertical;" spellcheck="false"></textarea>
-          <div style="display: flex; gap: 8px; justify-content: flex-end; align-items: center; width: 100%;">
+          <textarea id="customThemeJson" style="width: 100%; min-height: 120px; font-family: var(--font-mono); font-size: 11px; padding: 8px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); background: var(--color-app-bg); color: var(--color-text-bright); resize: vertical; margin-top: 4px;" spellcheck="false"></textarea>
+          <div style="display: flex; gap: 8px; justify-content: flex-end; align-items: center; width: 100%; margin-top: 6px;">
             <span id="customThemeError" style="color: var(--color-danger); font-size: 11px; margin-right: auto; display: none;"></span>
             <input type="file" id="importThemeFile" accept=".json" style="display: none;" />
             <button type="button" class="secondary-button compact-button" id="importThemeBtn">Import</button>
@@ -1309,7 +1357,6 @@ function renderSettingsPage(): void {
   const cursorStyle = requiredElement<HTMLSelectElement>("#cursorStyle");
   const terminalPadding = requiredElement<HTMLInputElement>("#terminalPadding");
   const terminalPaddingValue = requiredElement<HTMLElement>("#terminalPaddingValue");
-
   const statusBarPosition = requiredElement<HTMLSelectElement>("#statusBarPosition");
   const statusBarShowPanes = requiredElement<HTMLInputElement>("#statusBarShowPanes");
   const statusBarShowClock = requiredElement<HTMLInputElement>("#statusBarShowClock");
@@ -1321,27 +1368,6 @@ function renderSettingsPage(): void {
   const importBtn = requiredElement<HTMLButtonElement>("#importThemeBtn");
   const importFile = requiredElement<HTMLInputElement>("#importThemeFile");
   const exportBtn = requiredElement<HTMLButtonElement>("#exportThemeBtn");
-
-  theme.value = settings.theme.preset;
-  accent.value = settings.accent;
-  density.value = settings.density;
-  scrollback.value = String(settings.scrollback);
-  cursorBlink.checked = settings.cursorBlink;
-  cursorStyle.value = settings.cursorStyle;
-  terminalPadding.value = String(settings.terminalPadding);
-  terminalPaddingValue.textContent = `${settings.terminalPadding}px`;
-
-  statusBarPosition.value = settings.statusBarPosition;
-  statusBarShowPanes.checked = settings.statusBarShowPanes;
-  statusBarShowClock.checked = settings.statusBarShowClock;
-
-  renderKeybindingsList(keybindingsList);
-
-  requiredElement<HTMLButtonElement>("#resetAllKeybindings").addEventListener("click", () => {
-    settings.keybindings = {};
-    saveSettings(settings);
-    renderKeybindingsList(keybindingsList);
-  });
 
   const updateCustomThemeVisibility = () => {
     if (theme.value === "custom") {
@@ -1359,10 +1385,6 @@ function renderSettingsPage(): void {
 
   theme.addEventListener("change", updateCustomThemeVisibility);
   updateCustomThemeVisibility();
-
-  terminalPadding.addEventListener("input", () => {
-    terminalPaddingValue.textContent = `${terminalPadding.value}px`;
-  });
 
   importBtn.addEventListener("click", () => {
     importFile.click();
@@ -1392,12 +1414,12 @@ function renderSettingsPage(): void {
   });
 
   exportBtn.addEventListener("click", () => {
-    let paletteToExport;
+    let paletteToExport: TerminalPalette;
     if (theme.value === "custom") {
       try {
         paletteToExport = JSON.parse(customThemeJson.value);
       } catch {
-        paletteToExport = getThemePalette(settings.theme);
+        paletteToExport = getThemePalette({ preset: "dark" });
       }
     } else {
       paletteToExport = getThemePalette({ preset: theme.value });
@@ -1411,6 +1433,31 @@ function renderSettingsPage(): void {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  });
+
+  theme.value = settings.theme.preset;
+  accent.value = settings.accent;
+  density.value = settings.density;
+  scrollback.value = String(settings.scrollback);
+  cursorBlink.checked = settings.cursorBlink;
+  cursorStyle.value = settings.cursorStyle;
+  terminalPadding.value = String(settings.terminalPadding);
+  terminalPaddingValue.textContent = `${settings.terminalPadding}px`;
+
+  statusBarPosition.value = settings.statusBarPosition;
+  statusBarShowPanes.checked = settings.statusBarShowPanes;
+  statusBarShowClock.checked = settings.statusBarShowClock;
+
+  renderKeybindingsList(keybindingsList);
+
+  requiredElement<HTMLButtonElement>("#resetAllKeybindings").addEventListener("click", () => {
+    settings.keybindings = {};
+    saveSettings(settings);
+    renderKeybindingsList(keybindingsList);
+  });
+
+  terminalPadding.addEventListener("input", () => {
+    terminalPaddingValue.textContent = `${terminalPadding.value}px`;
   });
 
   form.addEventListener("submit", (event) => {
@@ -1430,34 +1477,282 @@ function renderSettingsPage(): void {
     renderSettingsPage();
   };
   requiredElement<HTMLButtonElement>("#resetSettings").addEventListener("click", reset);
-  requiredElement<HTMLButtonElement>("#resetSettingsQuick").addEventListener("click", reset);
-  requiredElement<HTMLButtonElement>("#createDefaultTerminal").addEventListener("click", () => {
-    void createTabInSpace(DEFAULT_SPACE_ID);
+
+  requiredElement<HTMLButtonElement>("#settingsGearBtn").addEventListener("click", () => {
+    const form = document.querySelector<HTMLElement>("#settingsForm");
+    const settingsEl = document.querySelector<HTMLElement>("#settings");
+    if (form && settingsEl) {
+      settingsEl.scrollTo({ top: form.offsetTop - 12, behavior: "smooth" });
+    }
   });
-  requiredElement<HTMLButtonElement>("#createQuickTerminal").addEventListener("click", () => {
-    void createTabInSpace(DEFAULT_SPACE_ID);
-  });
-  requiredElement<HTMLButtonElement>("#focusSettings").addEventListener("click", () => {
-    requiredElement<HTMLElement>("#settingsActions").scrollIntoView({ behavior: "smooth", block: "end" });
-  });
-  requiredElement<HTMLButtonElement>("#copyLaunchCommand").addEventListener("click", async () => {
-    await navigator.clipboard?.writeText("cd ~/crostini-ghostty-terminal/agent && go run . -web-dir ../web/dist");
-  });
-  requiredElement<HTMLButtonElement>("#showShortcuts").addEventListener("click", () => {
-    openShortcutsDialog();
-  });
-  requiredElement<HTMLButtonElement>("#refreshSessions").addEventListener("click", () => {
-    void renderSpaceList();
-  });
-  requiredElement<HTMLButtonElement>("#createSpace").addEventListener("click", () => {
+
+  const spaceList = requiredElement<HTMLElement>("#spaceList");
+
+  requiredElement<HTMLButtonElement>("#newSpaceBtn").addEventListener("click", () => {
     openCreateSpaceDialog();
   });
-  requiredElement<HTMLButtonElement>("#createProfile").addEventListener("click", () => {
-    void editProfile();
+
+  requiredElement<HTMLButtonElement>("#helpBtn").addEventListener("click", () => {
+    if (!shortcutsDialog.open) shortcutsDialog.showModal();
   });
-  void renderProfileList();
-  void renderSpaceList();
-  void renderOrphanPanel();
+
+  requiredElement<HTMLInputElement>("#searchSessionsInput").addEventListener("input", () => {
+    void renderLandingRecentSessions();
+  });
+
+  void renderLandingSpaceList(spaceList);
+  void renderLandingRecentSessions();
+}
+
+function getSpaceBadgeColors(title: string): { bg: string; fg: string } {
+  const lower = title.toLowerCase();
+  if (lower === "default space" || lower.includes("default")) {
+    return { bg: "light-dark(#e2e8f0, #2d3748)", fg: "light-dark(#4a5568, #e2e8f0)" };
+  }
+  if (lower.includes("company") || lower.includes("work")) {
+    return { bg: "light-dark(#c6f6d5, #22543d)", fg: "light-dark(#22543d, #c6f6d5)" };
+  }
+  if (lower.includes("code") || lower.includes("project") || lower.includes("dev")) {
+    return { bg: "light-dark(#e2e8f0, #1a202c)", fg: "light-dark(#1a202c, #edf2f7)" };
+  }
+  let hash = 0;
+  for (let i = 0; i < title.length; i++) {
+    hash = title.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue = Math.abs(hash) % 360;
+  return {
+    bg: `hsl(${hue}, 60%, light-dark(85%, 25%))`,
+    fg: `hsl(${hue}, 60%, light-dark(25%, 85%))`,
+  };
+}
+
+async function renderLandingSpaceList(container: HTMLElement): Promise<void> {
+  container.innerHTML = `<li class="landing-empty">Loading spaces</li>`;
+  try {
+    const spaces = await getJSON<Space[]>("/api/spaces");
+    listedSpaces = spaces;
+    listedSessions = spaces.flatMap((space) => space.tabs);
+
+    // Ensure selectedSpaceId is still valid, fallback to DEFAULT_SPACE_ID
+    if (!spaces.some(s => s.id === selectedSpaceId)) {
+      selectedSpaceId = DEFAULT_SPACE_ID;
+    }
+
+    if (spaces.length === 0) {
+      container.innerHTML = `<li class="landing-empty">No spaces yet</li>`;
+      return;
+    }
+
+    container.innerHTML = "";
+    for (const space of spaces) {
+      const li = document.createElement("li");
+      li.className = "space-item";
+      li.setAttribute("data-active", space.id === selectedSpaceId ? "true" : "false");
+
+      const badge = document.createElement("span");
+      badge.className = "space-badge";
+      const colors = getSpaceBadgeColors(space.title);
+      badge.style.backgroundColor = colors.bg;
+      badge.style.color = colors.fg;
+      badge.textContent = space.title.charAt(0).toUpperCase();
+      li.appendChild(badge);
+
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "space-item-name";
+      nameSpan.textContent = space.title;
+      li.appendChild(nameSpan);
+
+      li.addEventListener("click", () => {
+        if (selectedSpaceId !== space.id) {
+          selectedSpaceId = space.id;
+          for (const child of Array.from(container.children)) {
+            child.setAttribute("data-active", "false");
+          }
+          li.setAttribute("data-active", "true");
+          void renderLandingRecentSessions();
+        }
+      });
+
+      if (space.id !== DEFAULT_SPACE_ID) {
+        const closeBtn = document.createElement("button");
+        closeBtn.className = "space-item-close";
+        closeBtn.textContent = "x";
+        closeBtn.setAttribute("aria-label", `Delete ${space.title}`);
+        closeBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          void deleteSpace(space.id);
+        });
+        li.appendChild(closeBtn);
+      }
+      container.appendChild(li);
+    }
+  } catch {
+    container.innerHTML = `<li class="landing-empty">Could not load spaces</li>`;
+  }
+}
+
+async function renderLandingRecentSessions(): Promise<void> {
+  const container = document.querySelector<HTMLElement>("#recentSessionsList");
+  if (!container) return;
+
+  const searchInput = document.querySelector<HTMLInputElement>("#searchSessionsInput");
+  const query = searchInput ? searchInput.value.trim().toLowerCase() : "";
+
+  const selectedSpace = listedSpaces.find((s) => s.id === selectedSpaceId);
+  const activeTabs = selectedSpace ? selectedSpace.tabs : [];
+
+  let sessionsToRender: TerminalSession[] = [];
+  if (query) {
+    sessionsToRender = listedSessions.filter((session) => {
+      const titleMatch = session.title.toLowerCase().includes(query);
+      const shellMatch = (session.shell || "").toLowerCase().includes(query);
+      const spaceName = listedSpaces.find((s) => s.id === session.spaceId)?.title || "";
+      const spaceMatch = spaceName.toLowerCase().includes(query);
+      return titleMatch || shellMatch || spaceMatch;
+    });
+  } else {
+    sessionsToRender = activeTabs;
+  }
+
+  if (sessionsToRender.length === 0) {
+    container.innerHTML = `
+      <li class="landing-empty">
+        ${query ? "No matching sessions found." : "No active sessions in this project."}
+        <div style="margin-top: 12px;">
+          <button class="landing-btn primary" type="button" id="landingNewSessionBtn" style="display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-accent); color: var(--color-accent-contrast); font-size: 12px; font-weight: 600; cursor: pointer;">+ New session</button>
+        </div>
+      </li>
+    `;
+    const newSessionBtn = container.querySelector<HTMLButtonElement>("#landingNewSessionBtn");
+    newSessionBtn?.addEventListener("click", () => {
+      void createTabInSpace(selectedSpaceId);
+    });
+    return;
+  }
+
+  container.innerHTML = "";
+  for (const session of sessionsToRender) {
+    const li = document.createElement("li");
+    li.className = "session-item-row";
+
+    const titleSpan = document.createElement("span");
+    titleSpan.className = "session-item-title";
+    titleSpan.textContent = session.title || "Terminal";
+    li.appendChild(titleSpan);
+
+    const space = listedSpaces.find((s) => s.id === session.spaceId);
+    if (space) {
+      const tag = document.createElement("span");
+      tag.className = "session-item-tag";
+      tag.textContent = space.title;
+      li.appendChild(tag);
+    }
+
+    li.addEventListener("click", () => {
+      openAppURL(`/terminal.html?tab=${encodeURIComponent(session.id)}`, { newTab: true });
+    });
+
+    const actionsDiv = document.createElement("div");
+    actionsDiv.className = "session-item-actions";
+
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "session-item-close";
+    closeBtn.textContent = "x";
+    closeBtn.title = "Close session";
+    closeBtn.setAttribute("aria-label", `Close ${session.title || "session"}`);
+    closeBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const response = await fetch(`/api/tabs/${encodeURIComponent(session.id)}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
+      if (response.ok) {
+        void refreshLandingData();
+      }
+    });
+    actionsDiv.appendChild(closeBtn);
+    li.appendChild(actionsDiv);
+
+    container.appendChild(li);
+  }
+}
+
+async function refreshLandingData(): Promise<void> {
+  const spaces = await getJSON<Space[]>("/api/spaces");
+  listedSpaces = spaces;
+  listedSessions = spaces.flatMap((space) => space.tabs);
+
+  const spaceList = document.querySelector<HTMLElement>("#spaceList");
+  if (spaceList) {
+    void renderLandingSpaceList(spaceList);
+  }
+  void renderLandingRecentSessions();
+}
+
+type ClosedTabEntry = {
+  id: string;
+  title: string;
+  closedAt: string;
+};
+
+function loadClosedTabs(): ClosedTabEntry[] {
+  try {
+    const raw = localStorage.getItem("crostini-ghostty-closed-tabs");
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveClosedTabs(tabs: ClosedTabEntry[]): void {
+  localStorage.setItem("crostini-ghostty-closed-tabs", JSON.stringify(tabs.slice(0, 20)));
+}
+
+function addClosedTab(session: TerminalSession): void {
+  const tabs = loadClosedTabs();
+  tabs.unshift({
+    id: session.id,
+    title: sessionTitle(session),
+    closedAt: new Date().toISOString(),
+  });
+  saveClosedTabs(tabs);
+}
+
+async function renderClosedTabList(container: HTMLElement): Promise<void> {
+  const tabs = loadClosedTabs();
+  if (tabs.length === 0) {
+    container.innerHTML = `<li class="landing-empty">No recently closed tabs</li>`;
+    return;
+  }
+  container.innerHTML = "";
+  for (const tab of tabs) {
+    const li = document.createElement("li");
+    li.className = "closed-tab-item";
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "closed-tab-name";
+    nameSpan.textContent = tab.title;
+
+    const timeSpan = document.createElement("span");
+    timeSpan.className = "closed-tab-time";
+    const d = new Date(tab.closedAt);
+    timeSpan.textContent = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "closed-tab-delete";
+    deleteBtn.textContent = "x";
+    deleteBtn.setAttribute("aria-label", `Delete ${tab.title}`);
+    deleteBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      await fetch(`/api/tabs/${encodeURIComponent(tab.id)}`, { method: "DELETE", credentials: "same-origin" });
+      const updated = loadClosedTabs().filter((t) => t.id !== tab.id);
+      saveClosedTabs(updated);
+      void renderClosedTabList(container);
+    });
+
+    li.append(nameSpan, timeSpan, deleteBtn);
+    container.appendChild(li);
+  }
 }
 
 async function renderSpaceList(): Promise<void> {
@@ -1740,6 +2035,7 @@ async function deleteTerminalSession(sessionId: string): Promise<void> {
     console.error(`delete session ${sessionId} failed with ${response.status}`);
     return;
   }
+  if (session) addClosedTab(session);
   await renderSpaceList();
 }
 
@@ -1975,7 +2271,11 @@ async function deleteSpace(spaceId: string): Promise<void> {
     console.error(`delete space ${spaceId} failed with ${response.status}`);
     return;
   }
-  await renderSpaceList();
+  if (!settingsRoot.hidden) {
+    await refreshLandingData();
+  } else {
+    await renderSpaceList();
+  }
 }
 
 async function createTabInSpace(spaceId: string, profileId = settings.defaultProfileId): Promise<void> {
@@ -1983,7 +2283,11 @@ async function createTabInSpace(spaceId: string, profileId = settings.defaultPro
     profileId,
   });
   openAppURL(`/terminal.html?tab=${encodeURIComponent(session.id)}`, { newTab: true });
-  if (!settingsRoot.hidden) await renderSpaceList();
+  if (!settingsRoot.hidden) {
+    await refreshLandingData();
+  } else {
+    await renderSpaceList();
+  }
 }
 
 function readSettingsForm(): TerminalSettings | null {
@@ -1991,30 +2295,40 @@ function readSettingsForm(): TerminalSettings | null {
   let themeObj: TerminalTheme = { preset: themePreset };
 
   if (themePreset === "custom") {
-    const jsonText = requiredElement<HTMLTextAreaElement>("#customThemeJson").value;
-    const errorEl = requiredElement<HTMLElement>("#customThemeError");
-    errorEl.style.display = "none";
-    errorEl.textContent = "";
-
-    try {
-      const parsed = JSON.parse(jsonText);
-      const requiredFields = [
-        "name", "kind", "background", "foreground", "cursor", "selectionBackground",
-        "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
-        "brightBlack", "brightRed", "brightGreen", "brightYellow", "brightBlue",
-        "brightMagenta", "brightCyan", "brightWhite"
-      ];
-      for (const field of requiredFields) {
-        if (typeof parsed[field] !== "string" || !parsed[field].trim()) {
-          throw new Error(`Missing or invalid color field: "${field}"`);
-        }
+    const jsonEl = document.querySelector<HTMLTextAreaElement>("#customThemeJson");
+    if (!jsonEl) {
+      themeObj = { preset: "dark" };
+    } else {
+      const errorEl = document.querySelector<HTMLElement>("#customThemeError");
+      const jsonText = jsonEl.value;
+      if (errorEl) {
+        errorEl.style.display = "none";
+        errorEl.textContent = "";
       }
-      themeObj = { preset: "custom", palette: parsed };
-    } catch (err: any) {
-      errorEl.textContent = `Invalid palette JSON: ${err.message}`;
-      errorEl.style.display = "block";
-      requiredElement<HTMLElement>("#customThemeJson").focus();
-      return null;
+      try {
+        const parsed = JSON.parse(jsonText);
+        const requiredFields = [
+          "name", "kind", "background", "foreground", "cursor", "selectionBackground",
+          "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
+          "brightBlack", "brightRed", "brightGreen", "brightYellow", "brightBlue",
+          "brightMagenta", "brightCyan", "brightWhite"
+        ];
+        for (const field of requiredFields) {
+          if (typeof parsed[field] !== "string" || !parsed[field].trim()) {
+            throw new Error(`Missing or invalid color field: "${field}"`);
+          }
+        }
+        themeObj = { preset: "custom", palette: parsed };
+      } catch (err: any) {
+        if (errorEl) {
+          errorEl.textContent = `Invalid palette JSON: ${err.message}`;
+          errorEl.style.display = "block";
+          requiredElement<HTMLElement>("#customThemeJson").focus();
+          return null;
+        }
+        console.error("Invalid custom theme:", err);
+        return null;
+      }
     }
   }
 
@@ -2298,6 +2612,7 @@ function initActions(): void {
 
 let recordingActionId: string | null = null;
 let recordingListener: ((event: KeyboardEvent) => void) | null = null;
+let recordingChords: string[] = [];
 
 function renderKeybindingsList(container: HTMLElement): void {
   container.innerHTML = "";
@@ -2338,7 +2653,7 @@ function renderKeybindingsList(container: HTMLElement): void {
         ${hasConflict ? `<span class="keybinding-conflict-warning">⚠️ Conflicts with: ${actionConflicts.map(id => getAction(id)?.label || id).join(", ")}</span>` : ""}
       </div>
       <div class="keybinding-keys" style="margin-right: 16px;">
-        <kbd class="keybinding-kbd${hasConflict ? " conflict" : ""}">${isRecordingThis ? "Press keys..." : (chord || "None")}</kbd>
+        <kbd class="keybinding-kbd${hasConflict ? " conflict" : ""}">${isRecordingThis ? (recordingChords.length > 0 ? recordingChords.join(" ") : "Press keys...") : (chord || "None")}</kbd>
       </div>
       <div class="keybinding-actions">
         <button class="secondary-button record-btn${isRecordingThis ? " recording" : ""}" type="button" data-record="${escapeAttribute(action.id)}">
@@ -2355,7 +2670,7 @@ function renderKeybindingsList(container: HTMLElement): void {
 
     recordBtn?.addEventListener("click", () => {
       if (recordingActionId) {
-        stopRecordingKeybinding();
+        cancelRecording(container);
       }
       startRecordingKeybinding(action.id, container);
     });
@@ -2374,11 +2689,24 @@ function renderKeybindingsList(container: HTMLElement): void {
 
 function startRecordingKeybinding(actionId: string, container: HTMLElement): void {
   recordingActionId = actionId;
+  recordingChords = [];
   renderKeybindingsList(container);
+  showChordRecording(recordingChords);
 
   const listener = (event: KeyboardEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
+    if (event.key === "Enter" && recordingChords.length > 0) {
+      event.preventDefault();
+      event.stopPropagation();
+      finalizeRecording(container);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      cancelRecording(container);
+      return;
+    }
 
     if (["Control", "Alt", "Shift", "Meta"].includes(event.key)) {
       return;
@@ -2392,23 +2720,40 @@ function startRecordingKeybinding(actionId: string, container: HTMLElement): voi
 
     if (shouldPassThroughSystemShortcut(event)) {
       alert("Cannot override ChromeOS system or browser shortcuts.");
-      stopRecordingKeybinding();
-      renderKeybindingsList(container);
+      cancelRecording(container);
       return;
     }
 
-    if (!settings.keybindings) {
-      settings.keybindings = {};
-    }
-    settings.keybindings[actionId] = chord;
-    saveSettings(settings);
+    event.preventDefault();
+    event.stopPropagation();
 
-    stopRecordingKeybinding();
-    renderKeybindingsList(container);
+    recordingChords.push(chord);
+    showChordRecording(recordingChords);
   };
 
   recordingListener = listener;
   window.addEventListener("keydown", listener, { capture: true });
+}
+
+function finalizeRecording(container: HTMLElement): void {
+  if (recordingChords.length === 0) {
+    cancelRecording(container);
+    return;
+  }
+  if (!settings.keybindings) {
+    settings.keybindings = {};
+  }
+  settings.keybindings[recordingActionId!] = recordingChords.join(" ");
+  saveSettings(settings);
+  stopRecordingKeybinding();
+  hideChordIndicator();
+  renderKeybindingsList(container);
+}
+
+function cancelRecording(container: HTMLElement): void {
+  stopRecordingKeybinding();
+  hideChordIndicator();
+  renderKeybindingsList(container);
 }
 
 function stopRecordingKeybinding(): void {
@@ -2417,4 +2762,5 @@ function stopRecordingKeybinding(): void {
     recordingListener = null;
   }
   recordingActionId = null;
+  recordingChords = [];
 }

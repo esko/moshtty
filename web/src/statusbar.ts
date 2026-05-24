@@ -62,6 +62,44 @@ export function startStatusBarClock(): void {
   }, 30000) as unknown as number;
 }
 
+export function showChordProgress(pressed: string): void {
+  const el = getOrCreateChordEl();
+  el.textContent = `${pressed} ▸ …`;
+  el.classList.add("waiting");
+}
+
+export function showChordRecording(chords: string[]): void {
+  const el = getOrCreateChordEl();
+  el.classList.remove("waiting");
+  if (chords.length > 0) {
+    el.textContent = `${chords.join(" ")}  [Enter to finish, Esc to cancel]`;
+  } else {
+    el.textContent = "Recording… [Enter to finish, Esc to cancel]";
+  }
+}
+
+export function hideChordIndicator(): void {
+  const el = document.querySelector("#statusBarChord");
+  if (el) el.remove();
+}
+
+function getOrCreateChordEl(): HTMLElement {
+  const existing = document.querySelector<HTMLElement>("#statusBarChord");
+  if (existing) return existing;
+  const bar = document.querySelector<HTMLElement>("#workspaceStatusBar");
+  if (!bar) throw new Error("Status bar not found");
+  const left = bar.querySelector<HTMLElement>(".status-bar-left");
+  const el = document.createElement("span");
+  el.id = "statusBarChord";
+  el.className = "status-bar-chord";
+  if (left) {
+    left.appendChild(el);
+  } else {
+    bar.appendChild(el);
+  }
+  return el;
+}
+
 export function updateStatusBarHighlight(activePaneId: string): void {
   const buttons = document.querySelectorAll<HTMLButtonElement>(".status-bar-pane-button");
   for (const btn of buttons) {

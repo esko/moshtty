@@ -41,6 +41,11 @@ export function applyAppAppearance(nextSettings: TerminalSettings): void {
   document.documentElement.dataset.accent = nextSettings.accent;
   document.documentElement.dataset.density = nextSettings.density;
   document.documentElement.style.setProperty("--terminal-padding", `${nextSettings.terminalPadding}px`);
+
+  const palette = getThemePalette(nextSettings.theme);
+  document.documentElement.setAttribute("data-theme-kind", palette.kind);
+  document.documentElement.style.setProperty("--color-terminal-bg", palette.background);
+  document.documentElement.style.setProperty("--color-terminal-fg", palette.foreground);
 }
 
 export async function loadCustomFont(nextSettings: TerminalSettings): Promise<void> {
