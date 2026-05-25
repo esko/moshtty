@@ -22,6 +22,7 @@ Read these before starting implementation work:
 - `docs/moshtty-plan.md` - architecture decisions from planning.
 - `docs/moshtty-milestones.md` - implementation roadmap and acceptance criteria.
 - `docs/moshtty-testing.md` - testing strategy, visual regression, and agent-browser QA.
+- `docs/moshtty-model-routing.md` - model choice guidance for external subagents.
 - `docs/agents/*.md` - task briefs for parallel agents.
 
 Agents must close out `docs/moshtty-prd.md` before ending completed or blocked work: update task and milestone status, record verification commands, note blockers or follow-ups, and make sure the PRD does not show stale ownership/status for their slice.
@@ -144,4 +145,4 @@ Do not create a marketing landing page. The first screen should be the usable ap
 
 Avoid parallel edits to the same files. If two tasks need the same shared module, coordinate through the PRD status notes before editing.
 
-The `cmd` harness with model `deepseek/deepseek-v4-pro` is allowed for subagents when a task is well scoped and has a clear write boundary. Give those agents the same docs and task-brief instructions, and require the same verification, PRD status update, and atomic conventional commit behavior.
+The `cmd` harness with model `deepseek/deepseek-v4-pro` is allowed for subagents when a task is well scoped and has a clear write boundary. Gemini 3.5 Flash via Antigravity/`agy` is also allowed for bounded implementation work. Follow `docs/moshtty-model-routing.md` for model selection. Give all external agents the same docs and task-brief instructions, and require the same verification, PRD close-out, and atomic conventional commit behavior.

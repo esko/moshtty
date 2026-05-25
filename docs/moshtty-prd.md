@@ -39,6 +39,7 @@ Moshtty replaces the previous Crostini-local PWA/Go-agent architecture. The old 
 | Client stack | `electron-vite`, React + TypeScript, Zustand, CSS modules/plain CSS, pnpm |
 | Renderer | Keep `ghostty-web` |
 | Testing | Vitest, Go tests, Playwright Electron screenshots, and agent-browser exploratory QA |
+| Agent models | See `docs/moshtty-model-routing.md`; Gemini 3.5 Flash for bounded implementation, DeepSeek V4 Pro for large-context review |
 | Client state | Versioned JSON through Electron main, atomic writes |
 | Secrets | Electron `safeStorage`; passphrase-encrypted fallback |
 | Remote first target | macOS host |
