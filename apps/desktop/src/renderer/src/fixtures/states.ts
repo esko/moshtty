@@ -1,3 +1,28 @@
+/**
+ * Visual-regression fixture states for Moshtty.
+ *
+ * Each fixture is a deterministic `MoshttyState` used by:
+ *
+ *   - Playwright Electron tests under `apps/desktop/tests/visual/`;
+ *   - the in-app fixture viewer when the renderer is launched with
+ *     `?fixture=<id>` (see `loader.ts` and `FixtureBanner.tsx`);
+ *   - the M5 surface-state matrix (see
+ *     `docs/agents/2026-05-25-5-moshtty-ui-ghostty.md`).
+ *
+ * Naming convention:
+ *
+ *   <surface>[-<state>]
+ *
+ * Surface IDs from the M5 brief:
+ *   dashboard, rail, tab-bar, pane, split, dialog-import,
+ *   dialog-project-edit, dialog-terminal-settings, connection-status,
+ *   active-tab (composite, "everything is on").
+ *
+ * Adding a fixture is cheap — keep state shapes minimal and explicit.
+ * Do NOT inline literal colors or magic numbers here; pull from existing
+ * sample state when possible.
+ */
+
 import type { MoshttyState } from '../../../common/state'
 import { createSampleState } from '../../../common/state'
 
@@ -9,10 +34,39 @@ export interface FixtureState {
 
 const base = createSampleState()
 
+const lostPane = {
+  ...base,
+  panes: base.panes.map((pane) => ({ ...pane, status: 'lost' as const }))
+}
+
+const offlineRemote = {
+  ...base,
+  remotes: base.remotes.map((remote) => ({
+    ...remote,
+    status: 'offline' as const
+  }))
+}
+
+const connectingRemote = {
+  ...base,
+  remotes: base.remotes.map((remote) => ({
+    ...remote,
+    status: 'connecting' as const
+  }))
+}
+
+const lostRemote = {
+  ...base,
+  remotes: base.remotes.map((remote) => ({
+    ...remote,
+    status: 'lost' as const
+  }))
+}
+
 export const FIXTURES: Record<string, FixtureState> = {
   dashboard: {
     id: 'dashboard',
-    label: 'Project dashboard',
+    label: 'Project dashboard (light)',
     state: base
   },
   'dashboard-dark': {
@@ -22,12 +76,22 @@ export const FIXTURES: Record<string, FixtureState> = {
   },
   'active-tab': {
     id: 'active-tab',
-    label: 'Active project with one tab',
+    label: 'Active project with one tab open',
     state: base
   },
-  'split-2': {
-    id: 'split-2',
-    label: 'Split panes (2)',
+  'rail-collapsed': {
+    id: 'rail-collapsed',
+    label: 'Project rail collapsed',
+    state: { ...base, settings: { ...base.settings, projectRailCollapsed: true } }
+  },
+  'rail-expanded': {
+    id: 'rail-expanded',
+    label: 'Project rail expanded',
+    state: { ...base, settings: { ...base.settings, projectRailCollapsed: false } }
+  },
+  'split-2-row': {
+    id: 'split-2-row',
+    label: 'Two-pane row split',
     state: {
       ...base,
       layouts: [
@@ -44,14 +108,40 @@ export const FIXTURES: Record<string, FixtureState> = {
       ]
     }
   },
-  'split-3': {
-    id: 'split-3',
-    label: 'Split panes (3)',
+  'split-2-column': {
+    id: 'split-2-column',
+    label: 'Two-pane column split',
+    state: {
+      ...base,
+      layouts: [
+        {
+          tabId: 'tab-welcome',
+          root: {
+            kind: 'split',
+            axis: 'column',
+            ratio: 0.5,
+            first: { kind: 'pane', paneId: 'pane-welcome' },
+            second: { kind: 'pane', paneId: 'pane-welcome' }
+          }
+        }
+      ]
+    }
+  },
+  'split-3-nested': {
+    id: 'split-3-nested',
+    label: 'Three-pane nested split',
     state: {
       ...base,
       panes: [
         ...base.panes,
-        { id: 'pane-extra', title: 'Extra', cwd: '~', status: 'active', cols: 120, rows: 32 }
+        {
+          id: 'pane-extra',
+          title: 'Extra',
+          cwd: '~',
+          status: 'active',
+          cols: 120,
+          rows: 32
+        }
       ],
       layouts: [
         {
@@ -73,46 +163,45 @@ export const FIXTURES: Record<string, FixtureState> = {
       ]
     }
   },
-  'rail-collapsed': {
-    id: 'rail-collapsed',
-    label: 'Collapsed project rail',
-    state: { ...base, settings: { ...base.settings, projectRailCollapsed: true } }
+  'pane-lost': {
+    id: 'pane-lost',
+    label: 'Pane in lost-connection state',
+    state: lostPane
   },
-  'rail-expanded': {
-    id: 'rail-expanded',
-    label: 'Expanded project rail',
+  'dialog-import-empty': {
+    id: 'dialog-import-empty',
+    label: 'Remote import dialog (empty)',
     state: base
   },
-  'import-dialog': {
-    id: 'import-dialog',
-    label: 'Remote import dialog',
+  'dialog-import-invalid': {
+    id: 'dialog-import-invalid',
+    label: 'Remote import dialog (invalid profile)',
     state: base
   },
-  'edit-dialog': {
-    id: 'edit-dialog',
+  'dialog-project-edit': {
+    id: 'dialog-project-edit',
     label: 'Project edit dialog',
     state: base
   },
-  'settings-dialog': {
-    id: 'settings-dialog',
-    label: 'Settings dialog',
+  'dialog-terminal-settings': {
+    id: 'dialog-terminal-settings',
+    label: 'Terminal settings dialog',
     state: base
   },
-  'pane-lost': {
-    id: 'pane-lost',
-    label: 'Lost pane state',
-    state: {
-      ...base,
-      panes: base.panes.map((p) => ({ ...p, status: 'lost' as const }))
-    }
-  },
-  'offline': {
-    id: 'offline',
+  'connection-offline': {
+    id: 'connection-offline',
     label: 'Connection status (offline)',
-    state: {
-      ...base,
-      remotes: base.remotes.map((r) => ({ ...r, status: 'offline' as const }))
-    }
+    state: offlineRemote
+  },
+  'connection-connecting': {
+    id: 'connection-connecting',
+    label: 'Connection status (connecting)',
+    state: connectingRemote
+  },
+  'connection-lost': {
+    id: 'connection-lost',
+    label: 'Connection status (lost)',
+    state: lostRemote
   }
 }
 

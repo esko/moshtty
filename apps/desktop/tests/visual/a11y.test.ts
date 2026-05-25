@@ -1,25 +1,29 @@
-import { test, expect } from '@playwright/test'
-import type { ElectronApplication, Page } from '@playwright/test'
-import { _electron as electron } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
+import { test, expect } from './playwright.setup'
 
-let electronApp: ElectronApplication
-let page: Page
+const FAILING_IMPACTS = new Set(['critical', 'serious'])
 
-test.beforeAll(async () => {
-  electronApp = await electron.launch({
-    args: ['.', '--no-sandbox']
+test.describe('Accessibility (axe-core)', () => {
+  test('dashboard has no critical or serious violations', async ({ page }) => {
+    const results = await new AxeBuilder({ page }).analyze()
+    const violations = results.violations.filter((v) => v.impact && FAILING_IMPACTS.has(v.impact))
+    expect(violations, JSON.stringify(violations, null, 2)).toEqual([])
   })
-  page = await electronApp.firstWindow()
-  await page.waitForLoadState('domcontentloaded')
-})
 
-test.afterAll(async () => {
-  await electronApp?.close()
-})
+  test.fixme('active tab has no critical or serious violations', async ({ loadFixture, page }) => {
+    await loadFixture('active-tab')
+    const results = await new AxeBuilder({ page }).analyze()
+    const violations = results.violations.filter((v) => v.impact && FAILING_IMPACTS.has(v.impact))
+    expect(violations, JSON.stringify(violations, null, 2)).toEqual([])
+  })
 
-test('dashboard has no critical a11y violations', async () => {
-  const results = await new AxeBuilder({ page }).analyze()
-  const violations = results.violations.filter((v) => v.impact === 'critical' || v.impact === 'serious')
-  expect(violations).toEqual([])
+  test.fixme('import dialog has no critical or serious violations', async ({
+    loadFixture,
+    page
+  }) => {
+    await loadFixture('dialog-import-empty')
+    const results = await new AxeBuilder({ page }).analyze()
+    const violations = results.violations.filter((v) => v.impact && FAILING_IMPACTS.has(v.impact))
+    expect(violations, JSON.stringify(violations, null, 2)).toEqual([])
+  })
 })

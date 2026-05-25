@@ -1,31 +1,31 @@
-import { test, expect } from '@playwright/test'
-import type { ElectronApplication, Page } from '@playwright/test'
-import { _electron as electron } from '@playwright/test'
+import { test, expect } from './playwright.setup'
 
-let electronApp: ElectronApplication
-let page: Page
-
-test.beforeAll(async () => {
-  electronApp = await electron.launch({
-    args: ['.', '--no-sandbox']
+test.describe('Panes', () => {
+  test('terminal canvas is present', async ({ page }) => {
+    await expect(page.locator('.terminal-canvas')).toBeVisible()
   })
-  page = await electronApp.firstWindow()
-  await page.waitForLoadState('domcontentloaded')
-})
 
-test.afterAll(async () => {
-  await electronApp?.close()
-})
+  test('tab bar shows the active tab', async ({ page }) => {
+    await expect(page.locator('.tab.active')).toBeVisible()
+  })
 
-test('pane area is visible', async () => {
-  await expect(page.locator('.terminal-canvas')).toBeVisible()
-})
+  test.fixme('renders a 2-pane row split fixture', async ({ loadFixture, page }) => {
+    await loadFixture('split-2-row')
+    await expect(page).toHaveScreenshot('split-2-row.png')
+  })
 
-test('tab bar shows active tab', async () => {
-  await expect(page.locator('.tab.active')).toBeVisible()
-})
+  test.fixme('renders a 2-pane column split fixture', async ({ loadFixture, page }) => {
+    await loadFixture('split-2-column')
+    await expect(page).toHaveScreenshot('split-2-column.png')
+  })
 
-test('split layout placeholder accepts 2-pane state', async () => {
-  await page.goto('app://moshtty/index.html?fixture=split-2')
-  await expect(page.locator('.terminal-canvas')).toBeVisible()
+  test.fixme('renders a 3-pane nested split fixture', async ({ loadFixture, page }) => {
+    await loadFixture('split-3-nested')
+    await expect(page).toHaveScreenshot('split-3-nested.png')
+  })
+
+  test.fixme('renders a pane-lost state', async ({ loadFixture, page }) => {
+    await loadFixture('pane-lost')
+    await expect(page).toHaveScreenshot('pane-lost.png')
+  })
 })

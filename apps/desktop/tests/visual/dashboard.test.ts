@@ -1,24 +1,22 @@
-import { test, expect } from '@playwright/test'
-import type { ElectronApplication, Page } from '@playwright/test'
-import { _electron as electron } from '@playwright/test'
+import { test, expect } from './playwright.setup'
 
-let electronApp: ElectronApplication
-let page: Page
-
-test.beforeAll(async () => {
-  electronApp = await electron.launch({
-    args: ['.', '--no-sandbox']
+test.describe('Dashboard', () => {
+  test('renders the brand and project rail', async ({ page }) => {
+    await expect(page.locator('.project-rail')).toBeVisible()
+    await expect(page.locator('.brand-name')).toContainText('Moshtty')
   })
-  page = await electronApp.firstWindow()
-  await page.waitForLoadState('domcontentloaded')
-})
 
-test.afterAll(async () => {
-  await electronApp?.close()
-})
+  test.fixme('matches the rail-expanded reference screenshot', async ({ page }) => {
+    await expect(page).toHaveScreenshot('dashboard-rail-expanded.png')
+  })
 
-test('dashboard renders project rail', async () => {
-  await expect(page.locator('.project-rail')).toBeVisible()
-  await expect(page.locator('.brand-name')).toContainText('Moshtty')
-  await expect(page).toHaveScreenshot('dashboard.png')
+  test.fixme('matches the rail-collapsed reference screenshot', async ({ loadFixture, page }) => {
+    await loadFixture('rail-collapsed')
+    await expect(page).toHaveScreenshot('dashboard-rail-collapsed.png')
+  })
+
+  test.fixme('matches the active-tab reference screenshot', async ({ loadFixture, page }) => {
+    await loadFixture('active-tab')
+    await expect(page).toHaveScreenshot('dashboard-active-tab.png')
+  })
 })

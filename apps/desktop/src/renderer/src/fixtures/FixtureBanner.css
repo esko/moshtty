@@ -1,0 +1,14 @@
+.fixture-banner {
+  position: fixed;
+  top: 0;
+  right: 0;
+  padding: var(--space-xs) var(--space-md);
+  background-color: var(--color-warning);
+  color: var(--color-text-main);
+  font-size: var(--font-size-caption);
+  font-family: var(--font-family-ui);
+  z-index: var(--z-toast);
+  border-bottom-left-radius: var(--radius-sm);
+  pointer-events: none;
+  user-select: none;
+}
