@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { Terminal, type ITerminalOptions } from 'ghostty-web'
 import type { MoshttyPane, SplitAxis } from '../../../common/state'
 import { XIcon } from '../design/icons'
+import type { MoshttyTransport } from '../transport/moshtty-transport'
+import type { MoshConnectionManager } from '../mosh-connection-manager'
+import { MoshClient } from '../mosh-client-wrapper'
+import { useAppStore } from '../store'
 
 interface TerminalPaneProps {
   pane: MoshttyPane
@@ -9,6 +13,8 @@ interface TerminalPaneProps {
   terminalMode: 'light' | 'dark'
   onSplit?: (axis: SplitAxis) => void
   onClose?: () => void
+  transport?: MoshttyTransport | null
+  connectionManager?: MoshConnectionManager | null
 }
 
 const WASM_PATH = '/ghostty-vt.wasm'
@@ -18,12 +24,16 @@ export function TerminalPane({
   active,
   terminalMode,
   onSplit,
-  onClose
+  onClose,
+  transport,
+  connectionManager
 }: TerminalPaneProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const [ready, setReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const setPaneFlow = useAppStore((state) => state.setPaneFlow)
+  const disposablesRef = useRef<{ dispose: () => void }[]>([])
   const lost = pane.status === 'lost'
   const title = pane.title ?? 'Terminal'
   const cwd = pane.cwd ?? '~'
@@ -79,6 +89,55 @@ export function TerminalPane({
           term.open(containerRef.current)
           setReady(true)
         }
+
+        if (transport && connectionManager && !disposed) {
+          let flow = useAppStore.getState().paneFlows[pane.id]
+          if (!flow) {
+            const info = await transport.createPane({ cols, rows, shell: '/bin/sh' })
+            if (disposed) return
+            setPaneFlow(pane.id, info.flowId, info.key)
+            flow = { flowId: info.flowId, key: info.key }
+          }
+
+          const moshClient = new MoshClient()
+          await moshClient.dial(
+            flow.key,
+            (packet) => {
+              void transport.sendPaneDatagram(flow.flowId, packet)
+            },
+            (data) => {
+              if (!disposed) {
+                term.write(data)
+              }
+            }
+          )
+
+          if (disposed) {
+            moshClient.close()
+            return
+          }
+
+          connectionManager.register(flow.flowId, (payload) => {
+            moshClient.receive(payload)
+          })
+
+          const onDataDisposable = term.onData((data) => {
+            const bytes = new TextEncoder().encode(data)
+            moshClient.send(bytes)
+          })
+
+          const onResizeDisposable = term.onResize(({ cols, rows }) => {
+            moshClient.resize(cols, rows)
+            void transport.call('pane.resize', { flowId: flow.flowId, cols, rows })
+          })
+
+          disposablesRef.current = [
+            { dispose: () => connectionManager.unregister(flow!.flowId) },
+            onDataDisposable,
+            onResizeDisposable,
+            { dispose: () => moshClient.close() }
+          ]
+        }
       } catch (err) {
         if (!disposed) {
           setError(err instanceof Error ? err.message : 'Failed to load terminal')
@@ -94,8 +153,10 @@ export function TerminalPane({
         termRef.current.dispose()
         termRef.current = null
       }
+      disposablesRef.current.forEach((d) => d.dispose())
+      disposablesRef.current = []
     }
-  }, [pane.cols, pane.rows, terminalMode])
+  }, [connectionManager, pane.cols, pane.id, pane.rows, setPaneFlow, terminalMode, transport])
 
   return (
     <section

@@ -38,6 +38,9 @@ import {
   type AppActionHandlerMap
 } from './keymap'
 import { EMPTY_PROJECTS, useAppStore } from './store'
+import { MoshttyTransport } from './transport/moshtty-transport'
+import { MoshConnectionManager } from './mosh-connection-manager'
+import { buildRemoteWebTransportUrl } from './remote-url'
 
 const EMPTY_REMOTES: MoshttyRemote[] = []
 
@@ -73,7 +76,9 @@ function SplitNode({
   activePaneId,
   terminalMode,
   onSplit,
-  onClosePane
+  onClosePane,
+  transport,
+  connectionManager
 }: {
   state: MoshttyState
   node: MoshttyPaneLayoutNode | null
@@ -81,6 +86,8 @@ function SplitNode({
   terminalMode: 'light' | 'dark'
   onSplit: (axis: SplitAxis) => void
   onClosePane: () => void
+  transport?: MoshttyTransport | null
+  connectionManager?: MoshConnectionManager | null
 }): React.JSX.Element {
   if (!node) {
     return (
@@ -107,6 +114,8 @@ function SplitNode({
         terminalMode={terminalMode}
         onSplit={isActive ? onSplit : undefined}
         onClose={isActive ? onClosePane : undefined}
+        transport={transport}
+        connectionManager={connectionManager}
       />
     )
   }
@@ -120,6 +129,8 @@ function SplitNode({
         terminalMode={terminalMode}
         onSplit={onSplit}
         onClosePane={onClosePane}
+        transport={transport}
+        connectionManager={connectionManager}
       />
       <div
         className="split-handle"
@@ -133,6 +144,8 @@ function SplitNode({
         terminalMode={terminalMode}
         onSplit={onSplit}
         onClosePane={onClosePane}
+        transport={transport}
+        connectionManager={connectionManager}
       />
     </div>
   )
@@ -452,6 +465,10 @@ function App(): React.JSX.Element {
   const closeActivePane = useAppStore((state) => state.closeActivePane)
   const closeActiveTab = useAppStore((state) => state.closeActiveTab)
 
+  const [transport, setTransport] = useState<MoshttyTransport | null>(null)
+  const [connectionManager, setConnectionManager] = useState<MoshConnectionManager | null>(null)
+  const [liveStatus, setLiveStatus] = useState<MoshttyRemote['status'] | null>(null)
+
   const state = fixture?.state ?? snapshot?.state ?? null
   const projects = state?.projects ?? EMPTY_PROJECTS
   const remotes = state?.remotes ?? EMPTY_REMOTES
@@ -465,7 +482,9 @@ function App(): React.JSX.Element {
     resolvedTheme
   )
   const remote = remotes.find((entry) => entry.id === activeProject?.remoteId) ?? remotes[0]
-  const remoteStatus = getRemoteStatusLabel(remote?.status)
+  const remoteStatus = liveStatus
+    ? getRemoteStatusLabel(liveStatus)
+    : getRemoteStatusLabel(remote?.status)
   const dashboardMode = !activeTab || fixtureId?.startsWith('dashboard')
   const fixtureDialog = getFixtureDialog(fixtureId)
   const visibleDialog = fixtureDialog ?? activeDialog
@@ -492,6 +511,70 @@ function App(): React.JSX.Element {
       void hydrate()
     }
   }, [fixture, hydrate])
+
+  useEffect(() => {
+    if (fixture) return
+
+    let active = true
+    let currentTransport: MoshttyTransport | null = null
+    let currentManager: MoshConnectionManager | null = null
+
+    async function connectRemote(): Promise<void> {
+      if (!remote || !remote.url) {
+        setLiveStatus(null)
+        setTransport(null)
+        setConnectionManager(null)
+        return
+      }
+
+      setLiveStatus('connecting')
+
+      try {
+        const token = (await window.moshtty.loadToken(remote.tokenLabel)) || ''
+        if (!active) return
+
+        const tx = new MoshttyTransport()
+        currentTransport = tx
+
+        await tx.connect({
+          url: buildRemoteWebTransportUrl(remote.url, token),
+          token,
+          certHashes: remote.currentCertHash ? [remote.currentCertHash] : []
+        })
+
+        if (!active) {
+          void tx.close()
+          return
+        }
+
+        const manager = new MoshConnectionManager(tx)
+        currentManager = manager
+
+        setTransport(tx)
+        setConnectionManager(manager)
+        setLiveStatus('connected')
+      } catch (err) {
+        console.error('Failed to connect to remote companion:', err)
+        if (active) {
+          setLiveStatus('offline')
+          setTransport(null)
+          setConnectionManager(null)
+        }
+      }
+    }
+
+    void connectRemote()
+
+    return () => {
+      active = false
+      if (currentManager) {
+        currentManager.stop()
+      }
+      if (currentTransport) {
+        void currentTransport.close()
+      }
+    }
+  }, [remote, fixture])
 
   const shortcutHandlers = useMemo<AppActionHandlerMap>(
     () => ({
@@ -655,7 +738,7 @@ function App(): React.JSX.Element {
               <EditIcon />
               New tab
             </button>
-            <span className={`connection-status ${remote?.status ?? 'offline'}`}>
+            <span className={`connection-status ${liveStatus ?? remote?.status ?? 'offline'}`}>
               {remoteStatus}
             </span>
           </div>
@@ -694,6 +777,8 @@ function App(): React.JSX.Element {
               terminalMode={terminalMode}
               onSplit={(axis) => void splitPane(axis)}
               onClosePane={() => void closeActivePane()}
+              transport={transport}
+              connectionManager={connectionManager}
             />
           </section>
         ) : (

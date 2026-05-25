@@ -31,6 +31,8 @@ interface AppState {
   saving: boolean
   error: string | null
   snapshot: WorkspaceSnapshot | null
+  paneFlows: Record<string, { flowId: number; key: string }>
+  setPaneFlow: (paneId: string, flowId: number, key: string) => void
   hydrate: () => Promise<void>
   saveWorkspace: () => Promise<void>
   resetWorkspace: () => Promise<void>
@@ -67,6 +69,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   saving: false,
   error: null,
   snapshot: null,
+  paneFlows: {},
+  setPaneFlow: (paneId, flowId, key) => {
+    set((state) => ({
+      paneFlows: {
+        ...state.paneFlows,
+        [paneId]: { flowId, key }
+      }
+    }))
+  },
 
   hydrate: async () => {
     set({ loading: true, error: null })
@@ -300,6 +311,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       return
     }
 
+    const activeProjectId = snapshot.state.activeProjectId
     const nextState: MoshttyState = withUpdatedTimestamp({
       ...snapshot.state,
       remotes: [
@@ -315,7 +327,13 @@ export const useAppStore = create<AppState>((set, get) => ({
           currentCertHash: profile.currentCertHash,
           nextCertHash: profile.nextCertHash
         }
-      ]
+      ],
+      projects: snapshot.state.projects.map((project) =>
+        project.id === activeProjectId &&
+        (!project.remoteId || project.remoteId === 'remote-placeholder')
+          ? { ...project, remoteId: profile.remoteId }
+          : project
+      )
     })
 
     set({
