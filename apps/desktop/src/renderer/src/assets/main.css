@@ -591,6 +591,35 @@
   gap: var(--space-xs);
 }
 
+.shortcuts-row {
+  align-items: start;
+}
+
+.shortcut-list {
+  display: grid;
+  gap: var(--space-xs);
+  justify-items: end;
+}
+
+.shortcut-list span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--color-text-main);
+}
+
+.shortcut-list kbd {
+  min-height: var(--density-control-height);
+  padding: 0 var(--space-sm);
+  color: var(--color-text-main);
+  background: var(--color-workspace-bg);
+  border: var(--space-2xs) solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-body);
+}
+
 .renderer-error {
   min-height: 100vh;
   padding: var(--space-xl);

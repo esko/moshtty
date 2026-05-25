@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import {
   getActiveProject,
   getActiveTab,
@@ -24,6 +24,15 @@ import { resolveTerminalThemeMode, useResolvedThemeMode } from './design/theme'
 import { FixtureBanner } from './fixtures/FixtureBanner'
 import { getFixture } from './fixtures/states'
 import { loadFixtureFromQuery } from './fixtures/loader'
+import {
+  APP_ACTIONS,
+  formatShortcut,
+  getAction,
+  getShortcutActions,
+  useRegisteredShortcuts,
+  type AppActionId,
+  type AppActionHandlerMap
+} from './keymap'
 import { EMPTY_PROJECTS, useAppStore } from './store'
 
 const EMPTY_REMOTES: MoshttyRemote[] = []
@@ -47,6 +56,11 @@ function getRemoteStatusLabel(status: MoshttyRemote['status'] | undefined): stri
 
 function getPaneById(state: MoshttyState, paneId: string): MoshttyPane | null {
   return state.panes.find((pane) => pane.id === paneId) ?? null
+}
+
+function actionTitle(actionId: AppActionId): string {
+  const action = getAction(actionId)
+  return `${action.label} (${formatShortcut(action.shortcut)})`
 }
 
 function TerminalPane({
@@ -152,7 +166,13 @@ function ProjectDialog({
       >
         <header className="dialog-header">
           <h2 id="project-dialog-title">{mode === 'new' ? 'New project' : 'Edit project'}</h2>
-          <button className="icon-button" type="button" aria-label="Close project dialog">
+          <button
+            className="icon-button"
+            type="button"
+            aria-label="Close project dialog"
+            data-action-id="close-dialog"
+            title={actionTitle('close-dialog')}
+          >
             <XIcon />
           </button>
         </header>
@@ -165,17 +185,42 @@ function ProjectDialog({
           <div>
             <span className="field-label">Project color</span>
             <div className="swatch-row" aria-label="Project color choices">
-              <button className="swatch active" type="button" aria-label="Use accent color" />
-              <button className="swatch muted" type="button" aria-label="Use muted color" />
-              <button className="swatch warm" type="button" aria-label="Use warning color" />
+              <button
+                className="swatch active"
+                type="button"
+                aria-label="Use accent color"
+                data-action-id="choose-project-color"
+              />
+              <button
+                className="swatch muted"
+                type="button"
+                aria-label="Use muted color"
+                data-action-id="choose-project-color"
+              />
+              <button
+                className="swatch warm"
+                type="button"
+                aria-label="Use warning color"
+                data-action-id="choose-project-color"
+              />
             </div>
           </div>
         </div>
         <footer className="dialog-actions">
-          <button className="button secondary" type="button">
+          <button
+            className="button secondary"
+            type="button"
+            data-action-id="cancel-dialog"
+            title={actionTitle('cancel-dialog')}
+          >
             Cancel
           </button>
-          <button className="button primary" type="button">
+          <button
+            className="button primary"
+            type="button"
+            data-action-id="confirm-dialog"
+            title={actionTitle('confirm-dialog')}
+          >
             Save
           </button>
         </footer>
@@ -202,7 +247,13 @@ function ImportDialog({ mode }: { mode: 'empty' | 'valid' | 'invalid' }): React.
       >
         <header className="dialog-header">
           <h2 id="import-dialog-title">Import remote</h2>
-          <button className="icon-button" type="button" aria-label="Close import dialog">
+          <button
+            className="icon-button"
+            type="button"
+            aria-label="Close import dialog"
+            data-action-id="close-dialog"
+            title={actionTitle('close-dialog')}
+          >
             <XIcon />
           </button>
         </header>
@@ -220,10 +271,20 @@ function ImportDialog({ mode }: { mode: 'empty' | 'valid' | 'invalid' }): React.
           </p>
         ) : null}
         <footer className="dialog-actions">
-          <button className="button secondary" type="button">
+          <button
+            className="button secondary"
+            type="button"
+            data-action-id="cancel-dialog"
+            title={actionTitle('cancel-dialog')}
+          >
             Cancel
           </button>
-          <button className="button primary" type="button">
+          <button
+            className="button primary"
+            type="button"
+            data-action-id="confirm-dialog"
+            title={actionTitle('confirm-dialog')}
+          >
             Import
           </button>
         </footer>
@@ -233,6 +294,9 @@ function ImportDialog({ mode }: { mode: 'empty' | 'valid' | 'invalid' }): React.
 }
 
 function SettingsDialog({ terminalMode }: { terminalMode: string }): React.JSX.Element {
+  const shortcutActions = getShortcutActions()
+  const mouseOnlyActions = APP_ACTIONS.filter((action) => action.mouseOnly)
+
   return (
     <div className="dialog-backdrop">
       <section
@@ -243,11 +307,15 @@ function SettingsDialog({ terminalMode }: { terminalMode: string }): React.JSX.E
       >
         <aside className="settings-nav" aria-label="Settings sections">
           <span className="settings-section">Desktop</span>
-          <button className="settings-tab active" type="button">
+          <button
+            className="settings-tab active"
+            type="button"
+            data-action-id="show-general-settings"
+          >
             <GearIcon />
             General
           </button>
-          <button className="settings-tab" type="button">
+          <button className="settings-tab" type="button" data-action-id="show-shortcuts-settings">
             <KeyboardIcon />
             Shortcuts
           </button>
@@ -255,7 +323,13 @@ function SettingsDialog({ terminalMode }: { terminalMode: string }): React.JSX.E
         <div className="settings-panel">
           <header className="dialog-header">
             <h2 id="settings-title">Terminal settings</h2>
-            <button className="icon-button" type="button" aria-label="Close settings">
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="Close settings"
+              data-action-id="close-dialog"
+              title={actionTitle('close-dialog')}
+            >
               <XIcon />
             </button>
           </header>
@@ -287,6 +361,31 @@ function SettingsDialog({ terminalMode }: { terminalMode: string }): React.JSX.E
                 <span>Block cursor</span>
               </div>
               <span>Block</span>
+            </div>
+            <div className="settings-row shortcuts-row">
+              <div>
+                <strong>Keyboard shortcuts</strong>
+                <span>Registered app actions</span>
+              </div>
+              <div className="shortcut-list">
+                {shortcutActions.map((action) => (
+                  <span key={action.id}>
+                    {action.label}
+                    <kbd>{formatShortcut(action.shortcut)}</kbd>
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="settings-row shortcuts-row">
+              <div>
+                <strong>Pointer-only actions</strong>
+                <span>Documented exceptions</span>
+              </div>
+              <div className="shortcut-list">
+                {mouseOnlyActions.map((action) => (
+                  <span key={action.id}>{action.label}</span>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -331,6 +430,26 @@ function App(): React.JSX.Element {
     }
   }, [fixture, hydrate])
 
+  const shortcutHandlers = useMemo<AppActionHandlerMap>(
+    () => ({
+      'toggle-project-rail': () => undefined,
+      'show-projects': () => undefined,
+      'new-project': () => void addProject('New project'),
+      'import-remote': () => undefined,
+      'open-settings': () => undefined,
+      'open-help': () => undefined,
+      'new-tab': () => undefined,
+      'save-state': () => void saveWorkspace(),
+      'reset-state': () => void resetWorkspace(),
+      'add-project': () => void addProject('New project'),
+      'close-dialog': () => undefined,
+      'cancel-dialog': () => undefined,
+      'confirm-dialog': () => undefined
+    }),
+    [addProject, resetWorkspace, saveWorkspace]
+  )
+  useRegisteredShortcuts(shortcutHandlers)
+
   const tabs = activeProject
     ? (state?.tabs.filter((tab) => activeProject.tabIds.includes(tab.id)) ?? [])
     : []
@@ -345,13 +464,31 @@ function App(): React.JSX.Element {
       <aside className="project-rail" aria-label="Projects">
         <div className="brand">
           <span className="brand-badge">BETA</span>
-          <button className="icon-button" type="button" aria-label="Toggle project rail">
+          <button
+            className="icon-button"
+            type="button"
+            aria-label="Toggle project rail"
+            data-action-id="toggle-project-rail"
+            title={actionTitle('toggle-project-rail')}
+          >
             <HamburgerIcon />
           </button>
-          <button className="icon-button selected" type="button" aria-label="Show projects">
+          <button
+            className="icon-button selected"
+            type="button"
+            aria-label="Show projects"
+            data-action-id="show-projects"
+            title={actionTitle('show-projects')}
+          >
             <GridIcon />
           </button>
-          <button className="icon-button" type="button" aria-label="New project">
+          <button
+            className="icon-button"
+            type="button"
+            aria-label="New project"
+            data-action-id="new-project"
+            title={actionTitle('new-project')}
+          >
             <PlusIcon />
           </button>
         </div>
@@ -359,7 +496,13 @@ function App(): React.JSX.Element {
         <div className="rail-content">
           <div className="rail-heading">
             <span>Projects</span>
-            <button className="icon-button" type="button" aria-label="Import remote">
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="Import remote"
+              data-action-id="import-remote"
+              title={actionTitle('import-remote')}
+            >
               <FolderPlusIcon />
             </button>
           </div>
@@ -370,6 +513,7 @@ function App(): React.JSX.Element {
                 key={project.id}
                 type="button"
                 className={`project-item ${activeProject?.id === project.id ? 'active' : ''}`}
+                data-action-id="select-project"
                 onClick={() => void setActiveProject(project.id)}
               >
                 <span className="project-chip">{projectDisplayInitial(project)}</span>
@@ -380,11 +524,21 @@ function App(): React.JSX.Element {
           </div>
 
           <nav className="rail-links" aria-label="Application">
-            <button className="rail-link" type="button">
+            <button
+              className="rail-link"
+              type="button"
+              data-action-id="open-settings"
+              title={actionTitle('open-settings')}
+            >
               <GearIcon />
               Settings
             </button>
-            <button className="rail-link" type="button">
+            <button
+              className="rail-link"
+              type="button"
+              data-action-id="open-help"
+              title={actionTitle('open-help')}
+            >
               <HelpIcon />
               Help
             </button>
@@ -408,7 +562,12 @@ function App(): React.JSX.Element {
             ))}
           </div>
           <div className="top-actions">
-            <button className="button subtle" type="button">
+            <button
+              className="button subtle"
+              type="button"
+              data-action-id="new-tab"
+              title={actionTitle('new-tab')}
+            >
               <EditIcon />
               New tab
             </button>
@@ -426,7 +585,12 @@ function App(): React.JSX.Element {
             </div>
             <div className="dashboard-head">
               <h1 id="dashboard-title">Today</h1>
-              <button className="button subtle" type="button">
+              <button
+                className="button subtle"
+                type="button"
+                data-action-id="new-tab"
+                title={actionTitle('new-tab')}
+              >
                 <EditIcon />
                 New tab
               </button>
@@ -465,6 +629,8 @@ function App(): React.JSX.Element {
                 className="button secondary"
                 type="button"
                 disabled={!hydrated || saving}
+                data-action-id="save-state"
+                title={actionTitle('save-state')}
                 onClick={() => void saveWorkspace()}
               >
                 {saving ? 'Saving' : 'Save'}
@@ -473,6 +639,8 @@ function App(): React.JSX.Element {
                 className="button secondary"
                 type="button"
                 disabled={!hydrated || saving}
+                data-action-id="reset-state"
+                title={actionTitle('reset-state')}
                 onClick={() => void resetWorkspace()}
               >
                 Reset
@@ -481,6 +649,8 @@ function App(): React.JSX.Element {
                 className="button secondary"
                 type="button"
                 disabled={!hydrated || saving}
+                data-action-id="add-project"
+                title={actionTitle('add-project')}
                 onClick={() => void addProject('New project')}
               >
                 Add project
