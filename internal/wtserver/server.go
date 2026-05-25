@@ -116,7 +116,11 @@ func (s *Server) Close() error {
 }
 
 func (s *Server) handleWebTransport(w http.ResponseWriter, r *http.Request) {
-	if err := auth.ValidateToken(auth.TokenFromRequest(r), s.token); err != nil {
+	token := auth.TokenFromRequest(r)
+	if token == "" {
+		token = r.URL.Query().Get("token")
+	}
+	if err := auth.ValidateToken(token, s.token); err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
