@@ -205,6 +205,8 @@ func (s *Server) dispatch(req jsonrpc.Request) (any, error) {
 			"serviceVersion": profile.Version,
 			"bindEndpoint":   s.cfg.BindEndpoint(),
 		}, nil
+	case "pane.list":
+		return map[string]any{"panes": s.panes.List()}, nil
 	case "pane.create":
 		var params struct {
 			Shell string `json:"shell"`

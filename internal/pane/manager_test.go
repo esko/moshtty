@@ -66,3 +66,47 @@ func TestRouteUnknownFlow(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestListPanes(t *testing.T) {
+	manager := pane.NewManager()
+	manager.SetDatagramSender(func(data []byte) error { return nil })
+
+	panes := manager.List()
+	if len(panes) != 0 {
+		t.Fatalf("expected 0 panes, got %d", len(panes))
+	}
+
+	info1, err := manager.Create(pane.CreateOptions{Shell: "/bin/sh", Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	info2, err := manager.Create(pane.CreateOptions{Shell: "/bin/sh", Cols: 100, Rows: 30})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	panes = manager.List()
+	if len(panes) != 2 {
+		t.Fatalf("expected 2 panes, got %d", len(panes))
+	}
+
+	found := make(map[uint32]bool)
+	for _, p := range panes {
+		found[p.FlowID] = true
+	}
+	if !found[info1.FlowID] || !found[info2.FlowID] {
+		t.Fatalf("missing expected flow IDs in list: got %v", panes)
+	}
+
+	manager.Close(info1.FlowID)
+	panes = manager.List()
+	if len(panes) != 1 {
+		t.Fatalf("expected 1 pane after close, got %d", len(panes))
+	}
+
+	manager.Close(info2.FlowID)
+	panes = manager.List()
+	if len(panes) != 0 {
+		t.Fatalf("expected 0 panes after all closed, got %d", len(panes))
+	}
+}

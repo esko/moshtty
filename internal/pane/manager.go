@@ -185,6 +185,16 @@ func (m *Manager) get(flowID uint32) (*entry, error) {
 	return ent, nil
 }
 
+func (m *Manager) List() []Info {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	list := make([]Info, 0, len(m.entries))
+	for _, ent := range m.entries {
+		list = append(list, ent.info)
+	}
+	return list
+}
+
 type udpBridge struct {
 	conn   *net.UDPConn
 	server *net.UDPAddr
