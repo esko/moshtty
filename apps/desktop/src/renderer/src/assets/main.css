@@ -404,16 +404,18 @@
   white-space: nowrap;
 }
 
-.ghostty-placeholder {
+.terminal-container {
+  min-height: 0;
   flex: 1;
-  padding: var(--space-lg);
   overflow: hidden;
-  color: var(--color-text-terminal);
-  font-family: var(--font-family-mono);
 }
 
-.ghostty-placeholder pre {
+.terminal-error,
+.terminal-placeholder {
   margin: 0;
+  padding: var(--space-lg);
+  color: var(--color-text-terminal);
+  font-family: var(--font-family-mono);
   font-size: var(--font-size-body-lg);
   line-height: var(--line-height-body);
   white-space: pre-wrap;

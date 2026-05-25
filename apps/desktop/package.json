@@ -29,6 +29,7 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "ghostty-web": "github:rcarmo/ghostty-web#b6b243d7f380f8307e375719968f6046f1102c48",
     "zod": "^3.23.8",
     "zustand": "^5.0.3"
   },

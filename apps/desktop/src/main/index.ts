@@ -48,6 +48,8 @@ function contentTypeFor(filePath: string): string {
       return 'image/png'
     case '.ico':
       return 'image/x-icon'
+    case '.wasm':
+      return 'application/wasm'
     case '.map':
       return 'application/json; charset=utf-8'
     default:

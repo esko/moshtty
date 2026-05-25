@@ -21,6 +21,7 @@ import {
   SearchIcon,
   XIcon
 } from './design/icons'
+import { TerminalPane } from './components/TerminalPane'
 import { getFixtureDialog, type AppDialog } from './dialogs'
 import { resolveTerminalThemeMode, useResolvedThemeMode } from './design/theme'
 import { FixtureBanner } from './fixtures/FixtureBanner'
@@ -65,43 +66,6 @@ function actionTitle(actionId: AppActionId): string {
   return `${action.label} (${formatShortcut(action.shortcut)})`
 }
 
-function TerminalPane({
-  pane,
-  active,
-  terminalMode
-}: {
-  pane: MoshttyPane | null
-  active: boolean
-  terminalMode: 'light' | 'dark'
-}): React.JSX.Element {
-  const lost = pane?.status === 'lost'
-  const title = pane?.title ?? 'Waiting for pane'
-  const cwd = pane?.cwd ?? '~'
-
-  return (
-    <section
-      className={`terminal-pane ${active ? 'active' : ''} ${lost ? 'lost' : ''}`}
-      data-terminal-theme={terminalMode}
-      aria-label={`${title} pane`}
-    >
-      <header className="pane-header">
-        <span className="pane-title">{title}</span>
-        <span className={`pane-status ${lost ? 'lost' : 'active'}`}>
-          {lost ? 'Pane lost' : 'Active'}
-        </span>
-      </header>
-      <div className="ghostty-placeholder" role="img" aria-label="Ghostty terminal renderer">
-        <pre>{`$ cd ${cwd}
-$ moshtty pane attach
-${lost ? 'Pane lost - reconnect to restore.' : 'Ghostty renderer placeholder ready.'}
-
-Project -> Tab -> Pane
-Remote PTY output will render here.`}</pre>
-      </div>
-    </section>
-  )
-}
-
 function SplitNode({
   state,
   node,
@@ -123,8 +87,19 @@ function SplitNode({
 
   if (node.kind === 'pane') {
     const pane = getPaneById(state, node.paneId)
+    if (!pane) {
+      return (
+        <div className="empty-pane">
+          <span>Pane not found</span>
+        </div>
+      )
+    }
     return (
-      <TerminalPane pane={pane} active={pane?.id === activePaneId} terminalMode={terminalMode} />
+      <TerminalPane
+        pane={pane}
+        active={pane.id === state.activePaneId}
+        terminalMode={terminalMode}
+      />
     )
   }
 
