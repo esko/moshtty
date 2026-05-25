@@ -246,12 +246,14 @@ function ProjectDialog({
 
 function ImportDialog({
   mode,
+  secretMode,
   onClose,
   onImport
 }: {
   mode: 'empty' | 'valid' | 'invalid'
+  secretMode: string | null
   onClose: () => void
-  onImport: (profileText: string) => boolean
+  onImport: (profileText: string, passphrase: string) => Promise<boolean>
 }): React.JSX.Element {
   const validProfile = `{
   "schemaVersion": 1,
@@ -270,7 +272,13 @@ function ImportDialog({
 }`
   const initialText = mode === 'valid' ? validProfile : mode === 'invalid' ? '{ "host": ' : ''
   const [profileText, setProfileText] = useState(initialText)
+  const [passphrase, setPassphrase] = useState('')
   const [parseFailed, setParseFailed] = useState(mode === 'invalid')
+  const parsedProfile = profileText.trim() ? parseMoshttyProfileText(profileText) : null
+  const needsPassphrase =
+    secretMode === 'passphrase' &&
+    parsedProfile?.ok === true &&
+    Boolean(parsedProfile.profile.token)
   const invalid = parseFailed
 
   return (
@@ -308,8 +316,19 @@ function ImportDialog({
         </label>
         {invalid ? (
           <p className="error-text">
-            Could not import profile. Check that the JSON is valid and try again.
+            Could not import profile. Check the JSON and token passphrase, then try again.
           </p>
+        ) : null}
+        {needsPassphrase ? (
+          <label className="field">
+            <span>Token passphrase</span>
+            <input
+              value={passphrase}
+              type="password"
+              placeholder="Encrypt remote token"
+              onChange={(event) => setPassphrase(event.target.value)}
+            />
+          </label>
         ) : null}
         <footer className="dialog-actions">
           <button
@@ -326,7 +345,9 @@ function ImportDialog({
             type="button"
             data-action-id="confirm-dialog"
             title={actionTitle('confirm-dialog')}
-            onClick={() => setParseFailed(!onImport(profileText))}
+            onClick={() =>
+              void onImport(profileText, passphrase).then((imported) => setParseFailed(!imported))
+            }
           >
             Import
           </button>
@@ -496,12 +517,23 @@ function App(): React.JSX.Element {
     }
     closeDialog()
   }
-  const importProfileDialog = (profileText: string): boolean => {
+  const importProfileDialog = async (profileText: string, passphrase: string): Promise<boolean> => {
     const result = parseMoshttyProfileText(profileText)
     if (!result.ok) {
       return false
     }
-    void importRemoteProfile(result.profile)
+    if (result.profile.token) {
+      try {
+        if (passphrase.trim()) {
+          await window.moshtty.setPassphrase(passphrase)
+        }
+        await window.moshtty.storeToken(result.profile.tokenLabel, result.profile.token)
+      } catch (error) {
+        console.error('Failed to store remote token:', error)
+        return false
+      }
+    }
+    await importRemoteProfile(result.profile)
     closeDialog()
     return true
   }
@@ -834,6 +866,7 @@ function App(): React.JSX.Element {
         {visibleDialog?.kind === 'import' ? (
           <ImportDialog
             mode={visibleDialog.mode}
+            secretMode={snapshot?.secretInfo?.mode ?? null}
             onClose={closeDialog}
             onImport={importProfileDialog}
           />

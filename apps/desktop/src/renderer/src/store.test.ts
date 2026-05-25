@@ -124,6 +124,8 @@ test('importRemoteProfile validates profile-shaped data before storing remotes',
     status: 'offline'
   })
   expect(useAppStore.getState().snapshot!.state.projects[0]?.remoteId).toBe('remote-mac-mini')
+  expect(useAppStore.getState().snapshot!.state.tabs[0]?.title).toBe('Shell')
+  expect(useAppStore.getState().snapshot!.state.panes[0]?.title).toBe('Shell')
   expect(mockApi.saveState).toHaveBeenCalled()
 })
 

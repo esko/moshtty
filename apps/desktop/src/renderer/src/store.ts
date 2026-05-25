@@ -312,6 +312,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     const activeProjectId = snapshot.state.activeProjectId
+    const activeTabId = snapshot.state.activeTabId
+    const activePaneId = snapshot.state.activePaneId
     const nextState: MoshttyState = withUpdatedTimestamp({
       ...snapshot.state,
       remotes: [
@@ -333,6 +335,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         (!project.remoteId || project.remoteId === 'remote-placeholder')
           ? { ...project, remoteId: profile.remoteId }
           : project
+      ),
+      tabs: snapshot.state.tabs.map((tab) =>
+        tab.id === activeTabId && tab.title === 'Getting started' ? { ...tab, title: 'Shell' } : tab
+      ),
+      panes: snapshot.state.panes.map((pane) =>
+        pane.id === activePaneId && pane.title === 'No remote connected'
+          ? { ...pane, title: 'Shell' }
+          : pane
       )
     })
 

@@ -9,26 +9,29 @@ import (
 )
 
 const Version = "0.1.0"
+const SchemaVersion = 1
 
 type Defaults struct {
-	Shell      string `json:"shell"`
-	WorkingDir string `json:"workingDir"`
+	Cols      int    `json:"cols"`
+	Rows      int    `json:"rows"`
+	ShellHint string `json:"shellHint,omitempty"`
 }
 
 type ImportProfile struct {
-	ID              string           `json:"id"`
-	Label           string           `json:"label"`
-	Host            string           `json:"host"`
-	Platform        string           `json:"platform"`
-	URL             string           `json:"url"`
-	Token           string           `json:"token"`
-	TokenLabel      string           `json:"tokenLabel"`
-	CurrentCertHash string           `json:"currentCertHash"`
-	NextCertHash    string           `json:"nextCertHash,omitempty"`
-	ServiceVersion  string           `json:"serviceVersion"`
-	Defaults        Defaults         `json:"defaults"`
-	AllowedOrigins  []string         `json:"allowedOrigins,omitempty"`
-	GeneratedAt     time.Time        `json:"generatedAt"`
+	SchemaVersion   int       `json:"schemaVersion"`
+	RemoteID        string    `json:"remoteId"`
+	HostLabel       string    `json:"hostLabel"`
+	Host            string    `json:"host"`
+	Platform        string    `json:"platform"`
+	URL             string    `json:"url"`
+	Token           string    `json:"token"`
+	TokenLabel      string    `json:"tokenLabel"`
+	CurrentCertHash string    `json:"currentCertHash"`
+	NextCertHash    string    `json:"nextCertHash,omitempty"`
+	ServiceVersion  string    `json:"serviceVersion"`
+	Defaults        Defaults  `json:"defaults"`
+	AllowedOrigins  []string  `json:"allowedOrigins,omitempty"`
+	GeneratedAt     time.Time `json:"generatedAt"`
 }
 
 type BuildInput struct {
@@ -49,8 +52,9 @@ func Build(input BuildInput) ImportProfile {
 	}
 
 	profile := ImportProfile{
-		ID:              input.Config.RemoteID,
-		Label:           input.Config.Label,
+		SchemaVersion:   SchemaVersion,
+		RemoteID:        input.Config.RemoteID,
+		HostLabel:       input.Config.Label,
 		Host:            host,
 		Platform:        "macos",
 		URL:             input.Config.WebTransportURL(host),
@@ -60,8 +64,8 @@ func Build(input BuildInput) ImportProfile {
 		NextCertHash:    input.Config.Cert.NextHash,
 		ServiceVersion:  Version,
 		Defaults: Defaults{
-			Shell:      "",
-			WorkingDir: "",
+			Cols: 120,
+			Rows: 32,
 		},
 		AllowedOrigins: append([]string(nil), input.Config.AllowedOrigins...),
 		GeneratedAt:    now,

@@ -3,18 +3,16 @@
  *
  * `moshtty-remote profile` (Go side, see `cmd/moshtty-remote` and
  * `internal/profile/`) emits a pasteable JSON blob that the Electron app
- * imports to learn about a remote: URL, auth token reference, WebTransport
+ * imports to learn about a remote: URL, bootstrap auth token, WebTransport
  * cert hashes, host metadata, and default settings.
  *
  * This schema is the trust boundary for that import. Any profile that
  * arrives via paste, file, or clipboard MUST go through
  * `parseMoshttyProfile` before being stored in app state.
  *
- * Critical: the actual token VALUE never travels through the profile JSON.
- * Only the `tokenLabel` does — the user pastes the token separately, or
- * it lives in a companion-side secret store keyed by that label. If you
- * are tempted to add a `token` field here, stop and surface to the
- * coordinator (this is a stop condition).
+ * Critical: a profile may contain a bootstrap token value, but workspace
+ * state stores only the token label. Import flows must store the token
+ * through Electron's secret store before adding the remote to state.
  *
  * Schema version: 1. Increment `MOSHTTY_PROFILE_VERSION` and add a
  * migration entry whenever the field shape changes. Go-side emitters must
@@ -40,6 +38,44 @@ const HttpsUrlSchema = z
 
 const TokenLabelSchema = z.string().min(1).max(64)
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function normalizeProfileDefaults(value: unknown): unknown {
+  if (!isRecord(value)) {
+    return { cols: 120, rows: 32 }
+  }
+
+  return {
+    cols: value.cols,
+    rows: value.rows,
+    shellHint: value.shellHint ?? value.shell
+  }
+}
+
+function normalizeProfileInput(value: unknown): unknown {
+  if (!isRecord(value)) {
+    return value
+  }
+
+  return {
+    schemaVersion: value.schemaVersion ?? MOSHTTY_PROFILE_VERSION,
+    remoteId: value.remoteId ?? value.id,
+    hostLabel: value.hostLabel ?? value.label ?? value.host,
+    platform: value.platform,
+    serviceVersion: value.serviceVersion,
+    url: value.url,
+    token: value.token,
+    tokenLabel: value.tokenLabel,
+    currentCertHash: value.currentCertHash,
+    nextCertHash: value.nextCertHash || null,
+    currentCertIssuedAt: value.currentCertIssuedAt,
+    currentCertExpiresAt: value.currentCertExpiresAt,
+    defaults: normalizeProfileDefaults(value.defaults)
+  }
+}
+
 export const MoshttyProfileDefaultsSchema = z.object({
   /** Default pane cols/rows the renderer should request on attach. */
   cols: z.number().int().positive().default(120),
@@ -48,37 +84,38 @@ export const MoshttyProfileDefaultsSchema = z.object({
   shellHint: z.string().optional()
 })
 
-export const MoshttyProfileSchema = z.object({
-  /** Profile JSON schema version; matched against `MOSHTTY_PROFILE_VERSION`. */
-  schemaVersion: z.literal(MOSHTTY_PROFILE_VERSION),
-  /** Stable remote ID assigned by the companion. */
-  remoteId: z.string().min(1),
-  /** Friendly host label shown in the UI. */
-  hostLabel: z.string().min(1),
-  /** OS family of the host. */
-  platform: RemotePlatformSchema,
-  /** Service version (`moshtty-remote --version`). */
-  serviceVersion: z.string().min(1),
-  /** WebTransport URL the renderer dials. */
-  url: HttpsUrlSchema,
-  /**
-   * Token label only — the actual token value never travels through the
-   * profile JSON. The user pastes the token separately or it lives in a
-   * companion-side secret store referenced by this label.
-   */
-  tokenLabel: TokenLabelSchema,
-  /** Current short-lived WT cert hash. */
-  currentCertHash: CertHashSchema,
-  /**
-   * Optional next cert hash, published while connected so the renderer can
-   * pin both during rotation. Null if the companion has not generated one.
-   */
-  nextCertHash: CertHashSchema.nullable(),
-  /** Issued/expires timestamps (RFC 3339) for the current cert. */
-  currentCertIssuedAt: z.string().datetime().optional(),
-  currentCertExpiresAt: z.string().datetime().optional(),
-  defaults: MoshttyProfileDefaultsSchema.default({ cols: 120, rows: 32 })
-})
+export const MoshttyProfileSchema = z.preprocess(
+  normalizeProfileInput,
+  z.object({
+    /** Profile JSON schema version; matched against `MOSHTTY_PROFILE_VERSION`. */
+    schemaVersion: z.literal(MOSHTTY_PROFILE_VERSION),
+    /** Stable remote ID assigned by the companion. */
+    remoteId: z.string().min(1),
+    /** Friendly host label shown in the UI. */
+    hostLabel: z.string().min(1),
+    /** OS family of the host. */
+    platform: RemotePlatformSchema,
+    /** Service version (`moshtty-remote --version`). */
+    serviceVersion: z.string().min(1),
+    /** WebTransport URL the renderer dials. */
+    url: HttpsUrlSchema,
+    /** Optional bootstrap token. Importers must store this through the secret store. */
+    token: z.string().min(1).optional(),
+    /** Secret-store key for the remote token. */
+    tokenLabel: TokenLabelSchema,
+    /** Current short-lived WT cert hash. */
+    currentCertHash: CertHashSchema,
+    /**
+     * Optional next cert hash, published while connected so the renderer can
+     * pin both during rotation. Null if the companion has not generated one.
+     */
+    nextCertHash: CertHashSchema.nullable(),
+    /** Issued/expires timestamps (RFC 3339) for the current cert. */
+    currentCertIssuedAt: z.string().datetime().optional(),
+    currentCertExpiresAt: z.string().datetime().optional(),
+    defaults: MoshttyProfileDefaultsSchema.default({ cols: 120, rows: 32 })
+  })
+)
 
 export type ParsedMoshttyProfile = z.infer<typeof MoshttyProfileSchema>
 

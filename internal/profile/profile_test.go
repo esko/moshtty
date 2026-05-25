@@ -13,8 +13,8 @@ func TestProfileJSONShape(t *testing.T) {
 	now := time.Date(2026, 5, 25, 15, 0, 0, 0, time.UTC)
 	cfg := config.DefaultConfig("remote-profile-1")
 	cfg.Label = "Office Mac"
-	cfg.Cert.CurrentHash = "current-hash"
-	cfg.Cert.NextHash = "next-hash"
+	cfg.Cert.CurrentHash = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+	cfg.Cert.NextHash = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB="
 
 	tests := []struct {
 		name  string
@@ -44,7 +44,7 @@ func TestProfileJSONShape(t *testing.T) {
 			}
 
 			required := []string{
-				"id", "label", "host", "platform", "url", "token", "tokenLabel",
+				"schemaVersion", "remoteId", "hostLabel", "host", "platform", "url", "token", "tokenLabel",
 				"currentCertHash", "nextCertHash", "serviceVersion", "defaults", "generatedAt",
 			}
 			for _, key := range required {
@@ -53,8 +53,14 @@ func TestProfileJSONShape(t *testing.T) {
 				}
 			}
 
-			if decoded["id"] != "remote-profile-1" {
-				t.Fatalf("id = %v", decoded["id"])
+			if decoded["schemaVersion"] != float64(profile.SchemaVersion) {
+				t.Fatalf("schemaVersion = %v", decoded["schemaVersion"])
+			}
+			if decoded["remoteId"] != "remote-profile-1" {
+				t.Fatalf("remoteId = %v", decoded["remoteId"])
+			}
+			if decoded["hostLabel"] != "Office Mac" {
+				t.Fatalf("hostLabel = %v", decoded["hostLabel"])
 			}
 			if decoded["platform"] != "macos" {
 				t.Fatalf("platform = %v", decoded["platform"])
@@ -62,8 +68,15 @@ func TestProfileJSONShape(t *testing.T) {
 			if decoded["url"] != "https://macbook.local:4433" {
 				t.Fatalf("url = %v", decoded["url"])
 			}
-			if decoded["currentCertHash"] != "current-hash" {
+			if decoded["currentCertHash"] != "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" {
 				t.Fatalf("currentCertHash = %v", decoded["currentCertHash"])
+			}
+			defaults, ok := decoded["defaults"].(map[string]any)
+			if !ok {
+				t.Fatalf("defaults = %T", decoded["defaults"])
+			}
+			if defaults["cols"] != float64(120) || defaults["rows"] != float64(32) {
+				t.Fatalf("defaults = %v", defaults)
 			}
 		})
 	}
