@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { MoshttyAppInfo, MoshttySecretStorageInfo } from '../../common/moshtty-api'
+import type { ParsedMoshttyProfile } from '../../common/profile.schema'
 import type { MoshttyProject, MoshttyState, StateLoadResult } from '../../common/state'
 import {
   createSampleState,
@@ -27,7 +28,10 @@ interface AppState {
   saveWorkspace: () => Promise<void>
   resetWorkspace: () => Promise<void>
   addProject: (name: string) => Promise<void>
+  addTab: (title: string) => Promise<void>
+  importRemoteProfile: (profile: ParsedMoshttyProfile) => Promise<void>
   setActiveProject: (projectId: string) => Promise<void>
+  toggleProjectRail: () => Promise<void>
 }
 
 function getMoshttyApi(): Window['moshtty'] {
@@ -209,6 +213,110 @@ export const useAppStore = create<AppState>((set, get) => ({
     await get().saveWorkspace()
   },
 
+  addTab: async (title: string) => {
+    const snapshot = get().snapshot
+    if (!snapshot || !snapshot.state.activeProjectId) {
+      return
+    }
+
+    const activeProject = snapshot.state.projects.find(
+      (project) => project.id === snapshot.state.activeProjectId
+    )
+    if (!activeProject) {
+      return
+    }
+
+    const tabId = `tab-${crypto.randomUUID()}`
+    const paneId = `pane-${crypto.randomUUID()}`
+    const trimmedTitle = title.trim() || 'Shell'
+
+    const nextState: MoshttyState = withUpdatedTimestamp({
+      ...snapshot.state,
+      activeTabId: tabId,
+      activePaneId: paneId,
+      projects: snapshot.state.projects.map((project) =>
+        project.id === activeProject.id
+          ? {
+              ...project,
+              tabIds: [...project.tabIds, tabId],
+              activeTabId: tabId
+            }
+          : project
+      ),
+      tabs: [
+        ...snapshot.state.tabs,
+        {
+          id: tabId,
+          title: trimmedTitle,
+          paneIds: [paneId],
+          activePaneId: paneId
+        }
+      ],
+      panes: [
+        ...snapshot.state.panes,
+        {
+          id: paneId,
+          title: trimmedTitle,
+          cwd: '~',
+          status: 'active',
+          cols: 120,
+          rows: 32
+        }
+      ],
+      layouts: [
+        ...snapshot.state.layouts,
+        {
+          tabId,
+          root: {
+            kind: 'pane',
+            paneId
+          }
+        }
+      ]
+    })
+
+    set({
+      snapshot: {
+        ...snapshot,
+        state: nextState
+      }
+    })
+    await get().saveWorkspace()
+  },
+
+  importRemoteProfile: async (profile: ParsedMoshttyProfile) => {
+    const snapshot = get().snapshot
+    if (!snapshot) {
+      return
+    }
+
+    const nextState: MoshttyState = withUpdatedTimestamp({
+      ...snapshot.state,
+      remotes: [
+        ...snapshot.state.remotes.filter((remote) => remote.id !== profile.remoteId),
+        {
+          id: profile.remoteId,
+          label: profile.hostLabel,
+          host: new URL(profile.url).hostname,
+          platform: profile.platform,
+          status: 'offline',
+          url: profile.url,
+          tokenLabel: profile.tokenLabel,
+          currentCertHash: profile.currentCertHash,
+          nextCertHash: profile.nextCertHash
+        }
+      ]
+    })
+
+    set({
+      snapshot: {
+        ...snapshot,
+        state: nextState
+      }
+    })
+    await get().saveWorkspace()
+  },
+
   setActiveProject: async (projectId: string) => {
     const snapshot = get().snapshot
     if (!snapshot) {
@@ -232,6 +340,27 @@ export const useAppStore = create<AppState>((set, get) => ({
       snapshot: {
         ...snapshot,
         state: nextState
+      }
+    })
+    await get().saveWorkspace()
+  },
+
+  toggleProjectRail: async () => {
+    const snapshot = get().snapshot
+    if (!snapshot) {
+      return
+    }
+
+    set({
+      snapshot: {
+        ...snapshot,
+        state: withUpdatedTimestamp({
+          ...snapshot.state,
+          settings: {
+            ...snapshot.state.settings,
+            projectRailCollapsed: !snapshot.state.settings.projectRailCollapsed
+          }
+        })
       }
     })
     await get().saveWorkspace()

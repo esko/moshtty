@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   getActiveProject,
   getActiveTab,
@@ -8,6 +8,7 @@ import {
   type MoshttyRemote,
   type MoshttyState
 } from '../../common/state'
+import { parseMoshttyProfileText } from '../../common/profile.schema'
 import {
   EditIcon,
   FolderPlusIcon,
@@ -20,6 +21,7 @@ import {
   SearchIcon,
   XIcon
 } from './design/icons'
+import { getFixtureDialog, type AppDialog } from './dialogs'
 import { resolveTerminalThemeMode, useResolvedThemeMode } from './design/theme'
 import { FixtureBanner } from './fixtures/FixtureBanner'
 import { getFixture } from './fixtures/states'
@@ -151,11 +153,17 @@ function SplitNode({
 
 function ProjectDialog({
   mode,
-  projectName
+  projectName,
+  onClose,
+  onSave
 }: {
   mode: 'new' | 'existing'
   projectName: string
+  onClose: () => void
+  onSave: (name: string) => void
 }): React.JSX.Element {
+  const [name, setName] = useState(mode === 'new' ? '' : projectName)
+
   return (
     <div className="dialog-backdrop">
       <section
@@ -172,13 +180,18 @@ function ProjectDialog({
             aria-label="Close project dialog"
             data-action-id="close-dialog"
             title={actionTitle('close-dialog')}
+            onClick={onClose}
           >
             <XIcon />
           </button>
         </header>
         <label className="field">
           <span>Name</span>
-          <input defaultValue={mode === 'new' ? '' : projectName} placeholder="Remote dev" />
+          <input
+            value={name}
+            placeholder="Remote dev"
+            onChange={(event) => setName(event.target.value)}
+          />
         </label>
         <div className="project-chip-editor">
           <div className="large-chip">{projectName.charAt(0).toUpperCase() || 'M'}</div>
@@ -212,6 +225,7 @@ function ProjectDialog({
             type="button"
             data-action-id="cancel-dialog"
             title={actionTitle('cancel-dialog')}
+            onClick={onClose}
           >
             Cancel
           </button>
@@ -220,6 +234,7 @@ function ProjectDialog({
             type="button"
             data-action-id="confirm-dialog"
             title={actionTitle('confirm-dialog')}
+            onClick={() => onSave(name)}
           >
             Save
           </button>
@@ -229,13 +244,34 @@ function ProjectDialog({
   )
 }
 
-function ImportDialog({ mode }: { mode: 'empty' | 'valid' | 'invalid' }): React.JSX.Element {
-  const invalid = mode === 'invalid'
+function ImportDialog({
+  mode,
+  onClose,
+  onImport
+}: {
+  mode: 'empty' | 'valid' | 'invalid'
+  onClose: () => void
+  onImport: (profileText: string) => boolean
+}): React.JSX.Element {
   const validProfile = `{
-  "label": "Mac mini",
-  "host": "macmini.local",
-  "platform": "macos"
+  "schemaVersion": 1,
+  "remoteId": "remote-mac-mini",
+  "hostLabel": "Mac mini",
+  "platform": "macos",
+  "serviceVersion": "0.1.0",
+  "url": "https://macmini.local:4433",
+  "tokenLabel": "default",
+  "currentCertHash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+  "nextCertHash": null,
+  "defaults": {
+    "cols": 120,
+    "rows": 32
+  }
 }`
+  const initialText = mode === 'valid' ? validProfile : mode === 'invalid' ? '{ "host": ' : ''
+  const [profileText, setProfileText] = useState(initialText)
+  const [parseFailed, setParseFailed] = useState(mode === 'invalid')
+  const invalid = parseFailed
 
   return (
     <div className="dialog-backdrop">
@@ -253,6 +289,7 @@ function ImportDialog({ mode }: { mode: 'empty' | 'valid' | 'invalid' }): React.
             aria-label="Close import dialog"
             data-action-id="close-dialog"
             title={actionTitle('close-dialog')}
+            onClick={onClose}
           >
             <XIcon />
           </button>
@@ -260,9 +297,13 @@ function ImportDialog({ mode }: { mode: 'empty' | 'valid' | 'invalid' }): React.
         <label className="field">
           <span>Profile JSON</span>
           <textarea
-            defaultValue={invalid ? '{ "host": ' : mode === 'valid' ? validProfile : ''}
+            value={profileText}
             placeholder="Paste profile JSON"
             aria-invalid={invalid}
+            onChange={(event) => {
+              setProfileText(event.target.value)
+              setParseFailed(false)
+            }}
           />
         </label>
         {invalid ? (
@@ -276,6 +317,7 @@ function ImportDialog({ mode }: { mode: 'empty' | 'valid' | 'invalid' }): React.
             type="button"
             data-action-id="cancel-dialog"
             title={actionTitle('cancel-dialog')}
+            onClick={onClose}
           >
             Cancel
           </button>
@@ -284,6 +326,7 @@ function ImportDialog({ mode }: { mode: 'empty' | 'valid' | 'invalid' }): React.
             type="button"
             data-action-id="confirm-dialog"
             title={actionTitle('confirm-dialog')}
+            onClick={() => setParseFailed(!onImport(profileText))}
           >
             Import
           </button>
@@ -293,7 +336,13 @@ function ImportDialog({ mode }: { mode: 'empty' | 'valid' | 'invalid' }): React.
   )
 }
 
-function SettingsDialog({ terminalMode }: { terminalMode: string }): React.JSX.Element {
+function SettingsDialog({
+  terminalMode,
+  onClose
+}: {
+  terminalMode: string
+  onClose: () => void
+}): React.JSX.Element {
   const shortcutActions = getShortcutActions()
   const mouseOnlyActions = APP_ACTIONS.filter((action) => action.mouseOnly)
 
@@ -329,6 +378,7 @@ function SettingsDialog({ terminalMode }: { terminalMode: string }): React.JSX.E
               aria-label="Close settings"
               data-action-id="close-dialog"
               title={actionTitle('close-dialog')}
+              onClick={onClose}
             >
               <XIcon />
             </button>
@@ -397,6 +447,7 @@ function SettingsDialog({ terminalMode }: { terminalMode: string }): React.JSX.E
 function App(): React.JSX.Element {
   const fixtureId = getFixtureId()
   const fixture = fixtureId ? getFixture(fixtureId) : undefined
+  const [activeDialog, setActiveDialog] = useState<AppDialog | null>(null)
   const hydrated = useAppStore((state) => state.hydrated)
   const loading = useAppStore((state) => state.loading)
   const saving = useAppStore((state) => state.saving)
@@ -406,7 +457,10 @@ function App(): React.JSX.Element {
   const saveWorkspace = useAppStore((state) => state.saveWorkspace)
   const resetWorkspace = useAppStore((state) => state.resetWorkspace)
   const addProject = useAppStore((state) => state.addProject)
+  const addTab = useAppStore((state) => state.addTab)
+  const importRemoteProfile = useAppStore((state) => state.importRemoteProfile)
   const setActiveProject = useAppStore((state) => state.setActiveProject)
+  const toggleProjectRail = useAppStore((state) => state.toggleProjectRail)
 
   const state = fixture?.state ?? snapshot?.state ?? null
   const projects = state?.projects ?? EMPTY_PROJECTS
@@ -423,6 +477,25 @@ function App(): React.JSX.Element {
   const remote = remotes.find((entry) => entry.id === activeProject?.remoteId) ?? remotes[0]
   const remoteStatus = getRemoteStatusLabel(remote?.status)
   const dashboardMode = !activeTab || fixtureId?.startsWith('dashboard')
+  const fixtureDialog = getFixtureDialog(fixtureId)
+  const visibleDialog = fixtureDialog ?? activeDialog
+  const closeDialog = useCallback((): void => setActiveDialog(null), [])
+  const openDialog = useCallback((dialog: AppDialog): void => setActiveDialog(dialog), [])
+  const saveProjectDialog = (name: string): void => {
+    if (visibleDialog?.kind === 'project' && visibleDialog.mode === 'new') {
+      void addProject(name)
+    }
+    closeDialog()
+  }
+  const importProfileDialog = (profileText: string): boolean => {
+    const result = parseMoshttyProfileText(profileText)
+    if (!result.ok) {
+      return false
+    }
+    void importRemoteProfile(result.profile)
+    closeDialog()
+    return true
+  }
 
   useEffect(() => {
     if (!fixture) {
@@ -432,21 +505,21 @@ function App(): React.JSX.Element {
 
   const shortcutHandlers = useMemo<AppActionHandlerMap>(
     () => ({
-      'toggle-project-rail': () => undefined,
+      'toggle-project-rail': () => void toggleProjectRail(),
       'show-projects': () => undefined,
-      'new-project': () => void addProject('New project'),
-      'import-remote': () => undefined,
-      'open-settings': () => undefined,
+      'new-project': () => openDialog({ kind: 'project', mode: 'new' }),
+      'import-remote': () => openDialog({ kind: 'import', mode: 'empty' }),
+      'open-settings': () => openDialog({ kind: 'settings' }),
       'open-help': () => undefined,
-      'new-tab': () => undefined,
+      'new-tab': () => void addTab('Shell'),
       'save-state': () => void saveWorkspace(),
       'reset-state': () => void resetWorkspace(),
-      'add-project': () => void addProject('New project'),
-      'close-dialog': () => undefined,
-      'cancel-dialog': () => undefined,
+      'add-project': () => openDialog({ kind: 'project', mode: 'new' }),
+      'close-dialog': closeDialog,
+      'cancel-dialog': closeDialog,
       'confirm-dialog': () => undefined
     }),
-    [addProject, resetWorkspace, saveWorkspace]
+    [addTab, closeDialog, openDialog, resetWorkspace, saveWorkspace, toggleProjectRail]
   )
   useRegisteredShortcuts(shortcutHandlers)
 
@@ -470,6 +543,7 @@ function App(): React.JSX.Element {
             aria-label="Toggle project rail"
             data-action-id="toggle-project-rail"
             title={actionTitle('toggle-project-rail')}
+            onClick={() => void toggleProjectRail()}
           >
             <HamburgerIcon />
           </button>
@@ -479,6 +553,7 @@ function App(): React.JSX.Element {
             aria-label="Show projects"
             data-action-id="show-projects"
             title={actionTitle('show-projects')}
+            onClick={closeDialog}
           >
             <GridIcon />
           </button>
@@ -488,6 +563,7 @@ function App(): React.JSX.Element {
             aria-label="New project"
             data-action-id="new-project"
             title={actionTitle('new-project')}
+            onClick={() => openDialog({ kind: 'project', mode: 'new' })}
           >
             <PlusIcon />
           </button>
@@ -502,6 +578,7 @@ function App(): React.JSX.Element {
               aria-label="Import remote"
               data-action-id="import-remote"
               title={actionTitle('import-remote')}
+              onClick={() => openDialog({ kind: 'import', mode: 'empty' })}
             >
               <FolderPlusIcon />
             </button>
@@ -529,6 +606,7 @@ function App(): React.JSX.Element {
               type="button"
               data-action-id="open-settings"
               title={actionTitle('open-settings')}
+              onClick={() => openDialog({ kind: 'settings' })}
             >
               <GearIcon />
               Settings
@@ -538,6 +616,7 @@ function App(): React.JSX.Element {
               type="button"
               data-action-id="open-help"
               title={actionTitle('open-help')}
+              onClick={closeDialog}
             >
               <HelpIcon />
               Help
@@ -567,6 +646,7 @@ function App(): React.JSX.Element {
               type="button"
               data-action-id="new-tab"
               title={actionTitle('new-tab')}
+              onClick={() => void addTab('Shell')}
             >
               <EditIcon />
               New tab
@@ -590,6 +670,7 @@ function App(): React.JSX.Element {
                 type="button"
                 data-action-id="new-tab"
                 title={actionTitle('new-tab')}
+                onClick={() => void addTab('Shell')}
               >
                 <EditIcon />
                 New tab
@@ -651,7 +732,7 @@ function App(): React.JSX.Element {
                 disabled={!hydrated || saving}
                 data-action-id="add-project"
                 title={actionTitle('add-project')}
-                onClick={() => void addProject('New project')}
+                onClick={() => openDialog({ kind: 'project', mode: 'new' })}
               >
                 Add project
               </button>
@@ -659,17 +740,23 @@ function App(): React.JSX.Element {
           </section>
         ) : null}
 
-        {fixtureId === 'dialog-import-empty' ? <ImportDialog mode="empty" /> : null}
-        {fixtureId === 'dialog-import-valid' ? <ImportDialog mode="valid" /> : null}
-        {fixtureId === 'dialog-import-invalid' ? <ImportDialog mode="invalid" /> : null}
-        {fixtureId === 'dialog-project-edit-new' ? (
-          <ProjectDialog mode="new" projectName="Moshtty" />
+        {visibleDialog?.kind === 'import' ? (
+          <ImportDialog
+            mode={visibleDialog.mode}
+            onClose={closeDialog}
+            onImport={importProfileDialog}
+          />
         ) : null}
-        {fixtureId === 'dialog-project-edit' ? (
-          <ProjectDialog mode="existing" projectName={activeProject?.name ?? 'Moshtty'} />
+        {visibleDialog?.kind === 'project' ? (
+          <ProjectDialog
+            mode={visibleDialog.mode}
+            projectName={activeProject?.name ?? 'Moshtty'}
+            onClose={closeDialog}
+            onSave={saveProjectDialog}
+          />
         ) : null}
-        {fixtureId?.startsWith('dialog-terminal-settings') ? (
-          <SettingsDialog terminalMode={terminalMode} />
+        {visibleDialog?.kind === 'settings' ? (
+          <SettingsDialog terminalMode={terminalMode} onClose={closeDialog} />
         ) : null}
       </main>
     </div>

@@ -1,4 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest'
+import type { ParsedMoshttyProfile } from '../../common/profile.schema'
 import { createSampleState } from '../../common/state'
 import { useAppStore } from './store'
 
@@ -70,4 +71,71 @@ test('addProject persists through saveState', async () => {
   expect(
     useAppStore.getState().snapshot?.state.projects.some((project) => project.name === 'Remote dev')
   ).toBe(true)
+})
+
+test('addTab appends a pane tab to the active project', async () => {
+  const sample = createSampleState('2026-05-25T00:00:00.000Z')
+  useAppStore.setState({
+    hydrated: true,
+    snapshot: { state: sample, source: 'disk' }
+  })
+  mockApi.saveState.mockImplementation(async (state) => ({ state, source: 'disk' }))
+
+  await useAppStore.getState().addTab('Deploy')
+
+  const state = useAppStore.getState().snapshot!.state
+  expect(state.tabs.some((tab) => tab.title === 'Deploy')).toBe(true)
+  expect(state.activeTabId).toBe(state.projects[0]?.activeTabId)
+  expect(mockApi.saveState).toHaveBeenCalled()
+})
+
+test('importRemoteProfile validates profile-shaped data before storing remotes', async () => {
+  const sample = createSampleState('2026-05-25T00:00:00.000Z')
+  const profile: ParsedMoshttyProfile = {
+    schemaVersion: 1,
+    remoteId: 'remote-mac-mini',
+    hostLabel: 'Mac mini',
+    platform: 'macos',
+    serviceVersion: '0.1.0',
+    url: 'https://macmini.local:4433',
+    tokenLabel: 'default',
+    currentCertHash: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+    nextCertHash: null,
+    defaults: {
+      cols: 120,
+      rows: 32
+    }
+  }
+  useAppStore.setState({
+    hydrated: true,
+    snapshot: { state: sample, source: 'disk' }
+  })
+  mockApi.saveState.mockImplementation(async (state) => ({ state, source: 'disk' }))
+
+  await useAppStore.getState().importRemoteProfile(profile)
+
+  const remote = useAppStore
+    .getState()
+    .snapshot!.state.remotes.find((entry) => entry.id === 'remote-mac-mini')
+  expect(remote).toMatchObject({
+    label: 'Mac mini',
+    host: 'macmini.local',
+    platform: 'macos',
+    status: 'offline'
+  })
+  expect(mockApi.saveState).toHaveBeenCalled()
+})
+
+test('toggleProjectRail persists the collapsed setting', async () => {
+  const sample = createSampleState('2026-05-25T00:00:00.000Z')
+  useAppStore.setState({
+    hydrated: true,
+    snapshot: { state: sample, source: 'disk' }
+  })
+  mockApi.saveState.mockImplementation(async (state) => ({ state, source: 'disk' }))
+
+  await useAppStore.getState().toggleProjectRail()
+
+  expect(useAppStore.getState().snapshot!.state.settings.projectRailCollapsed).toBe(true)
+  expect(mockApi.saveState).toHaveBeenCalled()
 })
