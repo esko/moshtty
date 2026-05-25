@@ -1,47 +1,262 @@
 import { create } from 'zustand'
+import type { MoshttyAppInfo, MoshttySecretStorageInfo } from '../../common/moshtty-api'
+import type { MoshttyProject, MoshttyState, StateLoadResult } from '../../common/state'
+import {
+  createSampleState,
+  getActiveProject,
+  getActiveTab,
+  nextStateTimestamp,
+  projectDisplayInitial
+} from '../../common/state'
 
-export interface Pane {
-  id: string
-  title: string
-}
-
-export interface Tab {
-  id: string
-  title: string
-  panes: Pane[]
-}
-
-export interface Project {
-  id: string
-  name: string
-  tabs: Tab[]
+export interface WorkspaceSnapshot {
+  state: MoshttyState
+  source: StateLoadResult['source']
+  warning?: string
+  appInfo?: MoshttyAppInfo
+  secretInfo?: MoshttySecretStorageInfo
 }
 
 interface AppState {
-  projects: Project[]
-  activeProjectId: string | null
-  activeTabId: string | null
-  activePaneId: string | null
-  addProject: (name: string) => void
-  setActiveProject: (id: string) => void
+  hydrated: boolean
+  loading: boolean
+  saving: boolean
+  error: string | null
+  snapshot: WorkspaceSnapshot | null
+  hydrate: () => Promise<void>
+  saveWorkspace: () => Promise<void>
+  resetWorkspace: () => Promise<void>
+  addProject: (name: string) => Promise<void>
+  setActiveProject: (projectId: string) => Promise<void>
 }
 
-export const useAppStore = create<AppState>((set) => ({
-  projects: [],
-  activeProjectId: null,
-  activeTabId: null,
-  activePaneId: null,
-  addProject: (name) =>
-    set((state) => {
-      const newProject: Project = {
-        id: Math.random().toString(36).substring(7),
-        name,
-        tabs: []
+function getMoshttyApi(): Window['moshtty'] {
+  if (typeof window === 'undefined' || !window.moshtty) {
+    throw new Error('Moshtty preload API is unavailable')
+  }
+  return window.moshtty
+}
+
+const EMPTY_PROJECTS: MoshttyProject[] = []
+export { EMPTY_PROJECTS }
+
+function withUpdatedTimestamp(state: MoshttyState): MoshttyState {
+  return {
+    ...state,
+    updatedAt: nextStateTimestamp()
+  }
+}
+
+export const useAppStore = create<AppState>((set, get) => ({
+  hydrated: false,
+  loading: false,
+  saving: false,
+  error: null,
+  snapshot: null,
+
+  hydrate: async () => {
+    set({ loading: true, error: null })
+    try {
+      const api = getMoshttyApi()
+      const [loadResult, appInfo, secretInfo] = await Promise.all([
+        api.loadState(),
+        api.getAppInfo(),
+        api.getSecretStorageInfo()
+      ])
+
+      const state =
+        loadResult.state.projects.length === 0 ? createSampleState() : loadResult.state
+
+      set({
+        hydrated: true,
+        loading: false,
+        snapshot: {
+          state,
+          source: loadResult.source,
+          warning: loadResult.warning,
+          appInfo,
+          secretInfo
+        }
+      })
+    } catch (error) {
+      set({
+        loading: false,
+        error: error instanceof Error ? error.message : 'Failed to load Moshtty state'
+      })
+    }
+  },
+
+  saveWorkspace: async () => {
+    const snapshot = get().snapshot
+    if (!snapshot) {
+      return
+    }
+
+    set({ saving: true, error: null })
+    try {
+      const api = getMoshttyApi()
+      const nextState = withUpdatedTimestamp(snapshot.state)
+      const result = await api.saveState(nextState)
+      set({
+        saving: false,
+        snapshot: {
+          ...snapshot,
+          state: result.state,
+          source: result.source,
+          warning: result.warning
+        }
+      })
+    } catch (error) {
+      set({
+        saving: false,
+        error: error instanceof Error ? error.message : 'Failed to save Moshtty state'
+      })
+    }
+  },
+
+  resetWorkspace: async () => {
+    set({ saving: true, error: null })
+    try {
+      const api = getMoshttyApi()
+      const result = await api.resetState()
+      set({
+        saving: false,
+        snapshot: get().snapshot
+          ? {
+              ...get().snapshot!,
+              state: result.state,
+              source: result.source,
+              warning: result.warning
+            }
+          : {
+              state: result.state,
+              source: result.source,
+              warning: result.warning
+            }
+      })
+    } catch (error) {
+      set({
+        saving: false,
+        error: error instanceof Error ? error.message : 'Failed to reset Moshtty state'
+      })
+    }
+  },
+
+  addProject: async (name: string) => {
+    const snapshot = get().snapshot
+    if (!snapshot) {
+      return
+    }
+
+    const projectId = `project-${crypto.randomUUID()}`
+    const tabId = `tab-${crypto.randomUUID()}`
+    const paneId = `pane-${crypto.randomUUID()}`
+    const trimmedName = name.trim() || 'Untitled'
+
+    const nextState: MoshttyState = withUpdatedTimestamp({
+      ...snapshot.state,
+      activeProjectId: projectId,
+      activeTabId: tabId,
+      activePaneId: paneId,
+      projects: [
+        ...snapshot.state.projects,
+        {
+          id: projectId,
+          name: trimmedName,
+          color: '#4f46e5',
+          remoteId: null,
+          tabIds: [tabId],
+          activeTabId: tabId
+        }
+      ],
+      tabs: [
+        ...snapshot.state.tabs,
+        {
+          id: tabId,
+          title: 'Shell',
+          paneIds: [paneId],
+          activePaneId: paneId
+        }
+      ],
+      panes: [
+        ...snapshot.state.panes,
+        {
+          id: paneId,
+          title: trimmedName,
+          cwd: '~',
+          status: 'active',
+          cols: 120,
+          rows: 32
+        }
+      ],
+      layouts: [
+        ...snapshot.state.layouts,
+        {
+          tabId,
+          root: {
+            kind: 'pane',
+            paneId
+          }
+        }
+      ]
+    })
+
+    set({
+      snapshot: {
+        ...snapshot,
+        state: nextState
       }
-      return {
-        projects: [...state.projects, newProject],
-        activeProjectId: state.activeProjectId || newProject.id
+    })
+    await get().saveWorkspace()
+  },
+
+  setActiveProject: async (projectId: string) => {
+    const snapshot = get().snapshot
+    if (!snapshot) {
+      return
+    }
+
+    const project = snapshot.state.projects.find((entry) => entry.id === projectId)
+    if (!project) {
+      return
+    }
+
+    const nextState = withUpdatedTimestamp({
+      ...snapshot.state,
+      activeProjectId: project.id,
+      activeTabId: project.activeTabId,
+      activePaneId:
+        snapshot.state.tabs.find((tab) => tab.id === project.activeTabId)?.activePaneId ?? null
+    })
+
+    set({
+      snapshot: {
+        ...snapshot,
+        state: nextState
       }
-    }),
-  setActiveProject: (id) => set({ activeProjectId: id })
+    })
+    await get().saveWorkspace()
+  }
 }))
+
+export function selectProjects(state: AppState): MoshttyProject[] {
+  return state.snapshot?.state.projects ?? EMPTY_PROJECTS
+}
+
+export function selectActiveProject(state: AppState): MoshttyProject | null {
+  if (!state.snapshot) {
+    return null
+  }
+  return getActiveProject(state.snapshot.state)
+}
+
+export function selectActiveTabTitle(state: AppState): string {
+  if (!state.snapshot) {
+    return 'Loading...'
+  }
+  return getActiveTab(state.snapshot.state)?.title ?? 'No tab'
+}
+
+export function selectProjectInitial(project: MoshttyProject): string {
+  return projectDisplayInitial(project)
+}

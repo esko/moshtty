@@ -1,24 +1,134 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
-import { join } from 'path'
+import { app, shell, BrowserWindow, ipcMain, protocol, safeStorage } from 'electron'
+import { existsSync } from 'fs'
+import { readFile } from 'fs/promises'
+import { extname, join, resolve } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { MOSHTTY_IPC_CHANNELS } from '../common/moshtty-api'
+import type { MoshttyState } from '../common/state'
+import { createSecretStore } from './secret-store'
+import { createMoshttyStateStore } from './state-store'
 
-function createWindow(): void {
-  // Create the browser window.
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'app',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true
+    }
+  }
+])
+
+const stateStore = createMoshttyStateStore(() => app.getPath('userData'))
+const secretStore = createSecretStore({
+  userDataPath: () => app.getPath('userData'),
+  safeStorage: {
+    isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
+    encryptString: (plainText) => safeStorage.encryptString(plainText),
+    decryptString: (encrypted) => safeStorage.decryptString(encrypted)
+  }
+})
+
+function contentTypeFor(filePath: string): string {
+  switch (extname(filePath)) {
+    case '.html':
+      return 'text/html; charset=utf-8'
+    case '.js':
+      return 'text/javascript; charset=utf-8'
+    case '.css':
+      return 'text/css; charset=utf-8'
+    case '.json':
+      return 'application/json; charset=utf-8'
+    case '.svg':
+      return 'image/svg+xml'
+    case '.png':
+      return 'image/png'
+    case '.ico':
+      return 'image/x-icon'
+    case '.map':
+      return 'application/json; charset=utf-8'
+    default:
+      return 'application/octet-stream'
+  }
+}
+
+function getRendererRoot(): string {
+  return resolve(__dirname, '../renderer')
+}
+
+function resolveRendererPath(requestPath: string): string | null {
+  const rendererRoot = getRendererRoot()
+  const normalizedPath = decodeURIComponent(requestPath || '/')
+  const relativePath = normalizedPath === '/' ? 'index.html' : normalizedPath.replace(/^\/+/, '')
+  const absolutePath = resolve(rendererRoot, relativePath)
+
+  if (!absolutePath.startsWith(rendererRoot)) {
+    return null
+  }
+
+  return absolutePath
+}
+
+async function registerAppProtocol(): Promise<void> {
+  protocol.handle('app', async (request) => {
+    const url = new URL(request.url)
+    const filePath = resolveRendererPath(url.pathname)
+    if (!filePath) {
+      return new Response('Forbidden', { status: 403 })
+    }
+
+    try {
+      const body = await readFile(filePath)
+      return new Response(body, {
+        status: 200,
+        headers: {
+          'content-type': contentTypeFor(filePath)
+        }
+      })
+    } catch {
+      return new Response('Not found', { status: 404 })
+    }
+  })
+}
+
+async function loadRenderer(mainWindow: BrowserWindow): Promise<void> {
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    await mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    return
+  }
+
+  await mainWindow.loadURL('app://moshtty/index.html')
+}
+
+function resolvePreloadPath(): string {
+  const candidates = ['index.mjs', 'index.js'].map((file) => join(__dirname, '../preload', file))
+  return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0]
+}
+
+function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
-    show: false,
+    width: 1280,
+    height: 860,
+    minWidth: 1024,
+    minHeight: 720,
+    show: true,
     autoHideMenuBar: true,
+    title: 'Moshtty',
+    backgroundColor: '#f9f9fb',
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      preload: resolvePreloadPath(),
+      sandbox: false,
+      contextIsolation: true
     }
   })
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+    mainWindow.focus()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -26,49 +136,58 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
-  // HMR for renderer base on electron-vite cli.
-  // Load the remote URL for development or the local html file for production.
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
-  }
+  void loadRenderer(mainWindow).catch((error) => {
+    console.error('Failed to load Moshtty renderer:', error)
+  })
+  return mainWindow
 }
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
-  // Set app user model id for windows
-  electronApp.setAppUserModelId('com.electron')
+function registerIpcHandlers(): void {
+  ipcMain.handle(MOSHTTY_IPC_CHANNELS.stateLoad, async () => stateStore.loadState())
+  ipcMain.handle(MOSHTTY_IPC_CHANNELS.stateSave, async (_event, state: MoshttyState) =>
+    stateStore.saveState(state)
+  )
+  ipcMain.handle(MOSHTTY_IPC_CHANNELS.stateReset, async () => stateStore.resetState())
+  ipcMain.handle(MOSHTTY_IPC_CHANNELS.appInfo, async () => ({
+    name: app.getName(),
+    protocolUrl: 'app://moshtty/index.html',
+    stateFilePath: stateStore.stateFilePath()
+  }))
+  ipcMain.handle(MOSHTTY_IPC_CHANNELS.secretInfo, async () => secretStore.getStorageInfo())
+  ipcMain.handle(MOSHTTY_IPC_CHANNELS.secretSetPassphrase, async (_event, passphrase: string) =>
+    secretStore.setPassphrase(passphrase)
+  )
+  ipcMain.handle(MOSHTTY_IPC_CHANNELS.secretStoreToken, async (_event, label: string, token: string) =>
+    secretStore.storeToken(label, token)
+  )
+  ipcMain.handle(MOSHTTY_IPC_CHANNELS.secretLoadToken, async (_event, label: string) =>
+    secretStore.loadToken(label)
+  )
+  ipcMain.handle(MOSHTTY_IPC_CHANNELS.secretDeleteToken, async (_event, label: string) =>
+    secretStore.deleteToken(label)
+  )
+}
 
-  // Default open or close DevTools by F12 in development
-  // and ignore CommandOrControl + R in production.
-  // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
+app.whenReady().then(async () => {
+  electronApp.setAppUserModelId('com.moshtty.desktop')
+  await registerAppProtocol()
+  registerIpcHandlers()
+
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // IPC test
-  ipcMain.on('ping', () => console.log('pong'))
-
   createWindow()
 
-  app.on('activate', function () {
-    // On macOS it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow()
+    }
   })
 })
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
 })
-
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and require them here.

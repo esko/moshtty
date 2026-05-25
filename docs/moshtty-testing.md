@@ -127,6 +127,10 @@ Launch Electron with a remote debugging port:
 pnpm --filter @moshtty/desktop dev -- --remote-debugging-port=9222
 ```
 
+Do not pass `--disable-gpu` for normal dev or visual QA on ChromeOS/Crostini. It can leave the live Electron window blank on Wayland even when the DOM renders correctly over CDP.
+
+If port `9222` is already taken, pick another port (for example `9225`) for both Electron and `agent-browser connect`.
+
 Then connect and inspect:
 
 ```bash

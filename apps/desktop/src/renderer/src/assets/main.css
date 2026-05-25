@@ -115,6 +115,10 @@ body {
   gap: 10px;
   cursor: pointer;
   transition: background 0.15s ease;
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
 }
 
 .project-item:hover {
@@ -222,6 +226,83 @@ body {
   height: 6px;
   border-radius: 50%;
   background: var(--success-color);
+}
+
+.rail-actions {
+  padding: 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+.ghost-button,
+.dev-panel-actions button {
+  border: 1px solid var(--border-color);
+  background: var(--bg-workspace);
+  color: var(--text-main);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ghost-button:hover,
+.dev-panel-actions button:hover {
+  background: var(--bg-sidebar-active);
+}
+
+.ghost-button {
+  width: 100%;
+}
+
+.dev-panel {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  width: min(420px, calc(100% - 32px));
+  background: rgba(18, 18, 20, 0.92);
+  border: 1px solid #3a3a44;
+  border-radius: 10px;
+  padding: 12px;
+  color: #f0f0f4;
+  font-size: 12px;
+}
+
+.dev-panel-row {
+  display: grid;
+  grid-template-columns: 88px 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.dev-panel-row.warning {
+  color: #fbbf24;
+}
+
+.dev-panel-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.renderer-error {
+  min-height: 100vh;
+  padding: 24px;
+  background: #1e1e24;
+  color: #f87171;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.renderer-error h1 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+.renderer-error p {
+  margin: 0 0 12px;
+}
+
+.renderer-error pre {
+  white-space: pre-wrap;
+  color: #fca5a5;
 }
 
 /* Terminal Area */
