@@ -207,7 +207,7 @@ Agent brief:
 
 ## M6 `moshttyctl` CLI
 
-Status: In progress
+Status: Ready for review
 
 Objective:
 
