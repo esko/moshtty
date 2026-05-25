@@ -1,7 +1,8 @@
 packages:
-  - 'apps/*'
+  - "apps/*"
 
 allowBuilds:
   electron: true
   electron-winstaller: true
   esbuild: true
+  lefthook: true

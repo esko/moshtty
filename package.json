@@ -7,6 +7,18 @@
     "dev": "pnpm --filter @moshtty/desktop dev",
     "build": "pnpm --filter @moshtty/desktop build",
     "test": "pnpm --filter @moshtty/desktop test && go test ./...",
-    "typecheck": "pnpm --filter @moshtty/desktop typecheck"
+    "typecheck": "pnpm --filter @moshtty/desktop typecheck",
+    "lint": "pnpm --filter @moshtty/desktop lint",
+    "lint:css": "pnpm --filter @moshtty/desktop lint:css",
+    "lint:go": "golangci-lint run ./...",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "verify": "pnpm lint && pnpm lint:css && pnpm typecheck && pnpm test && pnpm format:check"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.6.1",
+    "@commitlint/config-conventional": "^19.6.0",
+    "lefthook": "^1.10.10",
+    "prettier": "^3.7.4"
   }
 }
