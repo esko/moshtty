@@ -116,10 +116,34 @@ Repo-wide gates (run before opening a PR or marking `Ready for review`):
 
 ```bash
 pnpm format:check    # prettier --check across the workspace
-pnpm verify          # lint + lint:css + typecheck + test + format:check
-go test ./...
+pnpm verify:full     # lint + lint:css + typecheck + test + build + test:visual + go test + go vet + diff
 git diff --check     # whitespace / conflict marker scan
 ```
+
+Per-commit verification minimum (run before every commit, even mid-slice):
+
+```bash
+pnpm --filter @moshtty/desktop test
+pnpm --filter @moshtty/desktop typecheck
+go test ./...
+git diff --check
+```
+
+Full verification sequence (run before marking `Ready for review`, superset of per-commit minimum):
+
+```bash
+pnpm --filter @moshtty/desktop typecheck
+pnpm --filter @moshtty/desktop lint
+pnpm --filter @moshtty/desktop lint:css
+pnpm --filter @moshtty/desktop test
+pnpm --filter @moshtty/desktop build
+pnpm --filter @moshtty/desktop test:visual
+go test ./...
+go vet ./...
+git diff --check
+```
+
+For UI-touching slices, also run `agent-browser` exploratory QA against the live Electron app on the developer's primary host (see `docs/moshtty-testing.md`).
 
 Pre-commit hooks (`lefthook.yml`) run prettier, scoped eslint, scoped stylelint, `go vet`, and `golangci-lint --new-from-rev` on staged files. `commit-msg` runs commitlint. Do not bypass with `--no-verify`.
 

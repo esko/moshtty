@@ -13,7 +13,8 @@
     "lint:go": "golangci-lint run ./...",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify": "pnpm lint && pnpm lint:css && pnpm typecheck && pnpm test && pnpm format:check"
+    "verify": "pnpm lint && pnpm lint:css && pnpm typecheck && pnpm test && pnpm format:check",
+    "verify:full": "pnpm lint && pnpm lint:css && pnpm typecheck && pnpm test && pnpm build && pnpm test:visual && go test ./... && go vet ./... && git diff --check"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.6.1",
