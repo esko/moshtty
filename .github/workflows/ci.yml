@@ -2,31 +2,110 @@ name: CI
 
 on:
   push:
-    branches: [master, feat/*]
+    branches: [main, master, feat/*]
   pull_request:
-    branches: [master]
+    branches: [main, master]
 
 jobs:
-  typescript:
+  frontend:
+    name: TypeScript (lint, typecheck, test, build)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - uses: pnpm/action-setup@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'pnpm'
+          node-version: "22"
+          cache: "pnpm"
+
       - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --filter @moshtty/desktop lint
+
+      - run: pnpm --filter @moshtty/desktop lint:css
+
       - run: pnpm --filter @moshtty/desktop typecheck
+
       - run: pnpm --filter @moshtty/desktop test
+
       - run: pnpm --filter @moshtty/desktop build
 
+  visual:
+    # TODO: wire xvfb / headless Electron once the M5 visual fixtures land.
+    # Left as continue-on-error until then so the rest of CI is meaningful.
+    name: Playwright Electron (visual + a11y)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --filter @moshtty/desktop exec playwright install --with-deps chromium
+
+      - run: pnpm --filter @moshtty/desktop test:visual
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: apps/desktop/playwright-report
+          retention-days: 7
+
   go:
+    name: Go (vet, lint, test)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.26'
-      - run: go test ./...
+          go-version: "1.26"
+          cache: true
+
       - run: go vet ./...
+
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout=5m
+
+      - run: go test ./...
+
+  format-and-commits:
+    name: Format + Conventional Commits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm format:check
+
+      - name: Lint PR commits (conventional commits)
+        if: github.event_name == 'pull_request'
+        run: |
+          pnpm exec commitlint \
+            --from "${{ github.event.pull_request.base.sha }}" \
+            --to "${{ github.event.pull_request.head.sha }}" \
+            --verbose

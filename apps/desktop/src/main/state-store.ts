@@ -25,7 +25,7 @@ export function createMoshttyStateStore(userDataPath: string | (() => string)): 
   const resolveUserDataPath = (): string =>
     typeof userDataPath === 'function' ? userDataPath() : userDataPath
 
-  const filePath = () => join(resolveUserDataPath(), 'moshtty-state.json')
+  const filePath = (): string => join(resolveUserDataPath(), 'moshtty-state.json')
 
   return {
     stateFilePath: () => filePath(),
@@ -57,7 +57,11 @@ export function createMoshttyStateStore(userDataPath: string | (() => string)): 
           source: 'disk'
         }
       } catch (error) {
-        if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+        if (
+          error instanceof Error &&
+          'code' in error &&
+          (error as NodeJS.ErrnoException).code === 'ENOENT'
+        ) {
           return {
             state: createEmptyState(),
             source: 'default'
