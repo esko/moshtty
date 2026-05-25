@@ -58,12 +58,12 @@ Moshtty replaces the previous Crostini-local PWA/Go-agent architecture. The old 
 | Planning Item | Status | Notes |
 | --- | --- | --- |
 | Architecture decisions | Locked | Captured in `docs/moshtty-plan.md` and summarized below |
-| Implementation branch | Pending | Start from the current dirty worktree after docs review |
+| Implementation branch | feat/moshtty-scaffold | Branch created from current worktree |
 
 | Milestone | Status | Notes |
 | --- | --- | --- |
 | M0 Planning docs | Done | PRD, plan, milestones, agent briefs, and Moshtty `AGENTS.md` are present |
-| M1 Branch and scaffold | Planned | New branch layout, pnpm/electron-vite/root Go module |
+| M1 Branch and scaffold | Ready for review | New branch layout, pnpm/electron-vite/root Go module. Old runtime quarantined under quarantine/ |
 | M2 Desktop state shell | Planned | Electron main/preload, secure protocol, JSON state, secrets |
 | M3 macOS remote companion | Planned | `moshtty-remote`, LaunchAgent, profile JSON, cert/token/config |
 | M4 WebTransport and Mosh mux | Planned | JSON-RPC streams, datagram mux, mosh-go WASM/server adapter |
@@ -75,7 +75,7 @@ Moshtty replaces the previous Crostini-local PWA/Go-agent architecture. The old 
 
 | Task | Owner | Status | Brief |
 | --- | --- | --- | --- |
-| Scaffold Moshtty repo | Unassigned | Planned | `docs/agents/2026-05-25-1-moshtty-scaffold.md` |
+| Scaffold Moshtty repo | Antigravity | Ready for review | `docs/agents/2026-05-25-1-moshtty-scaffold.md` |
 | Desktop state shell | Unassigned | Planned | `docs/agents/2026-05-25-2-desktop-state-shell.md` |
 | macOS remote companion | Unassigned | Planned | `docs/agents/2026-05-25-3-macos-remote-companion.md` |
 | WebTransport Mosh mux | Unassigned | Planned | `docs/agents/2026-05-25-4-webtransport-mosh-mux.md` |

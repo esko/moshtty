@@ -1,0 +1,3133 @@
+import { FitAddon, Terminal, init } from "ghostty-web";
+import { getAgentToken, getJSON, patchJSON, postJSON, ptyURL } from "./api";
+import { concatBytes, escapeAttribute, escapeHTML, formatNumber, pathBaseName, requiredElement, socketState } from "./dom";
+import { applySplitRatio, firstLeaf, layoutLeaves, ratioFromKeyboard, ratioFromPointer, splitRatio } from "./layout";
+import {
+  applyAppAppearance,
+  DEFAULT_SETTINGS,
+  loadCustomFont,
+  loadSettings,
+  normalizeSettings,
+  saveSettings,
+  terminalFontFamily,
+} from "./settings";
+import { getThemePalette } from "./themes";
+import { shouldPassThroughSystemShortcut } from "./shortcuts";
+import { registerAction, getAction, getAllActions, matchKeyChord, eventToChordString, parseBindingSequence, isMultiChordBinding, startSequence, advanceSequence, cancelSequence, isSequenceActive, getSequenceProgress, type Action } from "./actions";
+import { showChordProgress, showChordRecording, hideChordIndicator } from "./statusbar";
+import { initPalette, openPalette, isPaletteOpen } from "./palette";
+import type { AgentMessage, EnvVars, OrphanCleanup, Profile, SessionLayoutNode, Space, TerminalSession, TerminalSettings, Workspace, TerminalTheme, TerminalPalette } from "./types";
+import "./styles.css";
+import { initDebugShell, updateDebugShellFromLocation, updateActiveDebugTabTitle, isSettingsPath, currentAppPath, isAppPath, appURL, openAppURL } from "./debug-shell";
+
+const APP_TITLE = "Crostini Ghostty";
+const DEFAULT_SPACE_ID = "space-default";
+const DEFAULT_PROFILE_ID = "profile-default";
+
+const appRoot = requiredElement<HTMLElement>("#app");
+const settingsRoot = requiredElement<HTMLElement>("#settings");
+const terminalRoot = requiredElement<HTMLElement>("#terminal");
+const statusEl = requiredElement<HTMLElement>("#status");
+const offlineEl = requiredElement<HTMLElement>("#offline");
+const reconnectButton = requiredElement<HTMLButtonElement>("#reconnect");
+const topbarMenuButton = requiredElement<HTMLButtonElement>("#topbarMenu");
+const topbarSpacesButton = requiredElement<HTMLButtonElement>("#topbarSpaces");
+const topbarNewTerminalButton = requiredElement<HTMLButtonElement>("#topbarNewTerminal");
+const topbarTabsContainer = requiredElement<HTMLElement>("#topbarTabs");
+const diagnosticsToggle = requiredElement<HTMLButtonElement>("#diagnosticsToggle");
+const diagnosticsPanel = requiredElement<HTMLElement>("#diagnostics");
+const diagnosticsList = requiredElement<HTMLElement>("#diagnosticsList");
+const contextMenu = requiredElement<HTMLElement>("#terminalContextMenu");
+const renameDialog = requiredElement<HTMLDialogElement>("#renameDialog");
+const renameDialogTitle = requiredElement<HTMLElement>("#renameDialogTitle");
+const renameInput = requiredElement<HTMLInputElement>("#renameInput");
+const renameResetButton = requiredElement<HTMLButtonElement>("#renameReset");
+const profileDialog = requiredElement<HTMLDialogElement>("#profileDialog");
+const profileDialogTitle = requiredElement<HTMLElement>("#profileDialogTitle");
+const profileForm = requiredElement<HTMLFormElement>("#profileForm");
+const profileTitleInput = requiredElement<HTMLInputElement>("#profileTitle");
+const profileShellInput = requiredElement<HTMLInputElement>("#profileShell");
+const profileWorkingDirInput = requiredElement<HTMLInputElement>("#profileWorkingDir");
+const profileEnvInput = requiredElement<HTMLTextAreaElement>("#profileEnv");
+const profileError = requiredElement<HTMLElement>("#profileError");
+const spaceDialog = requiredElement<HTMLDialogElement>("#spaceDialog");
+const spaceTitleInput = requiredElement<HTMLInputElement>("#spaceTitle");
+const spaceEditDialog = requiredElement<HTMLDialogElement>("#spaceEditDialog");
+const spaceEditTitleInput = requiredElement<HTMLInputElement>("#spaceEditTitle");
+const spaceEditIconPreview = requiredElement<HTMLElement>("#spaceEditIconPreview");
+const spaceEditColorSwatches = requiredElement<HTMLElement>("#spaceEditColorSwatches");
+const spaceEditStartupScriptInput = requiredElement<HTMLInputElement>("#spaceEditStartupScript");
+const spaceEditForm = requiredElement<HTMLFormElement>("#spaceEditForm");
+const spaceEditCloseBtn = requiredElement<HTMLButtonElement>("#spaceEditCloseBtn");
+const spaceEditCancelBtn = requiredElement<HTMLButtonElement>("#spaceEditCancelBtn");
+const shortcutsDialog = requiredElement<HTMLDialogElement>("#shortcutsDialog");
+const winMinimize = requiredElement<HTMLButtonElement>("#winMinimize");
+const winMaximize = requiredElement<HTMLButtonElement>("#winMaximize");
+const winRestore = requiredElement<HTMLButtonElement>("#winRestore");
+const winClose = requiredElement<HTMLButtonElement>("#winClose");
+
+let settings = loadSettings();
+
+let currentWorkspace: Workspace | null = null;
+let parentSessionId = "";
+let activePaneId = "";
+let diagnosticsTimer: number | undefined;
+let pendingFitFrame: number | undefined;
+let activeResize: SplitResizeState | null = null;
+let terminalRuntimeReady = false;
+let listedSessions: TerminalSession[] = [];
+let listedSpaces: Space[] = [];
+let listedProfiles: Profile[] = [];
+let selectedSpaceId = DEFAULT_SPACE_ID;
+const panes = new Map<string, TerminalPane>();
+
+function applyAppAppearanceAndTheme(nextSettings: TerminalSettings): void {
+  applyAppAppearance(nextSettings);
+  for (const pane of panes.values()) {
+    pane.term.options.theme = getThemePalette(nextSettings.theme);
+    pane.term.options.cursorBlink = nextSettings.cursorBlink;
+    pane.term.options.cursorStyle = nextSettings.cursorStyle as any;
+    pane.term.options.fontSize = nextSettings.fontSize;
+    pane.term.options.fontFamily = terminalFontFamily(nextSettings);
+    pane.fit();
+    if (pane.term.renderer && pane.term.wasmTerm) {
+      pane.term.renderer.render(pane.term.wasmTerm, true, pane.term.viewportY, pane.term);
+    }
+  }
+}
+
+applyAppAppearanceAndTheme(settings);
+
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  if (settings.theme.preset === "system") {
+    applyAppAppearanceAndTheme(settings);
+  }
+});
+
+type SplitNode = Extract<SessionLayoutNode, { type: "split" }>;
+type SplitResizeState = {
+  pointerId: number;
+  node: SplitNode;
+  split: HTMLElement;
+  divider: HTMLElement;
+  first: HTMLElement;
+  second: HTMLElement;
+};
+type DebugShellTab = {
+  id: string;
+  title: string;
+  url: string;
+};
+type DebugShellState = {
+  root: HTMLElement;
+  tabs: DebugShellTab[];
+  activeTabId: string;
+  nextTabNumber: number;
+};
+
+void boot();
+
+reconnectButton.addEventListener("click", () => {
+  activePane()?.connect(false);
+});
+
+topbarMenuButton.addEventListener("pointerdown", (e) => {
+  e.stopPropagation();
+});
+
+topbarMenuButton.addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (!contextMenu.hidden) {
+    hideContextMenu();
+  } else {
+    const rect = topbarMenuButton.getBoundingClientRect();
+    showContextMenu(rect.left, rect.bottom + 6);
+  }
+});
+
+topbarSpacesButton.addEventListener("click", () => {
+  openAppURL("/");
+});
+
+topbarNewTerminalButton.addEventListener("click", () => {
+  const spaceId = currentWorkspace?.session?.spaceId || selectedSpaceId || DEFAULT_SPACE_ID;
+  void createTabInSpace(spaceId, undefined, { newTab: false });
+});
+
+diagnosticsToggle.addEventListener("click", () => {
+  diagnosticsPanel.hidden = !diagnosticsPanel.hidden;
+  updateDiagnosticsTimer();
+});
+
+interface WindowControls {
+  minimize(): Promise<void>;
+  maximize(): Promise<void>;
+  restore(): Promise<void>;
+  setResizable(resizable: boolean): Promise<void>;
+}
+const wc = window as unknown as Partial<WindowControls>;
+
+if (typeof wc.minimize === "function") {
+  winMinimize.addEventListener("click", async () => { await wc.minimize!(); });
+} else {
+  winMinimize.hidden = true;
+}
+
+if (typeof wc.maximize === "function") {
+  winMaximize.addEventListener("click", async () => { await wc.maximize!(); });
+} else {
+  winMaximize.hidden = true;
+}
+
+if (typeof wc.restore === "function") {
+  winRestore.addEventListener("click", async () => { await wc.restore!(); });
+} else {
+  winRestore.hidden = true;
+}
+
+if (typeof window.close === "function") {
+  winClose.addEventListener("click", () => { window.close(); });
+} else {
+  winClose.hidden = true;
+}
+
+if (typeof wc.setResizable === "function") {
+  wc.setResizable(true).catch((err: unknown) => {
+    console.warn("setResizable(true) failed:", err);
+  });
+}
+
+terminalRoot.addEventListener("contextmenu", (event) => {
+  const paneEl = (event.target as Element).closest<HTMLElement>("[data-pane-id]");
+  if (paneEl?.dataset.paneId) setActivePane(paneEl.dataset.paneId);
+  event.preventDefault();
+  showContextMenu(event.clientX, event.clientY);
+});
+
+document.addEventListener("pointerdown", (event) => {
+  if (contextMenu.hidden || contextMenu.contains(event.target as Node)) return;
+  hideContextMenu();
+});
+
+document.addEventListener(
+  "keydown",
+  (event) => {
+    if (handleActionShortcut(event)) return;
+  },
+  { capture: true },
+);
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") hideContextMenu();
+});
+
+document.addEventListener("pointermove", (event) => {
+  if (!activeResize || event.pointerId !== activeResize.pointerId) return;
+  event.preventDefault();
+  resizeSplitFromPointer(activeResize, event.clientX, event.clientY);
+});
+
+document.addEventListener("pointerup", (event) => {
+  if (!activeResize || event.pointerId !== activeResize.pointerId) return;
+  event.preventDefault();
+  finishSplitResize(true);
+});
+
+document.addEventListener("pointercancel", (event) => {
+  if (!activeResize || event.pointerId !== activeResize.pointerId) return;
+  finishSplitResize(true);
+});
+
+contextMenu.addEventListener("click", (event) => {
+  const button = (event.target as Element).closest<HTMLButtonElement>("button[data-action]");
+  if (!button) return;
+  hideContextMenu();
+  void handleContextAction(button.dataset.action ?? "");
+});
+
+renameDialog.addEventListener("close", () => {
+  if (renameDialog.returnValue !== "save") return;
+  const spaceId = renameDialog.dataset.spaceId;
+  if (spaceId) {
+    void renameSpace(spaceId, renameInput.value);
+    return;
+  }
+  const sessionId = renameDialog.dataset.sessionId;
+  if (!sessionId) return;
+  void renameSession(sessionId, renameInput.value);
+});
+
+renameResetButton.addEventListener("click", () => {
+  const sessionId = renameDialog.dataset.sessionId;
+  if (!sessionId) return;
+  renameDialog.close("cancel");
+  void renameSession(sessionId, "");
+});
+
+profileDialog.addEventListener("close", () => {
+  if (profileDialog.returnValue !== "save") return;
+  void saveProfileDialog();
+});
+
+profileForm.addEventListener("submit", (event) => {
+  profileError.hidden = true;
+  profileError.textContent = "";
+  if (!envFromText(profileEnvInput.value)) {
+    event.preventDefault();
+  }
+});
+
+spaceDialog.addEventListener("close", () => {
+  if (spaceDialog.returnValue !== "save") return;
+  void createSpace(spaceTitleInput.value);
+});
+
+spaceEditCloseBtn.addEventListener("click", () => {
+  spaceEditDialog.close("cancel");
+});
+
+spaceEditCancelBtn.addEventListener("click", () => {
+  spaceEditDialog.close("cancel");
+});
+
+spaceEditTitleInput.addEventListener("input", () => {
+  const title = spaceEditTitleInput.value;
+  updateIconPreview(title);
+  const firstLetter = (title.trim() || "C").charAt(0).toUpperCase();
+  const swatches = spaceEditColorSwatches.querySelectorAll(".color-swatch");
+  swatches.forEach((swatch) => {
+    swatch.textContent = firstLetter;
+  });
+});
+
+spaceEditForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const nextTitle = spaceEditTitleInput.value.trim();
+  const nextStartupScript = spaceEditStartupScriptInput.value.trim();
+  if (!nextTitle) return;
+  saveSpaceMetadata(activeEditSpaceId, {
+    colorIndex: selectedColorIndex,
+    startupScript: nextStartupScript,
+  });
+  void renameSpace(activeEditSpaceId, nextTitle);
+  spaceEditDialog.close("save");
+});
+
+if (!("closedBy" in HTMLDialogElement.prototype)) {
+  spaceEditDialog.addEventListener("click", (event) => {
+    if (event.target !== spaceEditDialog) return;
+    const rect = spaceEditDialog.getBoundingClientRect();
+    const isDialogContent = (
+      rect.top <= event.clientY &&
+      event.clientY <= rect.top + rect.height &&
+      rect.left <= event.clientX &&
+      event.clientX <= rect.left + rect.width
+    );
+    if (isDialogContent) return;
+    spaceEditDialog.close("cancel");
+  });
+}
+
+window.addEventListener("resize", scheduleFit);
+
+window.addEventListener("beforeunload", () => {
+  if (pendingFitFrame !== undefined) cancelAnimationFrame(pendingFitFrame);
+  if (diagnosticsTimer !== undefined) window.clearInterval(diagnosticsTimer);
+  window.removeEventListener("resize", scheduleFit);
+  finishSplitResize(false);
+  disposePanes();
+});
+
+class TerminalPane {
+  readonly id: string;
+  readonly root: HTMLElement;
+  term: Terminal;
+  fitAddon: FitAddon;
+  socket: WebSocket | null = null;
+  lastCols = 0;
+  lastRows = 0;
+  title = "Terminal";
+  customTitle = false;
+  hasAttached = false;
+  private pendingWriteFrame: number | undefined;
+  private readonly pendingWrites: Array<string | Uint8Array> = [];
+  private pendingWheelFrame: number | undefined;
+  private pendingWheelLines = 0;
+
+  constructor(id: string, root: HTMLElement, session: TerminalSession | undefined) {
+    this.id = id;
+    this.root = root;
+    if (session) {
+      this.title = sessionTitle(session);
+      this.customTitle = Boolean(session.customTitle);
+    }
+    this.term = createTerminal();
+    this.fitAddon = new FitAddon();
+    this.term.loadAddon(this.fitAddon);
+    this.installWheelHandler();
+    this.term.onData((data) => this.send({ type: "input", data }));
+    this.term.onResize(({ cols, rows }) => {
+      this.lastCols = cols;
+      this.lastRows = rows;
+      this.send({ type: "resize", cols, rows });
+      renderDiagnostics();
+    });
+    this.term.open(root);
+    this.fitAddon.fit();
+    this.fitAddon.observeResize();
+    root.addEventListener("pointerdown", () => setActivePane(id));
+  }
+
+  async connect(restore: boolean): Promise<void> {
+    this.socket?.close();
+    setStatus("connecting", "Connecting");
+    offlineEl.hidden = true;
+    try {
+      const token = await getAgentToken();
+      const url = ptyURL(token, this.id, restore && !this.hasAttached, this.lastCols || this.term.cols, this.lastRows || this.term.rows);
+      const socket = new WebSocket(url);
+      this.socket = socket;
+      socket.binaryType = "arraybuffer";
+      socket.addEventListener("open", () => {
+        this.hasAttached = true;
+        this.fitAddon.fit();
+        if (this.lastCols > 0 && this.lastRows > 0) {
+          this.send({ type: "resize", cols: this.lastCols, rows: this.lastRows });
+        }
+        if (this.id === activePaneId) {
+          setStatus("connected", this.title);
+          this.focus();
+        }
+      });
+      socket.addEventListener("message", (event) => this.handleSocketMessage(event.data));
+      socket.addEventListener("close", () => {
+        if (this.id === activePaneId && statusEl.dataset.state === "connected") {
+          setStatus("offline", "Closed");
+        }
+      });
+      socket.addEventListener("error", () => {
+        if (this.id === activePaneId) {
+          setStatus("offline", "Offline");
+          offlineEl.hidden = false;
+        }
+      });
+    } catch (error) {
+      console.error(error);
+      if (this.id === activePaneId) {
+        setStatus("offline", "Offline");
+        offlineEl.hidden = false;
+      }
+    }
+  }
+
+  focus(): void {
+    this.term.focus();
+    setStatus(this.socket?.readyState === WebSocket.OPEN ? "connected" : "connecting", this.title);
+    document.title = `${this.title} - ${APP_TITLE}`;
+    updateActiveDebugTabTitle(this.title);
+    renderDiagnostics();
+  }
+
+  fit(): void {
+    this.fitAddon.fit();
+  }
+
+  dispose(): void {
+    if (this.pendingWriteFrame !== undefined) cancelAnimationFrame(this.pendingWriteFrame);
+    if (this.pendingWheelFrame !== undefined) cancelAnimationFrame(this.pendingWheelFrame);
+    this.socket?.close();
+    this.term.dispose();
+  }
+
+  private send(message: Record<string, unknown>): void {
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
+    this.socket.send(JSON.stringify(message));
+  }
+
+  private handleSocketMessage(data: string | ArrayBuffer | Blob): void {
+    if (typeof data === "string") {
+      this.handleAgentText(data);
+      return;
+    }
+    if (data instanceof ArrayBuffer) {
+      this.enqueueWrite(new Uint8Array(data));
+      return;
+    }
+    void data.arrayBuffer().then((buffer) => this.enqueueWrite(new Uint8Array(buffer)));
+  }
+
+  private handleAgentText(data: string): void {
+    try {
+      const message = JSON.parse(data) as AgentMessage;
+      if (message.type === "status" && message.shell) {
+        if (!this.customTitle) this.title = pathBaseName(message.shell);
+        if (this.id === activePaneId) this.focus();
+      } else if (message.type === "exit") {
+        this.enqueueWrite(`\r\n[process exited ${message.code ?? 0}]\r\n`);
+        if (this.id === activePaneId) setStatus("offline", "Exited");
+      } else if (message.type === "error") {
+        this.enqueueWrite(`\r\n[agent error] ${message.message ?? data}\r\n`);
+      }
+    } catch {
+      this.enqueueWrite(data);
+    }
+  }
+
+  private enqueueWrite(data: string | Uint8Array): void {
+    this.pendingWrites.push(data);
+    if (this.pendingWriteFrame !== undefined) return;
+    this.pendingWriteFrame = requestAnimationFrame(() => this.flushWrites());
+  }
+
+  private flushWrites(): void {
+    this.pendingWriteFrame = undefined;
+    if (this.pendingWrites.length === 0) return;
+    const writes = this.pendingWrites.splice(0);
+    let text = "";
+    let bytes: Uint8Array[] = [];
+    for (const write of writes) {
+      if (typeof write === "string") {
+        if (bytes.length > 0) {
+          this.term.write(concatBytes(bytes));
+          bytes = [];
+        }
+        text += write;
+      } else {
+        if (text) {
+          this.term.write(text);
+          text = "";
+        }
+        bytes.push(write);
+      }
+    }
+    if (text) this.term.write(text);
+    if (bytes.length > 0) this.term.write(concatBytes(bytes));
+  }
+
+  private installWheelHandler(): void {
+    this.term.attachCustomWheelEventHandler((event) => {
+      if (this.term.wasmTerm?.isAlternateScreen()) return false;
+      const lineHeight = this.term.renderer?.getMetrics().height ?? 20;
+      let deltaLines: number;
+      if (event.deltaMode === WheelEvent.DOM_DELTA_PIXEL) {
+        deltaLines = (event.deltaY / lineHeight) * settings.scrollSensitivity;
+      } else if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
+        deltaLines = event.deltaY;
+      } else {
+        deltaLines = event.deltaY * this.term.rows;
+      }
+      this.pendingWheelLines += deltaLines;
+      if (this.pendingWheelFrame === undefined) {
+        this.pendingWheelFrame = requestAnimationFrame(() => {
+          this.pendingWheelFrame = undefined;
+          const lines = this.pendingWheelLines;
+          this.pendingWheelLines = 0;
+          if (lines !== 0) this.term.scrollLines(lines);
+        });
+      }
+      return true;
+    });
+  }
+}
+
+async function boot(): Promise<void> {
+  initActions();
+  initPalette();
+  window.addEventListener("command-palette-closed", () => {
+    activePane()?.focus();
+  });
+
+  await registerServiceWorker();
+
+  initDebugShell(appRoot, renderCurrentRoute);
+
+  await renderCurrentRoute();
+  updateDiagnosticsTimer();
+}
+
+async function renderCurrentRoute(): Promise<void> {
+  if (isSettingsRoute()) {
+    disposeTerminalPage();
+    renderSettingsPage();
+    updateDebugShellFromLocation("App Menu");
+    topbarSpacesButton.classList.add("toolbar-button-active");
+    clearTopbarTabs();
+    return;
+  }
+
+  settingsRoot.hidden = true;
+  terminalRoot.hidden = false;
+  document.title = `Terminal - ${APP_TITLE}`;
+  await ensureTerminalRuntime();
+  parentSessionId = await ensureParentSession();
+  const workspace = await getJSON<Workspace>(`/api/tabs/${encodeURIComponent(parentSessionId)}`);
+  renderWorkspace(workspace, firstLeaf(workspace.layout));
+  updateDiagnosticsTimer();
+  updateDebugShellFromLocation("Terminal");
+  topbarSpacesButton.classList.remove("toolbar-button-active");
+  await renderTopbarTabs(workspace);
+}
+
+async function ensureTerminalRuntime(): Promise<void> {
+  if (terminalRuntimeReady) return;
+  await loadCustomFont(settings);
+  await init("/ghostty-vt.wasm");
+  terminalRuntimeReady = true;
+}
+
+function createTerminal(): Terminal {
+  const nextTerm = new Terminal({
+    cols: 80,
+    rows: 24,
+    cursorBlink: settings.cursorBlink,
+    cursorStyle: settings.cursorStyle,
+    fontFamily: terminalFontFamily(settings),
+    fontSize: settings.fontSize,
+    scrollback: settings.scrollback,
+    smoothScrollDuration: 0,
+    scrollbarWidth: 0,
+    theme: getThemePalette(settings.theme),
+  });
+
+  nextTerm.attachCustomKeyEventHandler(
+    ((event: KeyboardEvent) => shouldPassThroughSystemShortcut(event) ? false : undefined) as (
+      event: KeyboardEvent,
+    ) => boolean,
+  );
+
+  return nextTerm;
+}
+
+function renderWorkspace(workspace: Workspace, focusSessionId: string): void {
+  currentWorkspace = workspace;
+  parentSessionId = workspace.session.id;
+  disposePanes();
+  const body = document.createElement("div");
+  body.className = "workspace-body";
+  body.append(renderLayoutNode(workspace.layout));
+  terminalRoot.replaceChildren(body);
+  const focusId = panes.has(focusSessionId) ? focusSessionId : firstLeaf(workspace.layout);
+  setActivePane(focusId);
+  for (const pane of panes.values()) {
+    void pane.connect(true);
+  }
+  scheduleFit();
+}
+
+async function renderTopbarTabs(workspace: Workspace): Promise<void> {
+  const spaceId = workspace.session.spaceId || selectedSpaceId || DEFAULT_SPACE_ID;
+  try {
+    const space = await getJSON<Space>(`/api/spaces/${encodeURIComponent(spaceId)}`);
+    topbarTabsContainer.innerHTML = "";
+
+    for (const tab of space.tabs) {
+      const isSelected = tab.id === parentSessionId;
+      const tabEl = document.createElement("div");
+      tabEl.className = "topbar-tab-item";
+      tabEl.dataset.selected = isSelected ? "true" : "false";
+
+      const btn = document.createElement("button");
+      btn.className = "topbar-tab-btn";
+      btn.type = "button";
+      btn.role = "tab";
+      btn.ariaSelected = isSelected ? "true" : "false";
+
+      const span = document.createElement("span");
+      span.textContent = tab.title || "Terminal";
+      btn.appendChild(span);
+
+      btn.addEventListener("click", () => {
+        if (tab.id !== parentSessionId) {
+          openAppURL(`/terminal.html?tab=${encodeURIComponent(tab.id)}`);
+        }
+      });
+      tabEl.appendChild(btn);
+
+      if (space.tabs.length > 1) {
+        const closeBtn = document.createElement("button");
+        closeBtn.className = "topbar-tab-close";
+        closeBtn.type = "button";
+        closeBtn.title = `Close ${tab.title || "Terminal"}`;
+        closeBtn.ariaLabel = `Close ${tab.title || "Terminal"}`;
+        closeBtn.textContent = "×";
+        closeBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          if (!window.confirm(`Close tab "${tab.title || "Terminal"}" and all of its panes?`)) return;
+          const response = await fetch(`/api/tabs/${encodeURIComponent(tab.id)}`, {
+            method: "DELETE",
+            credentials: "same-origin",
+          });
+          if (response.ok) {
+            addClosedTab(tab);
+            if (tab.id === parentSessionId) {
+              const remaining = space.tabs.filter((candidate) => candidate.id !== tab.id);
+              if (remaining.length > 0) {
+                openAppURL(`/terminal.html?tab=${encodeURIComponent(remaining[0].id)}`);
+              } else {
+                openAppURL("/");
+              }
+            } else {
+              const current = await getJSON<Workspace>(`/api/tabs/${encodeURIComponent(parentSessionId)}`);
+              await renderTopbarTabs(current);
+            }
+          }
+        });
+        tabEl.appendChild(closeBtn);
+      }
+
+      topbarTabsContainer.appendChild(tabEl);
+    }
+  } catch (error) {
+    console.error("failed to render topbar tabs", error);
+  }
+}
+
+function clearTopbarTabs(): void {
+  topbarTabsContainer.innerHTML = "";
+}
+
+function renderLayoutNode(node: SessionLayoutNode): HTMLElement {
+  if (node.type === "leaf") {
+    const paneRoot = document.createElement("section");
+    paneRoot.className = "terminal-pane";
+    paneRoot.dataset.paneId = node.sessionId;
+    paneRoot.tabIndex = -1;
+    panes.set(node.sessionId, new TerminalPane(node.sessionId, paneRoot, sessionForPane(node.sessionId)));
+    return paneRoot;
+  }
+
+  const splitNode = node;
+  const split = document.createElement("section");
+  split.className = `split-node ${node.direction}`;
+  const first = document.createElement("div");
+  first.className = "split-child";
+  first.style.flexBasis = `${splitRatio(node.ratio || 0.5) * 100}%`;
+  first.append(renderLayoutNode(node.first));
+  const divider = document.createElement("div");
+  divider.className = "split-divider";
+  divider.tabIndex = 0;
+  divider.setAttribute("role", "separator");
+  divider.setAttribute("aria-orientation", node.direction === "horizontal" ? "vertical" : "horizontal");
+  divider.setAttribute("aria-valuemin", "20");
+  divider.setAttribute("aria-valuemax", "80");
+  divider.setAttribute("aria-label", "Resize terminal panes");
+  const second = document.createElement("div");
+  second.className = "split-child";
+  second.style.flexBasis = `${(1 - splitRatio(node.ratio || 0.5)) * 100}%`;
+  second.append(renderLayoutNode(node.second));
+  updateDividerValue(divider, node.ratio || 0.5);
+  divider.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    divider.setPointerCapture(event.pointerId);
+    activeResize = { pointerId: event.pointerId, node: splitNode, split, divider, first, second };
+    split.classList.add("resizing");
+    resizeSplitFromPointer(activeResize, event.clientX, event.clientY);
+  });
+  divider.addEventListener("keydown", (event) => {
+    const nextRatio = ratioFromKeyboard(node.ratio || 0.5, event.key, event.shiftKey);
+    if (nextRatio === undefined) return;
+    event.preventDefault();
+    applySplitRatio(node, first, second, nextRatio);
+    updateDividerValue(divider, node.ratio);
+    scheduleFit();
+    void persistCurrentLayout();
+  });
+  split.append(first, divider, second);
+  return split;
+}
+
+function resizeSplitFromPointer(state: SplitResizeState, clientX: number, clientY: number): void {
+  const nextRatio = ratioFromPointer(state.node.direction, state.split.getBoundingClientRect(), clientX, clientY);
+  applySplitRatio(state.node, state.first, state.second, nextRatio);
+  updateDividerValue(state.divider, state.node.ratio);
+  scheduleFit();
+}
+
+function finishSplitResize(persist: boolean): void {
+  if (!activeResize) return;
+  if (activeResize.divider.hasPointerCapture(activeResize.pointerId)) {
+    activeResize.divider.releasePointerCapture(activeResize.pointerId);
+  }
+  activeResize.split.classList.remove("resizing");
+  activeResize = null;
+  if (persist) void persistCurrentLayout();
+}
+
+async function persistCurrentLayout(): Promise<void> {
+  if (!parentSessionId || !currentWorkspace) return;
+  try {
+    const workspace = await patchJSON<Workspace>(`/api/tabs/${encodeURIComponent(parentSessionId)}/layout`, {
+      layout: currentWorkspace.layout,
+    });
+    currentWorkspace.session = workspace.session;
+    currentWorkspace.children = workspace.children;
+  } catch (error) {
+    console.error("persist layout failed", error);
+    await reloadCurrentWorkspace();
+  }
+}
+
+async function reloadCurrentWorkspace(): Promise<void> {
+  if (!parentSessionId) return;
+  try {
+    const focusId = activePaneId;
+    const workspace = await getJSON<Workspace>(`/api/tabs/${encodeURIComponent(parentSessionId)}`);
+    renderWorkspace(workspace, focusId);
+  } catch (error) {
+    console.error("reload workspace failed", error);
+  }
+}
+
+function updateDividerValue(divider: HTMLElement, ratio: number): void {
+  divider.setAttribute("aria-valuenow", String(Math.round(splitRatio(ratio) * 100)));
+}
+
+function scheduleFit(): void {
+  if (pendingFitFrame !== undefined) return;
+  pendingFitFrame = requestAnimationFrame(() => {
+    pendingFitFrame = undefined;
+    for (const pane of panes.values()) pane.fit();
+    hideContextMenu();
+  });
+}
+
+async function handleContextAction(action: string): Promise<void> {
+  switch (action) {
+    case "copy":
+      activePane()?.term.copySelection();
+      break;
+    case "paste": {
+      const text = await navigator.clipboard?.readText();
+      if (text) activePane()?.term.paste(text);
+      break;
+    }
+    case "select-all":
+      activePane()?.term.selectAll();
+      break;
+    case "rename":
+      openRenameDialog(activePaneId);
+      break;
+    case "duplicate-pane":
+      await splitActivePane("horizontal");
+      break;
+    case "copy-pane-id":
+      await copyToClipboard(activePaneId);
+      break;
+    case "new-tab":
+      void createTabInSpace(currentWorkspace?.session?.spaceId || selectedSpaceId || DEFAULT_SPACE_ID, undefined, { newTab: false });
+      break;
+    case "copy-tab-id":
+      await copyToClipboard(parentSessionId);
+      break;
+    case "split-right":
+    case "split":
+      await splitActivePane("horizontal");
+      break;
+    case "split-down":
+      await splitActivePane("vertical");
+      break;
+    case "restart-pane":
+      await restartActivePane();
+      break;
+    case "restart-tab":
+      await restartCurrentTab();
+      break;
+    case "detach":
+      await detachActivePane();
+      break;
+    case "close-pane":
+      await closeActivePane();
+      break;
+    case "close-tab":
+      await closeCurrentTab();
+      break;
+    case "clear":
+      activePane()?.term.clear();
+      break;
+    case "shortcuts":
+      openShortcutsDialog();
+      break;
+    case "settings":
+      openAppURL("/");
+      break;
+  }
+}
+
+function handleActionShortcut(event: KeyboardEvent): boolean {
+  if (!shouldHandleAppShortcut(event)) return false;
+
+  // PASS 1: Active sequence in progress?
+  if (isSequenceActive()) {
+    const result = advanceSequence(event);
+    if (result.status === "continue") {
+      showChordProgress(result.progress);
+      event.preventDefault();
+      event.stopPropagation();
+      return true;
+    }
+    if (result.status === "complete") {
+      hideChordIndicator();
+      const action = getAction(result.actionId);
+      if (action) {
+        const isEnabled = action.enabled ? action.enabled() : true;
+        if (!isEnabled) return false;
+        event.preventDefault();
+        event.stopPropagation();
+        void action.handler();
+        return true;
+      }
+    }
+    // mismatch: sequence was cancelled by advanceSequence, fall through
+    hideChordIndicator();
+  }
+
+  const allActions = getAllActions();
+  let matchedAction: Action | undefined;
+
+  // PASS 2: Custom multi-key (first chord match)
+  for (const action of allActions) {
+    const customChord = settings.keybindings?.[action.id];
+    if (customChord && isMultiChordBinding(customChord)) {
+      const chords = parseBindingSequence(customChord);
+      if (chords.length > 0 && matchKeyChord(event, chords[0])) {
+        startSequence(action.id, customChord);
+        showChordProgress(getSequenceProgress());
+        event.preventDefault();
+        event.stopPropagation();
+        return true;
+      }
+    }
+  }
+
+  // PASS 3: Custom single-key
+  for (const action of allActions) {
+    const customChord = settings.keybindings?.[action.id];
+    if (customChord && !isMultiChordBinding(customChord) && matchKeyChord(event, customChord)) {
+      matchedAction = action;
+      break;
+    }
+  }
+
+  // PASS 4: Default multi-key (first chord match)
+  if (!matchedAction) {
+    for (const action of allActions) {
+      const customChord = settings.keybindings?.[action.id];
+      if (customChord === undefined && action.defaultKeys && isMultiChordBinding(action.defaultKeys)) {
+        const chords = parseBindingSequence(action.defaultKeys);
+        if (chords.length > 0 && matchKeyChord(event, chords[0])) {
+          startSequence(action.id, action.defaultKeys);
+          showChordProgress(getSequenceProgress());
+          event.preventDefault();
+          event.stopPropagation();
+          return true;
+        }
+      }
+    }
+  }
+
+  // PASS 5: Default single-key
+  if (!matchedAction) {
+    for (const action of allActions) {
+      const customChord = settings.keybindings?.[action.id];
+      if (customChord === undefined && action.defaultKeys && !isMultiChordBinding(action.defaultKeys) && matchKeyChord(event, action.defaultKeys)) {
+        matchedAction = action;
+        break;
+      }
+    }
+  }
+
+  if (!matchedAction) return false;
+
+  const isEnabled = matchedAction.enabled ? matchedAction.enabled() : true;
+  if (!isEnabled) return false;
+
+  event.preventDefault();
+  event.stopPropagation();
+  void matchedAction.handler();
+  return true;
+}
+
+function shouldHandleAppShortcut(event: KeyboardEvent): boolean {
+  if (event.defaultPrevented || isSettingsRoute() || !currentWorkspace) return false;
+  if (isPaletteOpen()) return false;
+  if (document.querySelector("dialog[open]")) return false;
+  const target = event.target;
+  return !(target instanceof Element && isEditableShortcutTarget(target) && !terminalRoot.contains(target));
+}
+
+function isEditableShortcutTarget(target: Element): boolean {
+  if (target.closest("input, select, textarea")) return true;
+  const editable = target.closest<HTMLElement>("[contenteditable]");
+  return Boolean(editable?.isContentEditable);
+}
+
+function focusAdjacentPane(delta: -1 | 1): void {
+  if (!currentWorkspace) return;
+  const leaves = layoutLeaves(currentWorkspace.layout);
+  if (leaves.length === 0) return;
+  const index = leaves.indexOf(activePaneId);
+  const currentIndex = index >= 0 ? index : 0;
+  const nextIndex = (currentIndex + delta + leaves.length) % leaves.length;
+  setActivePane(leaves[nextIndex]);
+}
+
+function focusSpatialPane(direction: "left" | "right" | "up" | "down"): void {
+  const active = activePane();
+  if (!active) return;
+  const activeRect = active.root.getBoundingClientRect();
+  const activeCenter = {
+    x: activeRect.left + activeRect.width / 2,
+    y: activeRect.top + activeRect.height / 2
+  };
+
+  let bestPaneId: string | null = null;
+  let bestDistance = Infinity;
+
+  for (const [id, pane] of panes) {
+    if (id === activePaneId) continue;
+    const rect = pane.root.getBoundingClientRect();
+    const center = {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2
+    };
+
+    let isCandidate = false;
+    if (direction === "left" && center.x < activeCenter.x - 5) isCandidate = true;
+    else if (direction === "right" && center.x > activeCenter.x + 5) isCandidate = true;
+    else if (direction === "up" && center.y < activeCenter.y - 5) isCandidate = true;
+    else if (direction === "down" && center.y > activeCenter.y + 5) isCandidate = true;
+
+    if (isCandidate) {
+      const dx = center.x - activeCenter.x;
+      const dy = center.y - activeCenter.y;
+      const dist = (direction === "left" || direction === "right")
+        ? dx * dx + 4 * dy * dy
+        : 4 * dx * dx + dy * dy;
+
+      if (dist < bestDistance) {
+        bestDistance = dist;
+        bestPaneId = id;
+      }
+    }
+  }
+
+  if (bestPaneId) {
+    for (const pane of panes.values()) {
+      pane.root.classList.remove("zoomed");
+    }
+    setActivePane(bestPaneId);
+    scheduleFit();
+  }
+}
+
+function toggleZoomActivePane(): void {
+  const active = activePane();
+  if (!active) return;
+  const wasZoomed = active.root.classList.contains("zoomed");
+  for (const pane of panes.values()) {
+    pane.root.classList.remove("zoomed");
+  }
+  if (!wasZoomed) {
+    active.root.classList.add("zoomed");
+  }
+  scheduleFit();
+}
+
+async function navigateWorkspaceTab(delta: -1 | 1): Promise<void> {
+  if (!currentWorkspace?.session?.spaceId) return;
+  try {
+    const spaces = await getJSON<Space[]>("/api/spaces");
+    const space = spaces.find(s => s.id === currentWorkspace?.session?.spaceId);
+    if (!space || space.tabs.length <= 1) return;
+
+    const currentIndex = space.tabs.findIndex(t => t.id === parentSessionId);
+    if (currentIndex === -1) return;
+
+    const nextIndex = (currentIndex + delta + space.tabs.length) % space.tabs.length;
+    const nextTab = space.tabs[nextIndex];
+    openAppURL(`/terminal.html?tab=${encodeURIComponent(nextTab.id)}`);
+  } catch (error) {
+    console.error("navigate workspace tab failed", error);
+  }
+}
+
+async function pasteToActivePane(): Promise<void> {
+  const text = await navigator.clipboard?.readText();
+  if (text) activePane()?.term.paste(text);
+}
+
+function toggleDiagnosticsPanel(): void {
+  diagnosticsPanel.hidden = !diagnosticsPanel.hidden;
+  updateDiagnosticsTimer();
+}
+
+async function splitActivePane(direction: "horizontal" | "vertical"): Promise<void> {
+  const target = activePaneId || firstLeaf(currentWorkspace?.layout);
+  if (!parentSessionId || !target) return;
+  const workspace = await postJSON<Workspace>(`/api/tabs/${encodeURIComponent(parentSessionId)}/splits`, {
+    targetSessionId: target,
+    direction,
+  });
+  const previous = new Set(panes.keys());
+  const focus = layoutLeaves(workspace.layout).find((id) => !previous.has(id)) ?? target;
+  renderWorkspace(workspace, focus);
+}
+
+async function restartActivePane(): Promise<void> {
+  if (!activePaneId) return;
+  const session = await postJSON<TerminalSession>(`/api/panes/${encodeURIComponent(activePaneId)}/restart`);
+  applySessionUpdate(session);
+  const pane = panes.get(activePaneId);
+  if (!pane) return;
+  pane.hasAttached = false;
+  pane.term.clear();
+  await pane.connect(false);
+}
+
+async function restartCurrentTab(): Promise<void> {
+  if (!parentSessionId) return;
+  const workspace = await postJSON<Workspace>(`/api/tabs/${encodeURIComponent(parentSessionId)}/restart`);
+  renderWorkspace(workspace, activePaneId || firstLeaf(workspace.layout));
+}
+
+async function copyToClipboard(value: string): Promise<void> {
+  if (!value) return;
+  await navigator.clipboard?.writeText(value);
+}
+
+async function detachActivePane(): Promise<void> {
+  if (!parentSessionId || !activePaneId || activePaneId === parentSessionId) return;
+  const session = await postJSON<TerminalSession>(`/api/terminal-sessions/${encodeURIComponent(parentSessionId)}/detach`, {
+    sessionId: activePaneId,
+  });
+  openAppURL(`/terminal.html?tab=${encodeURIComponent(session.id)}`);
+  const workspace = await getJSON<Workspace>(`/api/tabs/${encodeURIComponent(parentSessionId)}`);
+  renderWorkspace(workspace, firstLeaf(workspace.layout));
+}
+
+async function closeActivePane(): Promise<void> {
+  if (!activePaneId || !currentWorkspace) return;
+  if (activePaneId === parentSessionId && layoutLeaves(currentWorkspace.layout).length > 1) return;
+  const isTab = activePaneId === parentSessionId;
+  const response = await fetch(`/${isTab ? "api/tabs" : "api/panes"}/${encodeURIComponent(activePaneId)}`, {
+    method: "DELETE",
+    credentials: "same-origin",
+  });
+  if (!response.ok) return;
+  if (activePaneId === parentSessionId) {
+    window.close();
+    return;
+  }
+  const workspace = await getJSON<Workspace>(`/api/tabs/${encodeURIComponent(parentSessionId)}`);
+  renderWorkspace(workspace, firstLeaf(workspace.layout));
+}
+
+async function closeCurrentTab(): Promise<void> {
+  if (!parentSessionId) return;
+  if (!window.confirm("Close this tab and all of its panes?")) return;
+  const response = await fetch(`/api/tabs/${encodeURIComponent(parentSessionId)}`, {
+    method: "DELETE",
+    credentials: "same-origin",
+  });
+  if (!response.ok) return;
+  window.close();
+}
+
+function setActivePane(sessionId: string): void {
+  if (!sessionId || !panes.has(sessionId)) return;
+  activePaneId = sessionId;
+  for (const [id, pane] of panes) {
+    pane.root.classList.toggle("active", id === sessionId);
+  }
+  activePane()?.focus();
+}
+
+function activePane(): TerminalPane | undefined {
+  return panes.get(activePaneId);
+}
+
+function sessionForPane(sessionId: string): TerminalSession | undefined {
+  if (!currentWorkspace) return undefined;
+  if (currentWorkspace.session.id === sessionId) return currentWorkspace.session;
+  return currentWorkspace.children.find((session) => session.id === sessionId);
+}
+
+function openRenameDialog(sessionId: string): void {
+  const session = sessionForPane(sessionId);
+  if (!session) return;
+  openRenameDialogForSession(session);
+}
+
+function openMenuRenameDialog(sessionId: string): void {
+  const session = listedSessions.find((candidate) => candidate.id === sessionId);
+  if (!session) return;
+  openRenameDialogForSession(session);
+}
+
+function openRenameDialogForSession(session: TerminalSession): void {
+  delete renameDialog.dataset.spaceId;
+  renameDialog.dataset.sessionId = session.id;
+  renameDialogTitle.textContent = "Rename tab";
+  renameResetButton.hidden = false;
+  renameInput.value = session.customTitle ? session.title : "";
+  renameInput.placeholder = sessionTitle(session);
+  if (!renameDialog.open) renameDialog.showModal();
+  renameInput.focus();
+  renameInput.select();
+}
+
+function openRenameDialogForSpace(space: Space): void {
+  delete renameDialog.dataset.sessionId;
+  renameDialog.dataset.spaceId = space.id;
+  renameDialogTitle.textContent = "Rename space";
+  renameResetButton.hidden = true;
+  renameInput.value = space.title;
+  renameInput.placeholder = "Space name";
+  if (!renameDialog.open) renameDialog.showModal();
+  renameInput.focus();
+  renameInput.select();
+}
+
+async function renameSession(sessionId: string, title: string): Promise<void> {
+  const existing = sessionForPane(sessionId) ?? listedSessions.find((candidate) => candidate.id === sessionId);
+  const collection = existing?.parentId ? "panes" : "tabs";
+  const session = await patchJSON<TerminalSession>(`/api/${collection}/${encodeURIComponent(sessionId)}`, { title });
+  applySessionUpdate(session);
+  if (settingsRoot.hidden) {
+    const pane = panes.get(session.id);
+    if (pane) {
+      pane.title = sessionTitle(session);
+      pane.customTitle = Boolean(session.customTitle);
+      if (pane.id === activePaneId) pane.focus();
+    }
+    if (currentWorkspace) {
+      void renderTopbarTabs(currentWorkspace);
+    }
+  } else {
+    if (!settingsRoot.hidden) {
+      await refreshLandingData();
+    } else {
+      await renderSpaceList();
+    }
+  }
+}
+
+function applySessionUpdate(session: TerminalSession): void {
+  if (!currentWorkspace) return;
+  if (currentWorkspace.session.id === session.id) {
+    currentWorkspace.session = { ...currentWorkspace.session, ...session };
+  }
+  currentWorkspace.children = currentWorkspace.children.map((child) => (child.id === session.id ? { ...child, ...session } : child));
+}
+
+function disposePanes(): void {
+  for (const pane of panes.values()) pane.dispose();
+  panes.clear();
+}
+
+function disposeTerminalPage(): void {
+  disposePanes();
+  terminalRoot.replaceChildren();
+  currentWorkspace = null;
+  parentSessionId = "";
+  activePaneId = "";
+}
+
+function showContextMenu(x: number, y: number): void {
+  updateContextMenuState();
+  contextMenu.hidden = false;
+  contextMenu.style.left = "0px";
+  contextMenu.style.top = "0px";
+  const rect = contextMenu.getBoundingClientRect();
+  const left = Math.min(x, window.innerWidth - rect.width - 8);
+  const top = Math.min(y, window.innerHeight - rect.height - 8);
+  contextMenu.style.left = `${Math.max(8, left)}px`;
+  contextMenu.style.top = `${Math.max(8, top)}px`;
+}
+
+function hideContextMenu(): void {
+  contextMenu.hidden = true;
+}
+
+function updateContextMenuState(): void {
+  for (const button of contextMenu.querySelectorAll<HTMLButtonElement>("button[data-action]")) {
+    const action = button.dataset.action ?? "";
+    button.disabled =
+      (["copy", "paste", "select-all", "clear", "copy-pane-id", "duplicate-pane", "rename", "restart-pane", "split-right", "split-down", "detach", "move-pane-to-tab", "zoom-pane", "close-pane"].includes(action) &&
+        !activePaneId) ||
+      (["copy-tab-id", "restart-tab", "close-tab"].includes(action) && !parentSessionId);
+  }
+}
+
+async function ensureParentSession(): Promise<string> {
+  const current = currentTabId();
+  if (current) return current;
+  const nextSession = await postJSON<TerminalSession>(`/api/spaces/${DEFAULT_SPACE_ID}/tabs`, {
+    profileId: settings.defaultProfileId,
+  });
+  const url = new URL(window.location.href);
+  url.searchParams.set("tab", nextSession.id);
+  url.searchParams.delete("session");
+  window.history.replaceState(null, "", url);
+  updateDebugShellFromLocation("Terminal");
+  return nextSession.id;
+}
+
+function currentTabId(): string {
+  const params = new URL(window.location.href).searchParams;
+  const tab = params.get("tab") || params.get("session") || "";
+  return /^[a-z0-9][a-z0-9-]{2,63}$/.test(tab) ? tab : "";
+}
+
+function setStatus(state: "connecting" | "connected" | "offline", label: string): void {
+  statusEl.dataset.state = state;
+  statusEl.textContent = label;
+}
+
+function renderDiagnostics(): void {
+  if (diagnosticsPanel.hidden) return;
+  const pane = activePane();
+  const canvas = pane?.root.querySelector("canvas");
+  const rect = canvas?.getBoundingClientRect() ?? pane?.root.getBoundingClientRect() ?? terminalRoot.getBoundingClientRect();
+  diagnosticsList.innerHTML = "";
+  for (const [label, value] of [
+    ["Renderer", "ghostty-web/canvas"],
+    ["Core", "ghostty-vt"],
+    ["Tab", parentSessionId || "?"],
+    ["Pane", activePaneId || "?"],
+    ["Panes", String(panes.size)],
+    ["DPR", formatNumber(window.devicePixelRatio || 1)],
+    ["Canvas", canvas ? `${canvas.width} x ${canvas.height}` : "?"],
+    ["CSS", `${formatNumber(rect.width)} x ${formatNumber(rect.height)}`],
+    ["Grid", `${pane?.term.cols || "?"} x ${pane?.term.rows || "?"}`],
+    ["Transport", socketState(pane?.socket ?? null)],
+  ]) {
+    const termEl = document.createElement("dt");
+    termEl.textContent = label;
+    const description = document.createElement("dd");
+    description.textContent = String(value);
+    diagnosticsList.append(termEl, description);
+  }
+}
+
+function renderSettingsPage(): void {
+  document.title = `Spaces - ${APP_TITLE}`;
+  terminalRoot.hidden = true;
+  offlineEl.hidden = true;
+  settingsRoot.hidden = false;
+  setStatus("connected", "Spaces");
+
+  settingsRoot.innerHTML = `
+    <div class="landing">
+      <div class="landing-left">
+        <div class="landing-brand">
+          Crostini Ghostty
+          <span>Terminal spaces</span>
+        </div>
+        <div>
+          <div class="landing-section-header">
+            <p class="landing-section-title">Spaces</p>
+            <button class="landing-icon-btn" type="button" id="newSpaceBtn" title="Create Space" aria-label="Create Space">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M2 4a1 1 0 011-1h3.5a1 1 0 01.7.3l1.6 1.6a1 1 0 00.7.3H13a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V4z"/>
+                <path d="M8 6v4M6 8h4"/>
+              </svg>
+            </button>
+          </div>
+          <ul class="space-list" id="spaceList">
+            <li class="landing-empty">Loading spaces</li>
+          </ul>
+        </div>
+        <div class="landing-footer">
+          <button class="landing-footer-btn" type="button" id="settingsGearBtn">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg>
+            Settings
+          </button>
+          <button class="landing-footer-btn" type="button" id="helpBtn">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 10.5v-.5M8 8.5C8 7.5 9 7 9 6c0-1.1-.9-2-2-2S5 4.9 5 6"/></svg>
+            Help
+          </button>
+        </div>
+      </div>
+      <div class="landing-right">
+        <div class="search-container">
+          <svg class="search-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="7" cy="7" r="4.5"/>
+            <path d="M10.5 10.5l4 4"/>
+          </svg>
+          <input type="text" id="searchSessionsInput" placeholder="Search sessions" autocomplete="off" />
+        </div>
+        <div class="recent-sessions-container">
+          <div class="recent-sessions-heading">
+            <p class="landing-section-title">Today</p>
+            <button class="new-session-link" type="button" id="newSessionTopBtn">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <path d="M11.5 2.5h2v2"/>
+                <path d="M13 2.5l-6.8 6.8"/>
+                <path d="M7 3.5H3.5a1 1 0 00-1 1v8a1 1 0 001 1h8a1 1 0 001-1V9"/>
+              </svg>
+              New session
+            </button>
+          </div>
+          <ul class="recent-sessions-list" id="recentSessionsList">
+            <li class="landing-empty">Loading sessions</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <form id="settingsForm" class="settings-form">
+      <button type="button" class="settings-back" id="settingsBackBtn">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M10 2L4 8l6 6"/></svg>
+        Back to spaces
+      </button>
+      <aside class="settings-nav" aria-label="Settings sections">
+        <div style="display: flex; flex-direction: column; gap: 8px; width: 100%;">
+          <a href="#settingsDisplay" aria-current="page">Display</a>
+          <a href="#settingsTheme">Theme</a>
+          <a href="#settingsTerminal">Terminal</a>
+          <a href="#settingsProfiles">Launch Profiles</a>
+          <a href="#settingsKeys">Keybindings</a>
+        </div>
+        <small>Crostini Ghostty<br />Local PWA</small>
+      </aside>
+      <section class="settings-section" id="settingsDisplay">
+        <h2>Display</h2>
+        <label class="setting-row">
+          <span><strong>Font family</strong><small>CSS font stack used by new terminal tabs.</small></span>
+          <input id="fontFamily" name="fontFamily" type="text" value="${escapeAttribute(settings.fontFamily)}" />
+        </label>
+        <label class="setting-row">
+          <span><strong>Font-face name</strong><small>Name to use for the custom font URL below.</small></span>
+          <input id="customFontName" name="customFontName" type="text" placeholder="Custom Terminal Font" value="${escapeAttribute(settings.customFontName)}" />
+        </label>
+        <label class="setting-row">
+          <span><strong>Font-face URL</strong><small>Optional WOFF2, WOFF, TTF, or OTF URL loaded before terminal startup.</small></span>
+          <input id="customFontUrl" name="customFontUrl" type="url" placeholder="/fonts/example.woff2" value="${escapeAttribute(settings.customFontUrl)}" />
+        </label>
+        <label class="setting-row">
+          <span><strong>Font size</strong><small>Controls terminal grid density and readability.</small></span>
+          <input id="fontSize" name="fontSize" type="number" min="12" max="22" step="1" value="${settings.fontSize}" />
+        </label>
+        <label class="setting-row">
+          <span><strong>App density</strong><small>Compact mode tightens app chrome around the terminal.</small></span>
+          <select id="density" name="density">
+            <option value="comfortable">Comfortable</option>
+            <option value="compact">Compact</option>
+          </select>
+        </label>
+        <label class="setting-row">
+          <span><strong>Blinking cursor</strong><small>Disable this if cursor blinking is distracting.</small></span>
+          <input id="cursorBlink" name="cursorBlink" type="checkbox" />
+        </label>
+        <label class="setting-row">
+          <span><strong>Cursor style</strong><small>Choose the terminal cursor shape.</small></span>
+          <select id="cursorStyle" name="cursorStyle">
+            <option value="block">Block</option>
+            <option value="underline">Underline</option>
+            <option value="bar">Bar</option>
+          </select>
+        </label>
+        <label class="setting-row">
+          <span><strong>Terminal padding</strong><small>Inner padding around the terminal view (0–32px).</small></span>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <input id="terminalPadding" name="terminalPadding" type="range" min="0" max="32" step="1" value="${settings.terminalPadding}" />
+            <span id="terminalPaddingValue" style="min-width: 32px; font-family: var(--font-mono); font-size: 13px; text-align: right;">${settings.terminalPadding}px</span>
+          </div>
+        </label>
+      </section>
+
+      <section class="settings-section" id="settingsTheme">
+        <h2>Theme</h2>
+        <label class="setting-row">
+          <span><strong>Terminal palette</strong><small>Choose the terminal colors used by new tabs.</small></span>
+          <select id="theme" name="theme">
+            <option value="system">Follow System</option>
+            <option value="dark">Dark</option>
+            <option value="highContrast">High Contrast</option>
+            <option value="soft">Soft Dark</option>
+            <option value="light">Light</option>
+            <option value="solarizedLight">Solarized Light</option>
+            <option value="catppuccinLatte">Catppuccin Latte</option>
+            <option value="tokyoNight">Tokyo Night</option>
+            <option value="dracula">Dracula</option>
+            <option value="custom">Custom</option>
+          </select>
+        </label>
+        <div id="customThemeContainer" style="display: none; padding: 14px 15px; border-bottom: 1px solid var(--color-border-subtle); grid-column: 1 / -1;">
+          <span><strong>Custom palette JSON</strong><small>Edit palette colors as JSON.</small></span>
+          <textarea id="customThemeJson" style="width: 100%; min-height: 120px; font-family: var(--font-mono); font-size: 11px; padding: 8px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); background: var(--color-app-bg); color: var(--color-text-bright); resize: vertical; margin-top: 4px;" spellcheck="false"></textarea>
+          <div style="display: flex; gap: 8px; justify-content: flex-end; align-items: center; width: 100%; margin-top: 6px;">
+            <span id="customThemeError" style="color: var(--color-danger); font-size: 11px; margin-right: auto; display: none;"></span>
+            <input type="file" id="importThemeFile" accept=".json" style="display: none;" />
+            <button type="button" class="secondary-button compact-button" id="importThemeBtn">Import</button>
+            <button type="button" class="secondary-button compact-button" id="exportThemeBtn">Export</button>
+          </div>
+        </div>
+        <label class="setting-row">
+          <span><strong>App accent</strong><small>Changes controls, focus rings, and status highlights.</small></span>
+          <select id="accent" name="accent">
+            <option value="green">Green</option>
+            <option value="blue">Blue</option>
+            <option value="amber">Amber</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="settings-section" id="settingsTerminal">
+        <h2>Terminal</h2>
+        <label class="setting-row">
+          <span><strong>Scrollback lines</strong><small>Higher values keep more history and use more memory.</small></span>
+          <select id="scrollback" name="scrollback">
+            <option value="1000">1,000</option>
+            <option value="5000">5,000</option>
+            <option value="10000">10,000</option>
+            <option value="20000">20,000</option>
+          </select>
+        </label>
+        <label class="setting-row">
+          <span><strong>Scroll sensitivity</strong><small>Adjust trackpad and mouse-wheel scroll speed.</small></span>
+          <input id="scrollSensitivity" name="scrollSensitivity" type="range" min="0.5" max="2" step="0.25" value="${settings.scrollSensitivity}" />
+        </label>
+      </section>
+
+      <section class="settings-section" id="settingsProfiles">
+        <h2>Launch Profiles</h2>
+        <div id="profileList" class="session-list"></div>
+        <div style="margin-top: 12px; padding: 0 15px 15px;">
+          <button class="primary-button" type="button" data-create-profile>New profile</button>
+        </div>
+      </section>
+
+      <section class="settings-section" id="settingsKeys">
+        <h2>Keybindings</h2>
+        <div id="keybindingsList" class="keybindings-list"></div>
+        <div style="margin-top: 12px;">
+          <button class="secondary-button" type="button" id="resetAllKeybindings">Reset all keybindings</button>
+        </div>
+      </section>
+
+      <!-- Hidden compatibility inputs for status bar settings -->
+      <div style="display: none;">
+        <select id="statusBarPosition" name="statusBarPosition">
+          <option value="hidden">Hidden</option>
+        </select>
+        <input id="statusBarShowPanes" name="statusBarShowPanes" type="checkbox" />
+        <input id="statusBarShowClock" name="statusBarShowClock" type="checkbox" />
+      </div>
+
+
+      <div id="settingsActions" class="settings-actions">
+        <button class="secondary-button" type="button" id="resetSettings">Reset defaults</button>
+        <button class="primary-button" type="submit">Save settings</button>
+      </div>
+    </form>
+  `;
+
+  const form = requiredElement<HTMLFormElement>("#settingsForm");
+  const theme = requiredElement<HTMLSelectElement>("#theme");
+  const accent = requiredElement<HTMLSelectElement>("#accent");
+  const density = requiredElement<HTMLSelectElement>("#density");
+  const scrollback = requiredElement<HTMLSelectElement>("#scrollback");
+  const cursorBlink = requiredElement<HTMLInputElement>("#cursorBlink");
+  const cursorStyle = requiredElement<HTMLSelectElement>("#cursorStyle");
+  const terminalPadding = requiredElement<HTMLInputElement>("#terminalPadding");
+  const terminalPaddingValue = requiredElement<HTMLElement>("#terminalPaddingValue");
+  const statusBarPosition = requiredElement<HTMLSelectElement>("#statusBarPosition");
+  const statusBarShowPanes = requiredElement<HTMLInputElement>("#statusBarShowPanes");
+  const statusBarShowClock = requiredElement<HTMLInputElement>("#statusBarShowClock");
+  const keybindingsList = requiredElement<HTMLElement>("#keybindingsList");
+
+  const customThemeContainer = requiredElement<HTMLElement>("#customThemeContainer");
+  const customThemeJson = requiredElement<HTMLTextAreaElement>("#customThemeJson");
+  const customThemeError = requiredElement<HTMLElement>("#customThemeError");
+  const importBtn = requiredElement<HTMLButtonElement>("#importThemeBtn");
+  const importFile = requiredElement<HTMLInputElement>("#importThemeFile");
+  const exportBtn = requiredElement<HTMLButtonElement>("#exportThemeBtn");
+
+  const updateCustomThemeVisibility = () => {
+    if (theme.value === "custom") {
+      customThemeContainer.style.display = "grid";
+      if (!customThemeJson.value.trim()) {
+        const palette = settings.theme.preset === "custom"
+          ? (settings.theme as { preset: "custom"; palette: TerminalPalette }).palette
+          : getThemePalette(settings.theme);
+        customThemeJson.value = JSON.stringify(palette, null, 2);
+      }
+    } else {
+      customThemeContainer.style.display = "none";
+    }
+  };
+
+  theme.addEventListener("change", updateCustomThemeVisibility);
+  updateCustomThemeVisibility();
+
+  importBtn.addEventListener("click", () => {
+    importFile.click();
+  });
+
+  importFile.addEventListener("change", () => {
+    const file = importFile.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result;
+        if (typeof text !== "string") return;
+        const parsed = JSON.parse(text);
+        customThemeJson.value = JSON.stringify(parsed, null, 2);
+        customThemeError.style.display = "none";
+        customThemeError.textContent = "";
+        theme.value = "custom";
+        updateCustomThemeVisibility();
+      } catch (err: any) {
+        customThemeError.textContent = `Import failed: ${err.message}`;
+        customThemeError.style.display = "block";
+      }
+    };
+    reader.readAsText(file);
+    importFile.value = "";
+  });
+
+  exportBtn.addEventListener("click", () => {
+    let paletteToExport: TerminalPalette;
+    if (theme.value === "custom") {
+      try {
+        paletteToExport = JSON.parse(customThemeJson.value);
+      } catch {
+        paletteToExport = getThemePalette({ preset: "dark" });
+      }
+    } else {
+      paletteToExport = getThemePalette({ preset: theme.value });
+    }
+    const blob = new Blob([JSON.stringify(paletteToExport, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${paletteToExport.name || "theme"}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  theme.value = settings.theme.preset;
+  accent.value = settings.accent;
+  density.value = settings.density;
+  scrollback.value = String(settings.scrollback);
+  cursorBlink.checked = settings.cursorBlink;
+  cursorStyle.value = settings.cursorStyle;
+  terminalPadding.value = String(settings.terminalPadding);
+  terminalPaddingValue.textContent = `${settings.terminalPadding}px`;
+
+  statusBarPosition.value = "hidden";
+  statusBarShowPanes.checked = false;
+  statusBarShowClock.checked = false;
+
+  renderKeybindingsList(keybindingsList);
+
+  requiredElement<HTMLButtonElement>("#resetAllKeybindings").addEventListener("click", () => {
+    settings.keybindings = {};
+    saveSettings(settings);
+    renderKeybindingsList(keybindingsList);
+  });
+
+  const switchSettingsSection = (sectionId: string) => {
+    const sections = form.querySelectorAll<HTMLElement>(".settings-section");
+    for (const sec of sections) {
+      sec.style.display = sec.id === sectionId ? "block" : "none";
+    }
+    const navLinks = form.querySelectorAll<HTMLAnchorElement>(".settings-nav a");
+    for (const link of navLinks) {
+      const href = link.getAttribute("href") || "";
+      if (href === `#${sectionId}`) {
+        link.setAttribute("aria-current", "page");
+      } else {
+        link.removeAttribute("aria-current");
+      }
+    }
+  };
+
+  switchSettingsSection("settingsDisplay");
+
+  form.querySelectorAll<HTMLAnchorElement>(".settings-nav a").forEach((link) => {
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      const href = link.getAttribute("href");
+      if (href && href.startsWith("#")) {
+        switchSettingsSection(href.substring(1));
+      }
+    });
+  });
+
+  terminalPadding.addEventListener("input", () => {
+    terminalPaddingValue.textContent = `${terminalPadding.value}px`;
+  });
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const nextSettings = readSettingsForm();
+    if (nextSettings) {
+      settings = nextSettings;
+      saveSettings(settings);
+      applyAppAppearanceAndTheme(settings);
+    }
+  });
+
+  const reset = () => {
+    settings = { ...DEFAULT_SETTINGS };
+    saveSettings(settings);
+    applyAppAppearanceAndTheme(settings);
+    renderSettingsPage();
+  };
+  requiredElement<HTMLButtonElement>("#resetSettings").addEventListener("click", reset);
+
+  requiredElement<HTMLButtonElement>("#settingsGearBtn").addEventListener("click", () => {
+    const landing = document.querySelector<HTMLElement>(".landing");
+    const form = document.querySelector<HTMLElement>("#settingsForm");
+    const settingsEl = document.querySelector<HTMLElement>("#settings");
+    if (landing && form && settingsEl) {
+      landing.style.display = "none";
+      form.classList.add("visible");
+      settingsEl.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  });
+
+  requiredElement<HTMLButtonElement>("#settingsBackBtn").addEventListener("click", () => {
+    const landing = document.querySelector<HTMLElement>(".landing");
+    const form = document.querySelector<HTMLElement>("#settingsForm");
+    const settingsEl = document.querySelector<HTMLElement>("#settings");
+    if (landing && form && settingsEl) {
+      form.classList.remove("visible");
+      landing.style.display = "";
+      settingsEl.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  });
+
+  const spaceList = requiredElement<HTMLElement>("#spaceList");
+
+  requiredElement<HTMLButtonElement>("#newSpaceBtn").addEventListener("click", () => {
+    openCreateSpaceDialog();
+  });
+
+  requiredElement<HTMLButtonElement>("#newSessionTopBtn").addEventListener("click", () => {
+    void createTabInSpace(selectedSpaceId);
+  });
+
+  requiredElement<HTMLButtonElement>("#helpBtn").addEventListener("click", () => {
+    if (!shortcutsDialog.open) shortcutsDialog.showModal();
+  });
+
+  requiredElement<HTMLInputElement>("#searchSessionsInput").addEventListener("input", () => {
+    void renderLandingRecentSessions();
+  });
+
+  void refreshLandingData();
+  void renderProfileList();
+}
+
+function getSpaceBadgeColors(title: string, spaceId?: string): { bg: string; fg: string } {
+  if (spaceId) {
+    const meta = getSpaceMetadata(spaceId);
+    if (meta && typeof meta.colorIndex === 'number' && meta.colorIndex >= 0 && meta.colorIndex < SPACE_PRESET_COLORS.length) {
+      return SPACE_PRESET_COLORS[meta.colorIndex];
+    }
+  }
+  const lower = title.toLowerCase();
+  if (lower === "default space" || lower.includes("default")) {
+    return { bg: "light-dark(#e2e8f0, #2d3748)", fg: "light-dark(#4a5568, #e2e8f0)" };
+  }
+  if (lower.includes("company") || lower.includes("work")) {
+    return { bg: "light-dark(#c6f6d5, #22543d)", fg: "light-dark(#22543d, #c6f6d5)" };
+  }
+  if (lower.includes("code") || lower.includes("project") || lower.includes("dev")) {
+    return { bg: "light-dark(#e2e8f0, #1a202c)", fg: "light-dark(#1a202c, #edf2f7)" };
+  }
+  let hash = 0;
+  for (let i = 0; i < title.length; i++) {
+    hash = title.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue = Math.abs(hash) % 360;
+  return {
+    bg: `hsl(${hue}, 60%, light-dark(85%, 25%))`,
+    fg: `hsl(${hue}, 60%, light-dark(25%, 85%))`,
+  };
+}
+
+let landingFetchSeq = 0;
+
+function renderLandingSpaceList(container: HTMLElement, spaces: Space[]): void {
+  if (spaces.length === 0) {
+    container.innerHTML = `<li class="landing-empty">No spaces yet</li>`;
+    return;
+  }
+
+  container.innerHTML = "";
+  for (const space of spaces) {
+    const li = document.createElement("li");
+    li.className = "space-item";
+    li.setAttribute("data-active", space.id === selectedSpaceId ? "true" : "false");
+
+    const badge = document.createElement("span");
+    badge.className = "space-badge";
+    const colors = getSpaceBadgeColors(space.title, space.id);
+    badge.style.backgroundColor = colors.bg;
+    badge.style.color = colors.fg;
+    badge.textContent = space.title.charAt(0).toUpperCase();
+    li.appendChild(badge);
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "space-item-name";
+    nameSpan.textContent = space.title;
+    li.appendChild(nameSpan);
+
+    li.addEventListener("click", () => {
+      if (selectedSpaceId !== space.id) {
+        selectedSpaceId = space.id;
+        for (const child of Array.from(container.children)) {
+          child.setAttribute("data-active", "false");
+        }
+        li.setAttribute("data-active", "true");
+        void renderLandingRecentSessions();
+      }
+    });
+
+    const editBtn = document.createElement("button");
+    editBtn.className = "space-item-action";
+    editBtn.textContent = "Edit";
+    editBtn.setAttribute("aria-label", `Edit ${space.title}`);
+    editBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openEditSpaceDialog(space);
+    });
+    li.appendChild(editBtn);
+
+    if (space.id !== DEFAULT_SPACE_ID) {
+      const closeBtn = document.createElement("button");
+      closeBtn.className = "space-item-close";
+      closeBtn.textContent = "x";
+      closeBtn.setAttribute("aria-label", `Delete ${space.title}`);
+      closeBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        void deleteSpace(space.id);
+      });
+      li.appendChild(closeBtn);
+    }
+    container.appendChild(li);
+  }
+}
+
+function renderLandingRecentSessions(): void {
+  const container = document.querySelector<HTMLElement>("#recentSessionsList");
+  if (!container) return;
+
+  const searchInput = document.querySelector<HTMLInputElement>("#searchSessionsInput");
+  const query = searchInput ? searchInput.value.trim().toLowerCase() : "";
+
+  const selectedSpace = listedSpaces.find((s) => s.id === selectedSpaceId);
+  const activeTabs = selectedSpace ? selectedSpace.tabs : [];
+
+  let sessionsToRender: TerminalSession[] = [];
+  if (query) {
+    sessionsToRender = listedSessions.filter((session) => {
+      const titleMatch = session.title.toLowerCase().includes(query);
+      const shellMatch = (session.shell || "").toLowerCase().includes(query);
+      const spaceName = listedSpaces.find((s) => s.id === session.spaceId)?.title || "";
+      const spaceMatch = spaceName.toLowerCase().includes(query);
+      return titleMatch || shellMatch || spaceMatch;
+    });
+  } else {
+    sessionsToRender = activeTabs;
+  }
+
+  if (sessionsToRender.length === 0) {
+    container.innerHTML = `
+      <li class="landing-empty">
+        ${query ? "No matching sessions found." : "No active sessions in this space."}
+      </li>
+    `;
+    return;
+  }
+
+  container.innerHTML = "";
+  for (const session of sessionsToRender) {
+    const li = document.createElement("li");
+    li.className = "session-item-row";
+
+    const titleSpan = document.createElement("span");
+    titleSpan.className = "session-item-title";
+    titleSpan.textContent = session.title || "Terminal";
+    li.appendChild(titleSpan);
+
+    const space = listedSpaces.find((s) => s.id === session.spaceId);
+    if (space) {
+      const tag = document.createElement("span");
+      tag.className = "session-item-tag";
+      tag.textContent = space.title;
+      li.appendChild(tag);
+    }
+
+    li.addEventListener("click", () => {
+      openAppURL(`/terminal.html?tab=${encodeURIComponent(session.id)}`);
+    });
+
+    const actionsDiv = document.createElement("div");
+    actionsDiv.className = "session-item-actions";
+
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "session-item-close";
+    closeBtn.textContent = "x";
+    closeBtn.title = "Close session";
+    closeBtn.setAttribute("aria-label", `Close ${session.title || "session"}`);
+    closeBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const response = await fetch(`/api/tabs/${encodeURIComponent(session.id)}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
+      if (response.ok) {
+        void refreshLandingData();
+      }
+    });
+    actionsDiv.appendChild(closeBtn);
+    li.appendChild(actionsDiv);
+
+    container.appendChild(li);
+  }
+}
+
+async function refreshLandingData(): Promise<void> {
+  const seq = ++landingFetchSeq;
+  try {
+    const spaces = await getJSON<Space[]>("/api/spaces");
+    if (seq !== landingFetchSeq) return;
+
+    listedSpaces = spaces;
+    listedSessions = spaces.flatMap((space) => space.tabs);
+
+    // Ensure selectedSpaceId is still valid, fallback deterministically
+    if (!spaces.some((s) => s.id === selectedSpaceId)) {
+      if (spaces.some((s) => s.id === DEFAULT_SPACE_ID)) {
+        selectedSpaceId = DEFAULT_SPACE_ID;
+      } else if (spaces.length > 0) {
+        selectedSpaceId = spaces[0].id;
+      } else {
+        selectedSpaceId = DEFAULT_SPACE_ID;
+      }
+    }
+
+    const spaceList = document.querySelector<HTMLElement>("#spaceList");
+    if (spaceList) {
+      renderLandingSpaceList(spaceList, spaces);
+    }
+    renderLandingRecentSessions();
+  } catch (error) {
+    if (seq === landingFetchSeq) {
+      console.error("Failed to refresh landing data:", error);
+      const spaceList = document.querySelector<HTMLElement>("#spaceList");
+      if (spaceList) {
+        spaceList.innerHTML = `<li class="landing-empty">Could not load spaces</li>`;
+      }
+      const recentSessionsList = document.querySelector<HTMLElement>("#recentSessionsList");
+      if (recentSessionsList) {
+        recentSessionsList.innerHTML = `<li class="landing-empty">Could not load sessions</li>`;
+      }
+    }
+  }
+}
+
+type ClosedTabEntry = {
+  id: string;
+  title: string;
+  closedAt: string;
+};
+
+function loadClosedTabs(): ClosedTabEntry[] {
+  try {
+    const raw = localStorage.getItem("crostini-ghostty-closed-tabs");
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveClosedTabs(tabs: ClosedTabEntry[]): void {
+  localStorage.setItem("crostini-ghostty-closed-tabs", JSON.stringify(tabs.slice(0, 20)));
+}
+
+function addClosedTab(session: TerminalSession): void {
+  const tabs = loadClosedTabs();
+  tabs.unshift({
+    id: session.id,
+    title: sessionTitle(session),
+    closedAt: new Date().toISOString(),
+  });
+  saveClosedTabs(tabs);
+}
+
+async function renderClosedTabList(container: HTMLElement): Promise<void> {
+  const tabs = loadClosedTabs();
+  if (tabs.length === 0) {
+    container.innerHTML = `<li class="landing-empty">No recently closed tabs</li>`;
+    return;
+  }
+  container.innerHTML = "";
+  for (const tab of tabs) {
+    const li = document.createElement("li");
+    li.className = "closed-tab-item";
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "closed-tab-name";
+    nameSpan.textContent = tab.title;
+
+    const timeSpan = document.createElement("span");
+    timeSpan.className = "closed-tab-time";
+    const d = new Date(tab.closedAt);
+    timeSpan.textContent = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "closed-tab-delete";
+    deleteBtn.textContent = "x";
+    deleteBtn.setAttribute("aria-label", `Delete ${tab.title}`);
+    deleteBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      await fetch(`/api/tabs/${encodeURIComponent(tab.id)}`, { method: "DELETE", credentials: "same-origin" });
+      const updated = loadClosedTabs().filter((t) => t.id !== tab.id);
+      saveClosedTabs(updated);
+      void renderClosedTabList(container);
+    });
+
+    li.append(nameSpan, timeSpan, deleteBtn);
+    container.appendChild(li);
+  }
+}
+
+async function renderSpaceList(): Promise<void> {
+  const list = document.querySelector<HTMLElement>("#sessionList");
+  if (!list) return;
+  list.innerHTML = `<div class="session-empty">Loading spaces</div>`;
+  try {
+    const spaces = await getJSON<Space[]>("/api/spaces");
+    listedSpaces = spaces;
+    listedSessions = spaces.flatMap((space) => space.tabs);
+    if (spaces.length === 0) {
+      list.innerHTML = `<div class="session-empty">No spaces available</div>`;
+      return;
+    }
+    list.replaceChildren(...spaces.map((space) => renderSpace(space)));
+  } catch (error) {
+    console.error(error);
+    listedSpaces = [];
+    listedSessions = [];
+    list.innerHTML = `<div class="session-empty">Unable to load spaces</div>`;
+  }
+}
+
+async function renderProfileList(): Promise<void> {
+  const list = document.querySelector<HTMLElement>("#profileList");
+  if (!list) return;
+  list.innerHTML = `<div class="session-empty">Loading profiles</div>`;
+  try {
+    const profiles = await getJSON<Profile[]>("/api/profiles");
+    listedProfiles = profiles;
+    if (!profiles.some((profile) => profile.id === settings.defaultProfileId)) {
+      settings = { ...settings, defaultProfileId: DEFAULT_PROFILE_ID };
+      saveSettings(settings);
+    }
+    list.replaceChildren(...profiles.map((profile) => renderProfileRow(profile)));
+  } catch (error) {
+    console.error(error);
+    listedProfiles = [];
+    list.innerHTML = `<div class="session-empty">Unable to load profiles</div>`;
+  }
+}
+
+function renderProfileRow(profile: Profile): HTMLElement {
+  const row = document.createElement("article");
+  row.className = "session-row";
+  const isDefault = profile.id === settings.defaultProfileId;
+  const details = profileSummary(profile);
+  row.innerHTML = `
+    <div class="session-main">
+      <strong>${escapeHTML(profile.title)}${isDefault ? " · default" : ""}</strong>
+      <span>${escapeHTML(details)}</span>
+    </div>
+    <div class="session-meta">
+      <span>${escapeHTML(profile.id)}</span>
+      <time>${escapeHTML(formatSessionDate(profile.updatedAt || profile.createdAt))}</time>
+    </div>
+    <div class="session-actions">
+      <button class="icon-button" type="button" title="New terminal with profile" aria-label="New terminal with ${escapeAttribute(profile.title)}" data-launch-profile="${escapeAttribute(profile.id)}">
+        <span aria-hidden="true">↗</span>
+      </button>
+      <button class="icon-button" type="button" title="Use for new terminals" aria-label="Use ${escapeAttribute(profile.title)} for new terminals" data-select-profile="${escapeAttribute(profile.id)}"${isDefault ? " disabled" : ""}>
+        <span aria-hidden="true">✓</span>
+      </button>
+      <button class="icon-button" type="button" title="Duplicate profile" aria-label="Duplicate ${escapeAttribute(profile.title)}" data-duplicate-profile="${escapeAttribute(profile.id)}"${profile.id === DEFAULT_PROFILE_ID ? " disabled" : ""}>
+        <span aria-hidden="true">⧉</span>
+      </button>
+      <button class="icon-button" type="button" title="Edit profile" aria-label="Edit ${escapeAttribute(profile.title)}" data-edit-profile="${escapeAttribute(profile.id)}"${profile.id === DEFAULT_PROFILE_ID ? " disabled" : ""}>
+        <span aria-hidden="true">✎</span>
+      </button>
+      <button class="icon-button danger" type="button" title="Delete profile" aria-label="Delete ${escapeAttribute(profile.title)}" data-delete-profile="${escapeAttribute(profile.id)}"${profile.id === DEFAULT_PROFILE_ID ? " disabled" : ""}>
+        <span aria-hidden="true">${trashIcon()}</span>
+      </button>
+    </div>
+  `;
+  return row;
+}
+
+function profileSummary(profile: Profile): string {
+  const parts = [
+    profile.shell || "Automatic shell",
+    profile.workingDir || "Home directory",
+    `${Object.keys(profile.env ?? {}).length} env`,
+  ];
+  return parts.join(" · ");
+}
+
+function renderSpace(space: Space): HTMLElement {
+  const section = document.createElement("section");
+  section.className = "space-group";
+  const canDelete = space.id !== DEFAULT_SPACE_ID && space.tabs.length === 0;
+  const deleteTitle =
+    space.id === DEFAULT_SPACE_ID
+      ? "Default space cannot be removed"
+      : space.tabs.length === 0
+        ? "Delete space"
+        : "Only empty spaces can be removed";
+  section.innerHTML = `
+    <div class="space-heading">
+      <div>
+        <strong>${escapeHTML(space.title)}</strong>
+        <span>${space.tabCount} tab${space.tabCount === 1 ? "" : "s"}</span>
+      </div>
+      <div class="space-actions">
+        <button class="icon-button" type="button" title="New tab in ${escapeAttribute(space.title)}" aria-label="New tab in ${escapeAttribute(space.title)}" data-create-tab-space="${escapeAttribute(space.id)}">
+          <span aria-hidden="true">+</span>
+        </button>
+        <button class="icon-button" type="button" title="Edit space" aria-label="Edit ${escapeAttribute(space.title)}" data-rename-space="${escapeAttribute(space.id)}">
+          <span aria-hidden="true">✎</span>
+        </button>
+        <button class="icon-button" type="button" title="Copy space ID" aria-label="Copy space ID for ${escapeAttribute(space.title)}" data-copy-space-id="${escapeAttribute(space.id)}">
+          <span aria-hidden="true">#</span>
+        </button>
+        <button class="icon-button danger" type="button" title="${escapeAttribute(deleteTitle)}" aria-label="${escapeAttribute(deleteTitle)}" data-delete-space="${escapeAttribute(space.id)}"${canDelete ? "" : " disabled"}>
+          <span aria-hidden="true">${trashIcon()}</span>
+        </button>
+      </div>
+    </div>
+  `;
+  const rows = document.createElement("div");
+  rows.className = "space-tabs";
+  if (space.tabs.length === 0) {
+    rows.innerHTML = `<div class="session-empty compact">No terminal tabs</div>`;
+  } else {
+    rows.replaceChildren(...space.tabs.map((session) => renderTabRow(session)));
+  }
+  section.append(rows);
+  return section;
+}
+
+function renderTabRow(session: TerminalSession): HTMLElement {
+  const row = document.createElement("article");
+  row.className = "session-row";
+  row.innerHTML = `
+          <div class="session-main">
+            <strong>${escapeHTML(sessionTitle(session))}</strong>
+            <span>${escapeHTML(session.id)}${session.paneCount ? ` · ${session.paneCount} pane${session.paneCount === 1 ? "" : "s"}` : ""}</span>
+          </div>
+          <div class="session-meta">
+            <span class="session-status" data-state="${escapeAttribute(session.status)}">${escapeHTML(session.status)}</span>
+            <time>${escapeHTML(formatSessionDate(session.updatedAt || session.createdAt))}</time>
+          </div>
+          <div class="session-actions">
+            <a class="icon-button" href="${escapeAttribute(appURL(`/terminal.html?tab=${encodeURIComponent(session.id)}`))}" title="Open tab" aria-label="Open ${escapeAttribute(sessionTitle(session))} in a new tab">
+              <span aria-hidden="true">↗</span>
+            </a>
+            <button class="icon-button" type="button" title="Restart tab" aria-label="Restart ${escapeAttribute(sessionTitle(session))}" data-restart-session="${escapeAttribute(session.id)}">
+              <span aria-hidden="true">↻</span>
+            </button>
+            <button class="icon-button" type="button" title="Duplicate tab" aria-label="Duplicate ${escapeAttribute(sessionTitle(session))}" data-duplicate-session="${escapeAttribute(session.id)}">
+              <span aria-hidden="true">⧉</span>
+            </button>
+            <button class="icon-button" type="button" title="Copy tab ID" aria-label="Copy tab ID for ${escapeAttribute(sessionTitle(session))}" data-copy-tab-id="${escapeAttribute(session.id)}">
+              <span aria-hidden="true">#</span>
+            </button>
+            ${spaceSelectForTab(session)}
+            <button class="icon-button" type="button" title="Rename tab" aria-label="Rename ${escapeAttribute(sessionTitle(session))}" data-rename-session="${escapeAttribute(session.id)}">
+              <span aria-hidden="true">✎</span>
+            </button>
+            <button class="icon-button danger" type="button" title="Remove tab" aria-label="Remove ${escapeAttribute(sessionTitle(session))}" data-delete-session="${escapeAttribute(session.id)}">
+              <span aria-hidden="true">${trashIcon()}</span>
+            </button>
+          </div>
+        `;
+  return row;
+}
+
+function spaceSelectForTab(session: TerminalSession): string {
+  if (listedSpaces.length <= 1) return "";
+  const currentSpaceId = session.spaceId ?? listedSpaces.find((space) => space.tabs.some((tab) => tab.id === session.id))?.id ?? DEFAULT_SPACE_ID;
+  const options = listedSpaces
+    .map(
+      (space) =>
+        `<option value="${escapeAttribute(space.id)}"${space.id === currentSpaceId ? " selected" : ""}>${escapeHTML(space.title)}</option>`,
+    )
+    .join("");
+  return `
+            <select class="space-select" title="Move tab to space" aria-label="Move ${escapeAttribute(sessionTitle(session))} to space" data-move-session="${escapeAttribute(session.id)}">
+              ${options}
+            </select>
+          `;
+}
+
+document.addEventListener("click", (event) => {
+  const createProfileButton = (event.target as Element).closest<HTMLButtonElement>("button[data-create-profile]");
+  if (createProfileButton) {
+    void editProfile();
+    return;
+  }
+  const launchProfileButton = (event.target as Element).closest<HTMLButtonElement>("button[data-launch-profile]");
+  if (launchProfileButton?.dataset.launchProfile) {
+    void createTabInSpace(DEFAULT_SPACE_ID, launchProfileButton.dataset.launchProfile);
+    return;
+  }
+  const selectProfileButton = (event.target as Element).closest<HTMLButtonElement>("button[data-select-profile]");
+  if (selectProfileButton?.dataset.selectProfile) {
+    selectDefaultProfile(selectProfileButton.dataset.selectProfile);
+    return;
+  }
+  const duplicateProfileButton = (event.target as Element).closest<HTMLButtonElement>("button[data-duplicate-profile]");
+  if (duplicateProfileButton?.dataset.duplicateProfile) {
+    void duplicateProfile(duplicateProfileButton.dataset.duplicateProfile);
+    return;
+  }
+  const editProfileButton = (event.target as Element).closest<HTMLButtonElement>("button[data-edit-profile]");
+  if (editProfileButton?.dataset.editProfile) {
+    void editProfile(editProfileButton.dataset.editProfile);
+    return;
+  }
+  const deleteProfileButton = (event.target as Element).closest<HTMLButtonElement>("button[data-delete-profile]");
+  if (deleteProfileButton?.dataset.deleteProfile) {
+    void deleteProfile(deleteProfileButton.dataset.deleteProfile);
+    return;
+  }
+  const cleanupOrphansButton = (event.target as Element).closest<HTMLButtonElement>("button[data-cleanup-orphans]");
+  if (cleanupOrphansButton) {
+    void cleanupOrphanPanes();
+    return;
+  }
+  const createTabButton = (event.target as Element).closest<HTMLButtonElement>("button[data-create-tab-space]");
+  if (createTabButton?.dataset.createTabSpace) {
+    void createTabInSpace(createTabButton.dataset.createTabSpace);
+    return;
+  }
+  const renameSpaceButton = (event.target as Element).closest<HTMLButtonElement>("button[data-rename-space]");
+  if (renameSpaceButton?.dataset.renameSpace) {
+    openMenuSpaceRenameDialog(renameSpaceButton.dataset.renameSpace);
+    return;
+  }
+  const deleteSpaceButton = (event.target as Element).closest<HTMLButtonElement>("button[data-delete-space]");
+  if (deleteSpaceButton?.dataset.deleteSpace) {
+    void deleteSpace(deleteSpaceButton.dataset.deleteSpace);
+    return;
+  }
+  const copySpaceIdButton = (event.target as Element).closest<HTMLButtonElement>("button[data-copy-space-id]");
+  if (copySpaceIdButton?.dataset.copySpaceId) {
+    void copyToClipboard(copySpaceIdButton.dataset.copySpaceId);
+    return;
+  }
+  const renameButton = (event.target as Element).closest<HTMLButtonElement>("button[data-rename-session]");
+  if (renameButton?.dataset.renameSession) {
+    openMenuRenameDialog(renameButton.dataset.renameSession);
+    return;
+  }
+  const restartButton = (event.target as Element).closest<HTMLButtonElement>("button[data-restart-session]");
+  if (restartButton?.dataset.restartSession) {
+    void restartListedTab(restartButton.dataset.restartSession);
+    return;
+  }
+  const duplicateButton = (event.target as Element).closest<HTMLButtonElement>("button[data-duplicate-session]");
+  if (duplicateButton?.dataset.duplicateSession) {
+    void duplicateListedTab(duplicateButton.dataset.duplicateSession);
+    return;
+  }
+  const copyTabIdButton = (event.target as Element).closest<HTMLButtonElement>("button[data-copy-tab-id]");
+  if (copyTabIdButton?.dataset.copyTabId) {
+    void copyToClipboard(copyTabIdButton.dataset.copyTabId);
+    return;
+  }
+  const button = (event.target as Element).closest<HTMLButtonElement>("button[data-delete-session]");
+  if (!button) return;
+  const sessionId = button.dataset.deleteSession;
+  if (!sessionId) return;
+  void deleteTerminalSession(sessionId);
+});
+
+document.addEventListener("change", (event) => {
+  const spaceSelect = (event.target as Element).closest<HTMLSelectElement>("select[data-move-session]");
+  if (!spaceSelect?.dataset.moveSession) return;
+  void moveListedTab(spaceSelect.dataset.moveSession, spaceSelect.value);
+});
+
+async function deleteTerminalSession(sessionId: string): Promise<void> {
+  const session = listedSessions.find((candidate) => candidate.id === sessionId);
+  const title = session ? sessionTitle(session) : sessionId;
+  const paneCount = session?.paneCount ?? 1;
+  if (!window.confirm(`Delete tab "${title}" and ${paneCount} pane${paneCount === 1 ? "" : "s"}?`)) return;
+  const response = await fetch(`/api/tabs/${encodeURIComponent(sessionId)}`, {
+    method: "DELETE",
+    credentials: "same-origin",
+  });
+  if (!response.ok) {
+    console.error(`delete session ${sessionId} failed with ${response.status}`);
+    return;
+  }
+  if (session) addClosedTab(session);
+  if (!settingsRoot.hidden) {
+    await refreshLandingData();
+  } else {
+    await renderSpaceList();
+  }
+}
+
+async function restartListedTab(sessionId: string): Promise<void> {
+  const response = await fetch(`/api/tabs/${encodeURIComponent(sessionId)}/restart`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) {
+    console.error(`restart tab ${sessionId} failed with ${response.status}`);
+    return;
+  }
+  if (!settingsRoot.hidden) {
+    await refreshLandingData();
+  } else {
+    await renderSpaceList();
+  }
+}
+
+async function duplicateListedTab(sessionId: string): Promise<void> {
+  const session = listedSessions.find((candidate) => candidate.id === sessionId);
+  if (!session) return;
+  const spaceId =
+    session.spaceId ??
+    listedSpaces.find((space) => space.tabs.some((tab) => tab.id === sessionId))?.id ??
+    DEFAULT_SPACE_ID;
+  const profileId =
+    session.profileId && listedProfiles.some((profile) => profile.id === session.profileId)
+      ? session.profileId
+      : settings.defaultProfileId;
+  await createTabInSpace(spaceId, profileId);
+}
+
+async function moveListedTab(sessionId: string, spaceId: string): Promise<void> {
+  const session = listedSessions.find((candidate) => candidate.id === sessionId);
+  if (!session || !spaceId || session.spaceId === spaceId) return;
+  const response = await fetch(`/api/tabs/${encodeURIComponent(sessionId)}`, {
+    method: "PATCH",
+    credentials: "same-origin",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({ spaceId }),
+  });
+  if (!response.ok) {
+    console.error(`move tab ${sessionId} failed with ${response.status}`);
+  }
+  if (!settingsRoot.hidden) {
+    await refreshLandingData();
+  } else {
+    await renderSpaceList();
+  }
+}
+
+async function renderOrphanPanel(): Promise<void> {
+  const panel = document.querySelector<HTMLElement>("#orphanPanel");
+  if (!panel) return;
+  try {
+    const orphans = await getJSON<TerminalSession[]>("/api/terminal-sessions/orphans");
+    if (orphans.length === 0) {
+      panel.innerHTML = `<span>No orphan panes</span>`;
+      return;
+    }
+    panel.innerHTML = `
+      <span>${orphans.length} orphan pane${orphans.length === 1 ? "" : "s"} found</span>
+      <button class="secondary-button compact-button" type="button" data-cleanup-orphans>Clean up</button>
+    `;
+  } catch (error) {
+    console.error(error);
+    panel.innerHTML = `<span>Unable to check orphan panes</span>`;
+  }
+}
+
+async function cleanupOrphanPanes(): Promise<void> {
+  const panel = document.querySelector<HTMLElement>("#orphanPanel");
+  if (!window.confirm("Remove all orphan pane sessions?")) return;
+  const response = await fetch("/api/terminal-sessions/orphans", {
+    method: "DELETE",
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) {
+    console.error(`cleanup orphan panes failed with ${response.status}`);
+    return;
+  }
+  const result = (await response.json()) as OrphanCleanup;
+  if (panel) panel.innerHTML = `<span>Removed ${result.deleted} orphan pane${result.deleted === 1 ? "" : "s"}</span>`;
+}
+
+function selectDefaultProfile(profileId: string): void {
+  settings = normalizeSettings({ ...settings, defaultProfileId: profileId });
+  saveSettings(settings);
+  void renderProfileList();
+}
+
+async function editProfile(profileId?: string): Promise<void> {
+  const existing = profileId ? listedProfiles.find((candidate) => candidate.id === profileId) : undefined;
+  if (profileId && !existing) return;
+  if (existing?.id === DEFAULT_PROFILE_ID) return;
+  profileDialog.dataset.profileId = existing?.id ?? "";
+  profileDialog.returnValue = "";
+  profileDialogTitle.textContent = existing ? "Edit profile" : "New profile";
+  profileTitleInput.value = existing?.title ?? "";
+  profileShellInput.value = existing?.shell ?? "";
+  profileWorkingDirInput.value = existing?.workingDir ?? "";
+  profileEnvInput.value = envToText(existing?.env);
+  profileError.hidden = true;
+  profileError.textContent = "";
+  if (!profileDialog.open) profileDialog.showModal();
+  profileTitleInput.focus();
+  profileTitleInput.select();
+}
+
+async function saveProfileDialog(): Promise<void> {
+  const profileId = profileDialog.dataset.profileId || "";
+  if (profileId === DEFAULT_PROFILE_ID) return;
+  const existing = profileId ? listedProfiles.find((candidate) => candidate.id === profileId) : undefined;
+  if (profileId && !existing) return;
+  const env = envFromText(profileEnvInput.value);
+  if (!env) {
+    profileDialog.showModal();
+    profileEnvInput.focus();
+    return;
+  }
+  const title = profileTitleInput.value;
+  const shell = profileShellInput.value;
+  const workingDir = profileWorkingDirInput.value;
+  const payload = { title, shell, workingDir, env };
+  const url = existing ? `/api/profiles/${encodeURIComponent(existing.id)}` : "/api/profiles";
+  const response = await fetch(url, {
+    method: existing ? "PATCH" : "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    profileError.textContent = (await response.text()).trim() || "Unable to save profile";
+    profileError.hidden = false;
+    profileDialog.showModal();
+    return;
+  }
+  await renderProfileList();
+}
+
+async function duplicateProfile(profileId: string): Promise<void> {
+  const profile = listedProfiles.find((candidate) => candidate.id === profileId);
+  if (!profile || profile.id === DEFAULT_PROFILE_ID) return;
+  await postJSON<Profile>("/api/profiles", {
+    title: duplicateProfileTitle(profile.title),
+    shell: profile.shell ?? "",
+    workingDir: profile.workingDir ?? "",
+    env: { ...(profile.env ?? {}) },
+  });
+  await renderProfileList();
+}
+
+function duplicateProfileTitle(title: string): string {
+  const baseTitle = title.trim() || "Profile";
+  const copyTitle = `${baseTitle} copy`;
+  const existingTitles = new Set(listedProfiles.map((profile) => profile.title));
+  if (!existingTitles.has(copyTitle)) return copyTitle;
+  for (let index = 2; ; index += 1) {
+    const candidate = `${copyTitle} ${index}`;
+    if (!existingTitles.has(candidate)) return candidate;
+  }
+}
+
+async function deleteProfile(profileId: string): Promise<void> {
+  const profile = listedProfiles.find((candidate) => candidate.id === profileId);
+  if (!profile || profile.id === DEFAULT_PROFILE_ID) return;
+  if (!window.confirm(`Delete profile "${profile.title}"?`)) return;
+  const response = await fetch(`/api/profiles/${encodeURIComponent(profile.id)}`, {
+    method: "DELETE",
+    credentials: "same-origin",
+  });
+  if (!response.ok) {
+    console.error(`delete profile ${profile.id} failed with ${response.status}`);
+    return;
+  }
+  if (settings.defaultProfileId === profile.id) {
+    settings = { ...settings, defaultProfileId: DEFAULT_PROFILE_ID };
+    saveSettings(settings);
+  }
+  await renderProfileList();
+}
+
+function envToText(env: EnvVars | undefined): string {
+  return Object.entries(env ?? {})
+    .map(([key, value]) => `${key}=${value}`)
+    .join("\n");
+}
+
+function envFromText(value: string): EnvVars | null {
+  const env: EnvVars = {};
+  for (const rawLine of value.split(/\r?\n/)) {
+    if (!rawLine.trim()) continue;
+    const index = rawLine.indexOf("=");
+    const key = (index >= 0 ? rawLine.slice(0, index) : rawLine).trim();
+    const envValue = index >= 0 ? rawLine.slice(index + 1) : "";
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+      profileError.textContent = `Invalid environment variable name: ${key}`;
+      profileError.hidden = false;
+      return null;
+    }
+    env[key] = envValue;
+  }
+  return env;
+}
+
+interface SpaceMetadata {
+  colorIndex: number;
+  icon?: string;
+  startupScript?: string;
+}
+
+const SPACE_PRESET_COLORS = [
+  { bg: "light-dark(#fff0f6, #32101e)", fg: "light-dark(#d50067, #ff60ad)" }, // Pink
+  { bg: "light-dark(#e6fffa, #0c2d27)", fg: "light-dark(#008080, #3df5d5)" }, // Teal
+  { bg: "light-dark(#fffaf0, #361f0a)", fg: "light-dark(#dd6b20, #f6ad55)" }, // Orange
+  { bg: "light-dark(#faf5ff, #25123e)", fg: "light-dark(#805ad5, #b794f4)" }, // Purple
+  { bg: "light-dark(#ebf8ff, #0d2847)", fg: "light-dark(#3182ce, #63b3ed)" }, // Blue
+  { bg: "light-dark(#f0fff4, #122e1a)", fg: "light-dark(#38a169, #68d391)" }  // Green
+];
+
+function getSpaceMetadata(spaceId: string): SpaceMetadata {
+  try {
+    const raw = localStorage.getItem(`space_meta_${spaceId}`);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch (e) {
+    console.error(e);
+  }
+  let hash = 0;
+  for (let i = 0; i < spaceId.length; i++) {
+    hash = spaceId.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const colorIndex = Math.abs(hash) % 6;
+  return { colorIndex };
+}
+
+function saveSpaceMetadata(spaceId: string, meta: SpaceMetadata): void {
+  try {
+    localStorage.setItem(`space_meta_${spaceId}`, JSON.stringify(meta));
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+let activeEditSpaceId = "";
+let selectedColorIndex = 0;
+
+function renderSwatches(spaceTitle: string) {
+  spaceEditColorSwatches.innerHTML = "";
+  const firstLetter = (spaceTitle.trim() || "C").charAt(0).toUpperCase();
+  SPACE_PRESET_COLORS.forEach((colors, index) => {
+    const swatch = document.createElement("div");
+    swatch.className = `color-swatch`;
+    if (index === selectedColorIndex) {
+      swatch.classList.add("active");
+    }
+    swatch.style.backgroundColor = colors.bg;
+    swatch.style.color = colors.fg;
+    swatch.textContent = firstLetter;
+
+    swatch.addEventListener("click", () => {
+      selectedColorIndex = index;
+      const allSwatches = spaceEditColorSwatches.querySelectorAll(".color-swatch");
+      allSwatches.forEach((s, idx) => {
+        if (idx === index) {
+          s.classList.add("active");
+        } else {
+          s.classList.remove("active");
+        }
+      });
+      updateIconPreview(spaceEditTitleInput.value);
+    });
+    spaceEditColorSwatches.appendChild(swatch);
+  });
+}
+
+function updateIconPreview(spaceTitle: string) {
+  const firstLetter = (spaceTitle.trim() || "C").charAt(0).toUpperCase();
+  spaceEditIconPreview.textContent = firstLetter;
+  const colors = SPACE_PRESET_COLORS[selectedColorIndex];
+  spaceEditIconPreview.style.backgroundColor = colors.bg;
+  spaceEditIconPreview.style.color = colors.fg;
+}
+
+function openEditSpaceDialog(space: Space): void {
+  activeEditSpaceId = space.id;
+  spaceEditTitleInput.value = space.title;
+
+  const meta = getSpaceMetadata(space.id);
+  selectedColorIndex = meta.colorIndex;
+  spaceEditStartupScriptInput.value = meta.startupScript || "";
+
+  renderSwatches(space.title);
+  updateIconPreview(space.title);
+
+  if (!spaceEditDialog.open) spaceEditDialog.showModal();
+  spaceEditTitleInput.focus();
+  spaceEditTitleInput.select();
+}
+
+function openMenuSpaceRenameDialog(spaceId: string): void {
+  const space = listedSpaces.find((candidate) => candidate.id === spaceId);
+  if (!space) return;
+  openEditSpaceDialog(space);
+}
+
+function openCreateSpaceDialog(): void {
+  spaceDialog.returnValue = "";
+  spaceTitleInput.value = "";
+  if (!spaceDialog.open) spaceDialog.showModal();
+  spaceTitleInput.focus();
+}
+
+async function createSpace(title: string): Promise<void> {
+  await postJSON<Space>("/api/spaces", { title: title.trim() || undefined });
+  if (!settingsRoot.hidden) {
+    await refreshLandingData();
+  } else {
+    await renderSpaceList();
+  }
+}
+
+async function renameSpace(spaceId: string, title: string): Promise<void> {
+  await patchJSON<Space>(`/api/spaces/${encodeURIComponent(spaceId)}`, { title });
+  if (!settingsRoot.hidden) {
+    await refreshLandingData();
+  } else {
+    await renderSpaceList();
+  }
+}
+
+async function deleteSpace(spaceId: string): Promise<void> {
+  const space = listedSpaces.find((candidate) => candidate.id === spaceId);
+  if (!space || space.id === DEFAULT_SPACE_ID || space.tabs.length > 0) return;
+  const response = await fetch(`/api/spaces/${encodeURIComponent(spaceId)}`, {
+    method: "DELETE",
+    credentials: "same-origin",
+  });
+  if (!response.ok) {
+    console.error(`delete space ${spaceId} failed with ${response.status}`);
+    return;
+  }
+  if (!settingsRoot.hidden) {
+    await refreshLandingData();
+  } else {
+    await renderSpaceList();
+  }
+}
+
+async function createTabInSpace(spaceId: string, profileId = settings.defaultProfileId, options: { newTab?: boolean } = {}): Promise<void> {
+  const session = await postJSON<TerminalSession>(`/api/spaces/${encodeURIComponent(spaceId)}/tabs`, {
+    profileId,
+  });
+  openAppURL(`/terminal.html?tab=${encodeURIComponent(session.id)}`, options);
+  if (!settingsRoot.hidden) {
+    await refreshLandingData();
+  } else {
+    await renderSpaceList();
+  }
+}
+
+function readSettingsForm(): TerminalSettings | null {
+  const themePreset = requiredElement<HTMLSelectElement>("#theme").value;
+  let themeObj: TerminalTheme = { preset: themePreset };
+
+  if (themePreset === "custom") {
+    const jsonEl = document.querySelector<HTMLTextAreaElement>("#customThemeJson");
+    if (!jsonEl) {
+      themeObj = { preset: "dark" };
+    } else {
+      const errorEl = document.querySelector<HTMLElement>("#customThemeError");
+      const jsonText = jsonEl.value;
+      if (errorEl) {
+        errorEl.style.display = "none";
+        errorEl.textContent = "";
+      }
+      try {
+        const parsed = JSON.parse(jsonText);
+        const requiredFields = [
+          "name", "kind", "background", "foreground", "cursor", "selectionBackground",
+          "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
+          "brightBlack", "brightRed", "brightGreen", "brightYellow", "brightBlue",
+          "brightMagenta", "brightCyan", "brightWhite"
+        ];
+        for (const field of requiredFields) {
+          if (typeof parsed[field] !== "string" || !parsed[field].trim()) {
+            throw new Error(`Missing or invalid color field: "${field}"`);
+          }
+        }
+        themeObj = { preset: "custom", palette: parsed };
+      } catch (err: any) {
+        if (errorEl) {
+          errorEl.textContent = `Invalid palette JSON: ${err.message}`;
+          errorEl.style.display = "block";
+          requiredElement<HTMLElement>("#customThemeJson").focus();
+          return null;
+        }
+        console.error("Invalid custom theme:", err);
+        return null;
+      }
+    }
+  }
+
+  return normalizeSettings({
+    fontFamily: requiredElement<HTMLInputElement>("#fontFamily").value,
+    customFontName: requiredElement<HTMLInputElement>("#customFontName").value,
+    customFontUrl: requiredElement<HTMLInputElement>("#customFontUrl").value,
+    fontSize: Number(requiredElement<HTMLInputElement>("#fontSize").value),
+    scrollback: Number(requiredElement<HTMLSelectElement>("#scrollback").value),
+    cursorBlink: requiredElement<HTMLInputElement>("#cursorBlink").checked,
+    accent: requiredElement<HTMLSelectElement>("#accent").value,
+    density: requiredElement<HTMLSelectElement>("#density").value,
+    theme: themeObj,
+    cursorStyle: requiredElement<HTMLSelectElement>("#cursorStyle").value as any,
+    terminalPadding: Number(requiredElement<HTMLInputElement>("#terminalPadding").value),
+    scrollSensitivity: Number(requiredElement<HTMLInputElement>("#scrollSensitivity").value),
+    defaultProfileId: settings.defaultProfileId,
+    keybindings: settings.keybindings,
+    statusBarShowClock: false,
+    statusBarShowPanes: false,
+    statusBarPosition: "hidden",
+  });
+}
+
+function sessionTitle(session: TerminalSession): string {
+  return session.title || "Terminal";
+}
+
+function formatSessionDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function trashIcon(): string {
+  return `<svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-.7 11H7.7L7 9Zm3 2v7h2v-7h-2Zm4 0v7h2v-7h-2Z"/></svg>`;
+}
+
+function openShortcutsDialog(): void {
+  if (!shortcutsDialog.open) shortcutsDialog.showModal();
+}
+
+function isSettingsRoute(): boolean {
+  return window.location.pathname === "/" || window.location.pathname === "/index.html";
+}
+
+function updateDiagnosticsTimer(): void {
+  if (diagnosticsPanel.hidden) {
+    if (diagnosticsTimer !== undefined) {
+      window.clearInterval(diagnosticsTimer);
+      diagnosticsTimer = undefined;
+    }
+    return;
+  }
+  renderDiagnostics();
+  diagnosticsTimer ??= window.setInterval(renderDiagnostics, 1000);
+}
+
+async function registerServiceWorker(): Promise<void> {
+  if (!("serviceWorker" in navigator)) return;
+  try {
+    await navigator.serviceWorker.register("/sw.js");
+  } catch (error) {
+    console.warn("service worker registration failed", error);
+  }
+}
+
+function initActions(): void {
+  // Pane actions
+  registerAction({
+    id: "split-right",
+    label: "Split Right",
+    category: "pane",
+    defaultKeys: "Ctrl+Shift+Right",
+    handler: () => splitActivePane("horizontal")
+  });
+
+  registerAction({
+    id: "split-down",
+    label: "Split Down",
+    category: "pane",
+    defaultKeys: "Ctrl+Shift+Down",
+    handler: () => splitActivePane("vertical")
+  });
+
+  registerAction({
+    id: "close-pane",
+    label: "Close Pane",
+    category: "pane",
+    defaultKeys: "Ctrl+Shift+Backspace",
+    handler: () => closeActivePane()
+  });
+
+  registerAction({
+    id: "detach-pane",
+    label: "Move Pane to New Tab",
+    category: "pane",
+    defaultKeys: "Ctrl+Shift+KeyD",
+    handler: () => detachActivePane()
+  });
+
+  registerAction({
+    id: "zoom-pane",
+    label: "Toggle Zoom Pane",
+    category: "pane",
+    handler: () => toggleZoomActivePane()
+  });
+
+  registerAction({
+    id: "focus-previous",
+    label: "Focus Previous Pane",
+    category: "pane",
+    defaultKeys: "Ctrl+Shift+Left",
+    handler: () => focusAdjacentPane(-1)
+  });
+
+  registerAction({
+    id: "focus-next",
+    label: "Focus Next Pane",
+    category: "pane",
+    defaultKeys: "Ctrl+Shift+Up",
+    handler: () => focusAdjacentPane(1)
+  });
+
+  registerAction({
+    id: "focus-left",
+    label: "Focus Pane Left",
+    category: "pane",
+    handler: () => focusSpatialPane("left")
+  });
+
+  registerAction({
+    id: "focus-right",
+    label: "Focus Pane Right",
+    category: "pane",
+    handler: () => focusSpatialPane("right")
+  });
+
+  registerAction({
+    id: "focus-up",
+    label: "Focus Pane Up",
+    category: "pane",
+    handler: () => focusSpatialPane("up")
+  });
+
+  registerAction({
+    id: "focus-down",
+    label: "Focus Pane Down",
+    category: "pane",
+    handler: () => focusSpatialPane("down")
+  });
+
+  registerAction({
+    id: "rename-pane",
+    label: "Rename Pane",
+    category: "pane",
+    handler: () => openRenameDialog(activePaneId)
+  });
+
+  registerAction({
+    id: "restart-pane",
+    label: "Restart Pane",
+    category: "pane",
+    handler: () => restartActivePane()
+  });
+
+  registerAction({
+    id: "duplicate-pane",
+    label: "Duplicate Pane",
+    category: "pane",
+    handler: () => splitActivePane("horizontal")
+  });
+
+  registerAction({
+    id: "clear-pane",
+    label: "Clear Pane",
+    category: "pane",
+    handler: () => activePane()?.term.clear()
+  });
+
+  // Tab actions
+  registerAction({
+    id: "new-tab",
+    label: "New Tab",
+    category: "tab",
+    handler: () => {
+      const spaceId = currentWorkspace?.session?.spaceId || selectedSpaceId || DEFAULT_SPACE_ID;
+      void createTabInSpace(spaceId, undefined, { newTab: false });
+    }
+  });
+
+  registerAction({
+    id: "close-tab",
+    label: "Close Tab",
+    category: "tab",
+    handler: () => closeCurrentTab()
+  });
+
+  registerAction({
+    id: "restart-tab",
+    label: "Restart Tab",
+    category: "tab",
+    handler: () => restartCurrentTab()
+  });
+
+  registerAction({
+    id: "rename-tab",
+    label: "Rename Tab",
+    category: "tab",
+    handler: () => openRenameDialog(parentSessionId)
+  });
+
+  // Workspace actions
+  registerAction({
+    id: "next-tab",
+    label: "Next Tab / Workspace",
+    category: "workspace",
+    handler: () => navigateWorkspaceTab(1)
+  });
+
+  registerAction({
+    id: "previous-tab",
+    label: "Previous Tab / Workspace",
+    category: "workspace",
+    handler: () => navigateWorkspaceTab(-1)
+  });
+
+  // View actions
+  registerAction({
+    id: "copy",
+    label: "Copy Selection",
+    category: "view",
+    handler: () => { activePane()?.term.copySelection(); }
+  });
+
+  registerAction({
+    id: "paste",
+    label: "Paste Clipboard",
+    category: "view",
+    handler: () => pasteToActivePane()
+  });
+
+  registerAction({
+    id: "select-all",
+    label: "Select All",
+    category: "view",
+    handler: () => activePane()?.term.selectAll()
+  });
+
+  registerAction({
+    id: "toggle-settings",
+    label: "Toggle Settings Page",
+    category: "view",
+    handler: () => openAppURL("/")
+  });
+
+  registerAction({
+    id: "toggle-diagnostics",
+    label: "Toggle Diagnostics Panel",
+    category: "view",
+    handler: () => toggleDiagnosticsPanel()
+  });
+
+  registerAction({
+    id: "toggle-shortcuts",
+    label: "Show Shortcuts Guide",
+    category: "view",
+    handler: () => openShortcutsDialog()
+  });
+
+  registerAction({
+    id: "command-palette",
+    label: "Open Command Palette",
+    category: "view",
+    defaultKeys: "Ctrl+Shift+P",
+    handler: () => openPalette()
+  });
+}
+
+let recordingActionId: string | null = null;
+let recordingListener: ((event: KeyboardEvent) => void) | null = null;
+let recordingChords: string[] = [];
+
+function renderKeybindingsList(container: HTMLElement): void {
+  container.innerHTML = "";
+
+  const conflicts: Record<string, string[]> = {};
+  const currentChords: Record<string, string> = {};
+  const allActions = getAllActions();
+
+  allActions.forEach(action => {
+    const customChord = settings.keybindings?.[action.id];
+    const chord = customChord !== undefined ? customChord : (action.defaultKeys || "");
+    if (chord) {
+      currentChords[action.id] = chord;
+      if (!conflicts[chord]) {
+        conflicts[chord] = [];
+      }
+      conflicts[chord].push(action.id);
+    }
+  });
+
+  allActions.forEach(action => {
+    const customChord = settings.keybindings?.[action.id];
+    const hasCustom = customChord !== undefined;
+    const chord = customChord !== undefined ? customChord : (action.defaultKeys || "");
+    const actionConflicts = chord ? (conflicts[chord]?.filter(id => id !== action.id) || []) : [];
+    const hasConflict = actionConflicts.length > 0;
+
+    const row = document.createElement("div");
+    row.className = "keybinding-row";
+    row.dataset.actionId = action.id;
+
+    const isRecordingThis = recordingActionId === action.id;
+
+    row.innerHTML = `
+      <div class="keybinding-info">
+        <strong>${escapeHTML(action.label)}</strong>
+        <span class="keybinding-category">${action.category}</span>
+        ${hasConflict ? `<span class="keybinding-conflict-warning">⚠️ Conflicts with: ${actionConflicts.map(id => getAction(id)?.label || id).join(", ")}</span>` : ""}
+      </div>
+      <div class="keybinding-keys" style="margin-right: 16px;">
+        <kbd class="keybinding-kbd${hasConflict ? " conflict" : ""}">${isRecordingThis ? (recordingChords.length > 0 ? recordingChords.join(" ") : "Press keys...") : (chord || "None")}</kbd>
+      </div>
+      <div class="keybinding-actions">
+        <button class="secondary-button record-btn${isRecordingThis ? " recording" : ""}" type="button" data-record="${escapeAttribute(action.id)}">
+          ${isRecordingThis ? "Recording..." : "Record"}
+        </button>
+        <button class="secondary-button reset-btn" type="button" data-reset="${escapeAttribute(action.id)}"${hasCustom ? "" : " disabled"}>
+          Reset
+        </button>
+      </div>
+    `;
+
+    const recordBtn = row.querySelector<HTMLButtonElement>(".record-btn");
+    const resetBtn = row.querySelector<HTMLButtonElement>(".reset-btn");
+
+    recordBtn?.addEventListener("click", () => {
+      if (recordingActionId) {
+        cancelRecording(container);
+      }
+      startRecordingKeybinding(action.id, container);
+    });
+
+    resetBtn?.addEventListener("click", () => {
+      if (settings.keybindings) {
+        delete settings.keybindings[action.id];
+        saveSettings(settings);
+        renderKeybindingsList(container);
+      }
+    });
+
+    container.appendChild(row);
+  });
+}
+
+function startRecordingKeybinding(actionId: string, container: HTMLElement): void {
+  recordingActionId = actionId;
+  recordingChords = [];
+  renderKeybindingsList(container);
+  showChordRecording(recordingChords);
+
+  const listener = (event: KeyboardEvent) => {
+    if (event.key === "Enter" && recordingChords.length > 0) {
+      event.preventDefault();
+      event.stopPropagation();
+      finalizeRecording(container);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      cancelRecording(container);
+      return;
+    }
+
+    if (["Control", "Alt", "Shift", "Meta"].includes(event.key)) {
+      return;
+    }
+
+    if (!event.ctrlKey && !event.altKey && !event.metaKey) {
+      return;
+    }
+
+    const chord = eventToChordString(event);
+
+    if (shouldPassThroughSystemShortcut(event)) {
+      alert("Cannot override ChromeOS system or browser shortcuts.");
+      cancelRecording(container);
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    recordingChords.push(chord);
+    showChordRecording(recordingChords);
+  };
+
+  recordingListener = listener;
+  window.addEventListener("keydown", listener, { capture: true });
+}
+
+function finalizeRecording(container: HTMLElement): void {
+  if (recordingChords.length === 0) {
+    cancelRecording(container);
+    return;
+  }
+  if (!settings.keybindings) {
+    settings.keybindings = {};
+  }
+  settings.keybindings[recordingActionId!] = recordingChords.join(" ");
+  saveSettings(settings);
+  stopRecordingKeybinding();
+  hideChordIndicator();
+  renderKeybindingsList(container);
+}
+
+function cancelRecording(container: HTMLElement): void {
+  stopRecordingKeybinding();
+  hideChordIndicator();
+  renderKeybindingsList(container);
+}
+
+function stopRecordingKeybinding(): void {
+  if (recordingListener) {
+    window.removeEventListener("keydown", recordingListener, { capture: true });
+    recordingListener = null;
+  }
+  recordingActionId = null;
+  recordingChords = [];
+}

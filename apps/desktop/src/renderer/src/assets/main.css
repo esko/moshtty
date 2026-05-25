@@ -1,0 +1,252 @@
+@import './base.css';
+
+/* Core Theme Variables (Quiet Light UI by default, Dark mode supported) */
+:root {
+  --bg-app: #f9f9fb;
+  --bg-sidebar: #f0f0f4;
+  --bg-sidebar-active: #e2e2e8;
+  --bg-workspace: #ffffff;
+  --bg-terminal: #1e1e24;
+  
+  --border-color: #e0e0e6;
+  
+  --text-main: #202024;
+  --text-muted: #64646c;
+  --text-terminal: #f0f0f4;
+  
+  --accent-color: #4f46e5;
+  --accent-light: #eef2ff;
+  
+  --success-color: #10b981;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-app: #121214;
+    --bg-sidebar: #1a1a1e;
+    --bg-sidebar-active: #2a2a30;
+    --bg-workspace: #1e1e22;
+    --bg-terminal: #121214;
+    
+    --border-color: #2e2e34;
+    
+    --text-main: #f0f0f4;
+    --text-muted: #9a9ab0;
+    --text-terminal: #e2e2e8;
+    
+    --accent-color: #6366f1;
+    --accent-light: #1e1b4b;
+  }
+}
+
+/* Reset and Global Layout override */
+body {
+  margin: 0;
+  padding: 0;
+  display: block;
+  overflow: hidden;
+  background: var(--bg-app);
+  color: var(--text-main);
+  user-select: none;
+  height: 100vh;
+  width: 100vw;
+}
+
+#root {
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+/* Main App Shell Layout */
+.moshtty-app {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* Sidebar / Left Project Rail */
+.project-rail {
+  width: 240px;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.brand {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border-color);
+  gap: 8px;
+}
+
+.brand-dot {
+  width: 10px;
+  height: 10px;
+  background: var(--accent-color);
+  border-radius: 50%;
+}
+
+.brand-name {
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+}
+
+.project-list {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.project-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 6px;
+  gap: 10px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.project-item:hover {
+  background: var(--bg-sidebar-active);
+}
+
+.project-item.active {
+  background: var(--bg-sidebar-active);
+  font-weight: 500;
+}
+
+.project-chip {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  background: var(--accent-color);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.project-label {
+  font-size: 13px;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Workspace Canvas */
+.workspace {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-workspace);
+}
+
+.tab-bar {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-color);
+  padding: 0 16px;
+  background: var(--bg-app);
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  height: 100%;
+  align-items: flex-end;
+}
+
+.tab {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  background: transparent;
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tab:hover {
+  background: var(--bg-sidebar-active);
+}
+
+.tab.active {
+  background: var(--bg-workspace);
+  border: 1px solid var(--border-color);
+  border-bottom-color: transparent;
+  color: var(--text-main);
+  font-weight: 500;
+}
+
+.tab-actions {
+  display: flex;
+  align-items: center;
+}
+
+.status-indicator {
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: var(--bg-sidebar);
+  color: var(--text-muted);
+}
+
+.status-indicator.connected::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success-color);
+}
+
+/* Terminal Area */
+.terminal-canvas {
+  flex: 1;
+  background: var(--bg-terminal);
+  padding: 16px;
+  overflow: hidden;
+  position: relative;
+}
+
+.placeholder-terminal {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.placeholder-terminal pre {
+  margin: 0;
+  padding: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-terminal);
+  white-space: pre-wrap;
+}
