@@ -70,7 +70,7 @@ Moshtty replaces the previous Crostini-local PWA/Go-agent architecture. The old 
 | M3 macOS remote companion     | Ready for review | `moshtty-remote` run/install/profile/health, LaunchAgent plist, config/token/certs, profile JSON                             |
 | M4 WebTransport and Mosh mux  | Ready for review | WebTransport server, JSON-RPC control, mux datagrams, pane lifecycle, renderer transport client                              |
 | M5 UI and Ghostty integration | Planned          | React UI, project rail, tabs, panes, settings, Ghostty renderer                                                              |
-| M6 `moshttyctl` CLI           | Planned          | Connected app commands and offline cleanup                                                                                   |
+| M6 `moshttyctl` CLI           | In progress      | Unix socket JSON-RPC transport landed. Commands and cleanup next.                                                            |
 | M7 Real remote acceptance     | Planned          | macOS host smoke and reconnect workflow                                                                                      |
 | Testing plan                  | Done             | See `docs/moshtty-testing.md`                                                                                                |
 
@@ -83,7 +83,7 @@ Moshtty replaces the previous Crostini-local PWA/Go-agent architecture. The old 
 | macOS remote companion | Agent (M3)  | Ready for review | `docs/agents/2026-05-25-3-macos-remote-companion.md` |
 | WebTransport Mosh mux  | Agent (M4)  | Ready for review | `docs/agents/2026-05-25-4-webtransport-mosh-mux.md`  |
 | Moshtty UI and Ghostty | Unassigned  | Planned          | `docs/agents/2026-05-25-5-moshtty-ui-ghostty.md`     |
-| `moshttyctl` CLI       | Unassigned  | Planned          | `docs/agents/2026-05-25-6-moshttyctl-cli.md`         |
+| `moshttyctl` CLI       | agy         | In progress      | `docs/agents/2026-05-25-6-moshttyctl-cli.md`         |
 
 Allowed status values (also defined in `AGENTS.md` -> Status Tiers):
 
