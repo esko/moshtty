@@ -35,6 +35,7 @@ Run a live end-to-end test: Electron app connects to `moshtty-remote` on the Mac
 ## Scope
 
 Same globs as parent brief (2026-05-25-4-webtransport-mosh-mux.md):
+
 - `cmd/moshtty-remote/**` (transport)
 - `internal/jsonrpc/**`, `internal/mux/**`, `internal/pane/**`, `internal/wtserver/**`
 - `apps/desktop/src/renderer/src/transport/**`

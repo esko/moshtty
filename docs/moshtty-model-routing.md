@@ -117,14 +117,14 @@ Every external agent must be told:
 
 ## Recommended Task Mapping
 
-| Task type | Preferred model |
-| --- | --- |
-| Scaffold from clear brief | Gemini 3.5 Flash |
-| Electron state shell implementation | Gemini 3.5 Flash |
-| macOS remote companion implementation | Gemini 3.5 Flash |
-| WebTransport/Mosh mux architecture review | DeepSeek V4 Pro |
-| WebTransport/Mosh mux implementation | Codex or Gemini 3.5 Flash after review |
-| UI/Ghostty implementation | Gemini 3.5 Flash |
-| Visual QA with screenshots | Gemini 3.5 Flash plus agent-browser |
-| Large PR review | DeepSeek V4 Pro, then Codex |
-| Conflict resolution | Codex |
+| Task type                                 | Preferred model                        |
+| ----------------------------------------- | -------------------------------------- |
+| Scaffold from clear brief                 | Gemini 3.5 Flash                       |
+| Electron state shell implementation       | Gemini 3.5 Flash                       |
+| macOS remote companion implementation     | Gemini 3.5 Flash                       |
+| WebTransport/Mosh mux architecture review | DeepSeek V4 Pro                        |
+| WebTransport/Mosh mux implementation      | Codex or Gemini 3.5 Flash after review |
+| UI/Ghostty implementation                 | Gemini 3.5 Flash                       |
+| Visual QA with screenshots                | Gemini 3.5 Flash plus agent-browser    |
+| Large PR review                           | DeepSeek V4 Pro, then Codex            |
+| Conflict resolution                       | Codex                                  |

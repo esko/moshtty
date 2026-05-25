@@ -173,10 +173,11 @@ Each icon is a small `.tsx` file exporting a React component. No sprite file,
 no icon fonts. Add `lucide-react` only with coordinator approval.
 
 Usage pattern:
+
 ```tsx
-import { PlusIcon } from '../design/icons/PlusIcon'
+import { PlusIcon } from "../design/icons/PlusIcon";
 // ...
-<PlusIcon size={16} />
+<PlusIcon size={16} />;
 ```
 
 No new icon without coordinator approval. Document new icons here.

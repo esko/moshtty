@@ -9,14 +9,46 @@ Restore the custom terminal palette JSON editor that was removed during refactor
 After the `<select id="theme">` closing `</label>`, insert the custom theme container DIV:
 
 ```html
-<div id="customThemeContainer" style="display: none; padding: 14px 15px; border-bottom: 1px solid var(--color-border-subtle); grid-column: 1 / -1;">
-  <span><strong>Custom palette JSON</strong><small>Edit palette colors as JSON.</small></span>
-  <textarea id="customThemeJson" style="width: 100%; min-height: 120px; font-family: var(--font-mono); font-size: 11px; padding: 8px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); background: var(--color-app-bg); color: var(--color-text-bright); resize: vertical; margin-top: 4px;" spellcheck="false"></textarea>
-  <div style="display: flex; gap: 8px; justify-content: flex-end; align-items: center; width: 100%; margin-top: 6px;">
-    <span id="customThemeError" style="color: var(--color-danger); font-size: 11px; margin-right: auto; display: none;"></span>
-    <input type="file" id="importThemeFile" accept=".json" style="display: none;" />
-    <button type="button" class="secondary-button compact-button" id="importThemeBtn">Import</button>
-    <button type="button" class="secondary-button compact-button" id="exportThemeBtn">Export</button>
+<div
+  id="customThemeContainer"
+  style="display: none; padding: 14px 15px; border-bottom: 1px solid var(--color-border-subtle); grid-column: 1 / -1;"
+>
+  <span
+    ><strong>Custom palette JSON</strong
+    ><small>Edit palette colors as JSON.</small></span
+  >
+  <textarea
+    id="customThemeJson"
+    style="width: 100%; min-height: 120px; font-family: var(--font-mono); font-size: 11px; padding: 8px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); background: var(--color-app-bg); color: var(--color-text-bright); resize: vertical; margin-top: 4px;"
+    spellcheck="false"
+  ></textarea>
+  <div
+    style="display: flex; gap: 8px; justify-content: flex-end; align-items: center; width: 100%; margin-top: 6px;"
+  >
+    <span
+      id="customThemeError"
+      style="color: var(--color-danger); font-size: 11px; margin-right: auto; display: none;"
+    ></span>
+    <input
+      type="file"
+      id="importThemeFile"
+      accept=".json"
+      style="display: none;"
+    />
+    <button
+      type="button"
+      class="secondary-button compact-button"
+      id="importThemeBtn"
+    >
+      Import
+    </button>
+    <button
+      type="button"
+      class="secondary-button compact-button"
+      id="exportThemeBtn"
+    >
+      Export
+    </button>
   </div>
 </div>
 ```
@@ -28,8 +60,11 @@ Insert this immediately after the palette `<select></label>` block, before the a
 After the `const keybindingsList = requiredElement<HTMLElement>("#keybindingsList");` line (around line 1347), add:
 
 ```ts
-const customThemeContainer = requiredElement<HTMLElement>("#customThemeContainer");
-const customThemeJson = requiredElement<HTMLTextAreaElement>("#customThemeJson");
+const customThemeContainer = requiredElement<HTMLElement>(
+  "#customThemeContainer",
+);
+const customThemeJson =
+  requiredElement<HTMLTextAreaElement>("#customThemeJson");
 const customThemeError = requiredElement<HTMLElement>("#customThemeError");
 const importBtn = requiredElement<HTMLButtonElement>("#importThemeBtn");
 const importFile = requiredElement<HTMLInputElement>("#importThemeFile");
@@ -39,9 +74,11 @@ const updateCustomThemeVisibility = () => {
   if (theme.value === "custom") {
     customThemeContainer.style.display = "grid";
     if (!customThemeJson.value.trim()) {
-      const palette = settings.theme.preset === "custom"
-        ? (settings.theme as { preset: "custom"; palette: TerminalPalette }).palette
-        : getThemePalette(settings.theme);
+      const palette =
+        settings.theme.preset === "custom"
+          ? (settings.theme as { preset: "custom"; palette: TerminalPalette })
+              .palette
+          : getThemePalette(settings.theme);
       customThemeJson.value = JSON.stringify(palette, null, 2);
     }
   } else {
@@ -90,7 +127,9 @@ exportBtn.addEventListener("click", () => {
   } else {
     paletteToExport = getThemePalette({ preset: theme.value });
   }
-  const blob = new Blob([JSON.stringify(paletteToExport, null, 2)], { type: "application/json" });
+  const blob = new Blob([JSON.stringify(paletteToExport, null, 2)], {
+    type: "application/json",
+  });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -117,6 +156,7 @@ cd agent && go test ./...
 ```
 
 Manual test:
+
 1. Open settings page
 2. Select "Custom" from theme dropdown — textarea should appear with current palette JSON
 3. Switch to another preset — textarea should hide

@@ -48,23 +48,23 @@ From the Electron client (Crostini):
 
 ### Protocol and transport gaps
 
-| Follow-up | Why it matters | Target |
-| --- | --- | --- |
-| Cert-pin handshake against real Electron/Chromium | Unit tests validate hash encoding; only a live connect proves pins work with QUIC/WebTransport | Before marking M4 Done |
-| End-to-end one-pane WebTransport integration test | Go/TS unit tests cover framing and dispatch; no automated test runs a full WT session with mosh traffic yet | M4 or early M5 |
-| Replace localhost UDP bridge in `internal/pane` | Current adapter wraps `mosh-go`'s UDP server; a direct `Transport` loop would reduce latency and simplify shutdown | Post-M4 refactor |
-| Faster pane shutdown | `mosh-go` may wait on association timeout; manager currently caps close wait at 2s | Post-M4 hardening |
-| Server-side `pane.resize` semantics | RPC validates the flow exists; terminal resize is still client-driven through mosh today | M5 or when UI needs server-initiated resize |
-| Pass auth token on WebTransport connect from renderer | Server checks `X-Moshtty-Token` / Bearer on upgrade; client transport should set the header consistently in manual/E2E tests | M4 manual QA |
-| Publish rotated cert hashes over authenticated control | PRD requires current/next hash rotation while connected; only static profile export exists today | M4 hardening or M7 |
+| Follow-up                                              | Why it matters                                                                                                               | Target                                      |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| Cert-pin handshake against real Electron/Chromium      | Unit tests validate hash encoding; only a live connect proves pins work with QUIC/WebTransport                               | Before marking M4 Done                      |
+| End-to-end one-pane WebTransport integration test      | Go/TS unit tests cover framing and dispatch; no automated test runs a full WT session with mosh traffic yet                  | M4 or early M5                              |
+| Replace localhost UDP bridge in `internal/pane`        | Current adapter wraps `mosh-go`'s UDP server; a direct `Transport` loop would reduce latency and simplify shutdown           | Post-M4 refactor                            |
+| Faster pane shutdown                                   | `mosh-go` may wait on association timeout; manager currently caps close wait at 2s                                           | Post-M4 hardening                           |
+| Server-side `pane.resize` semantics                    | RPC validates the flow exists; terminal resize is still client-driven through mosh today                                     | M5 or when UI needs server-initiated resize |
+| Pass auth token on WebTransport connect from renderer  | Server checks `X-Moshtty-Token` / Bearer on upgrade; client transport should set the header consistently in manual/E2E tests | M4 manual QA                                |
+| Publish rotated cert hashes over authenticated control | PRD requires current/next hash rotation while connected; only static profile export exists today                             | M4 hardening or M7                          |
 
 ### Explicitly deferred
 
-| Item | Owner milestone |
-| --- | --- |
-| Bundle `mosh-go` WASM and wire `DialConnRaw` polling into pane UI | M5 UI/Ghostty |
-| Profile import UI and project connection shell | M5 |
-| `moshttyctl` Unix socket control plane | M6 |
-| Full macOS LaunchAgent acceptance and reconnect workflow | M7 |
+| Item                                                              | Owner milestone |
+| ----------------------------------------------------------------- | --------------- |
+| Bundle `mosh-go` WASM and wire `DialConnRaw` polling into pane UI | M5 UI/Ghostty   |
+| Profile import UI and project connection shell                    | M5              |
+| `moshttyctl` Unix socket control plane                            | M6              |
+| Full macOS LaunchAgent acceptance and reconnect workflow          | M7              |
 
 See also `docs/moshtty-testing.md` for the macOS remote access commands and acceptance checklist.

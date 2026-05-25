@@ -27,6 +27,7 @@ Run a live Electron session on the Crostini host and verify `safeStorage` availa
 ## Scope
 
 Same globs as parent brief (2026-05-25-2-desktop-state-shell.md):
+
 - `apps/desktop/src/main/**`
 - `apps/desktop/src/preload/**`
 - `apps/desktop/src/common/state*`

@@ -208,4 +208,3 @@ M7 real remote acceptance additionally requires:
 - Add or update Go tests with every non-trivial Go package.
 - Add visual screenshots when a change affects layout, theme, dialogs, rail, tab bar, terminal pane framing, or connection/lost-state UI.
 - Use agent-browser before marking UI work ready for review.
-
