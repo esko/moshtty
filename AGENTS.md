@@ -130,6 +130,7 @@ Do not create a marketing landing page. The first screen should be the usable ap
 - Do not push unless the coordinator/user asks.
 - Do not rewrite, revert, or clean up another agent's unrelated changes.
 - Do not run destructive git commands unless explicitly requested.
+- Never run `git clean -fd` without first running `git status` to review untracked files. Prefer `git checkout -- .` for reverting only tracked file changes. Untracked files may represent uncommitted work from prior agents — deleting them without review can destroy in-progress infrastructure.
 - If generated files are introduced, keep source and generated-output commits separate when practical.
 - Close out `docs/moshtty-prd.md` before committing a completed or blocked task.
 - Give immediate corrective feedback when a subagent is on the wrong path. Do not wait for a slice to finish if the scope, model choice, file ownership, or verification plan is wrong; stop, restate the correction, and reassign the work.

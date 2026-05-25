@@ -1,0 +1,17 @@
+pre-commit:
+  commands:
+    prettier:
+      glob: "*.{js,ts,tsx,json,md,css,yaml,yml}"
+      run: npx prettier --check {staged_files}
+    eslint:
+      glob: "*.{js,ts,tsx}"
+      run: npx eslint {staged_files}
+    stylelint:
+      glob: "*.css"
+      run: npx stylelint {staged_files}
+    go-vet:
+      glob: "*.go"
+      run: go vet {staged_files}
+    go-lint:
+      glob: "*.go"
+      run: golangci-lint run {staged_files}
