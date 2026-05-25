@@ -62,7 +62,10 @@ Required coverage:
 - macOS LaunchAgent plist generation;
 - token generation;
 - ECDSA P-256 WebTransport cert generation;
-- SHA-256 cert hash profile output;
+- SHA-256 cert hash profile output (standard base64 of SHA-256 over X.509 DER,
+  decodable to 32 bytes for `serverCertificateHashes`);
+- M4 handshake check: import a generated profile in Electron and confirm
+  WebTransport connects with `currentCertHash` before closing M4;
 - JSON-RPC request/response/error handling;
 - Origin and token auth;
 - datagram mux encode/decode;

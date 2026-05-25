@@ -113,6 +113,7 @@ Every external agent must be told:
 - that it must close out `docs/moshtty-prd.md` before commit;
 - that it must use an atomic conventional commit;
 - that it must report changed files, tests run, commit hash, and blockers.
+- that it must get corrected immediately if it is on the wrong path; orchestrators should stop drift early, narrow the scope, or reassign the slice before additional files change.
 
 ## Recommended Task Mapping
 
@@ -127,4 +128,3 @@ Every external agent must be told:
 | Visual QA with screenshots | Gemini 3.5 Flash plus agent-browser |
 | Large PR review | DeepSeek V4 Pro, then Codex |
 | Conflict resolution | Codex |
-

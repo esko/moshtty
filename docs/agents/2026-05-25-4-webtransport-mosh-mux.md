@@ -51,6 +51,9 @@ git diff --check
 
 Tests must cover:
 
+- cert pin handshake: profile `currentCertHash` / `nextCertHash` (standard
+  base64 of SHA-256 over X.509 DER from M3) must match what Chromium/Electron
+  accepts in `serverCertificateHashes` during a real WebTransport connect;
 - mux encode/decode;
 - unknown protocol version;
 - unknown pane flow;

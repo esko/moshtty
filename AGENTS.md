@@ -132,6 +132,7 @@ Do not create a marketing landing page. The first screen should be the usable ap
 - Do not run destructive git commands unless explicitly requested.
 - If generated files are introduced, keep source and generated-output commits separate when practical.
 - Close out `docs/moshtty-prd.md` before committing a completed or blocked task.
+- Give immediate corrective feedback when a subagent is on the wrong path. Do not wait for a slice to finish if the scope, model choice, file ownership, or verification plan is wrong; stop, restate the correction, and reassign the work.
 
 ## Multi-Agent Workflow
 
@@ -145,4 +146,4 @@ Do not create a marketing landing page. The first screen should be the usable ap
 
 Avoid parallel edits to the same files. If two tasks need the same shared module, coordinate through the PRD status notes before editing.
 
-The `cmd` harness with model `deepseek/deepseek-v4-pro` is allowed for subagents when a task is well scoped and has a clear write boundary. Gemini 3.5 Flash via Antigravity/`agy` is also allowed for bounded implementation work. Follow `docs/moshtty-model-routing.md` for model selection. Give all external agents the same docs and task-brief instructions, and require the same verification, PRD close-out, and atomic conventional commit behavior.
+The `cmd` harness with model `deepseek/deepseek-v4-pro` is allowed for subagents when a task is well scoped and has a clear write boundary. Gemini 3.5 Flash via Antigravity/`agy` is also allowed for bounded implementation work. Follow `docs/moshtty-model-routing.md` for model selection. Give all external agents the same docs and task-brief instructions, and require the same verification, PRD close-out, and atomic conventional commit behavior. If a worker starts drifting, stop it immediately and correct the scope before more files change.
