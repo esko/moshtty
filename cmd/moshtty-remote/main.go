@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/moshtty/moshtty/internal/config"
@@ -61,6 +62,7 @@ func pathsFromFlags(configDir string) config.Paths {
 func runCommand(args []string) {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
 	configDir := fs.String("config-dir", "", "override home directory for Moshtty paths (testing)")
+	socketPath := fs.String("socket", "", "Unix socket path for local control")
 	_ = fs.Parse(args)
 
 	paths := pathsFromFlags(*configDir)
@@ -69,11 +71,20 @@ func runCommand(args []string) {
 		exitErr(err)
 	}
 
+	if *socketPath == "" {
+		runtime.SocketPath = filepath.Join(paths.ApplicationSupportDir(), "moshtty.sock")
+	} else {
+		runtime.SocketPath = *socketPath
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	fmt.Fprintf(os.Stderr, "moshtty-remote listening on %s (health)\n", runtime.Config.HealthEndpoint())
 	fmt.Fprintf(os.Stderr, "moshtty-remote webtransport on %s\n", runtime.Config.BindEndpoint())
+	if runtime.SocketPath != "" {
+		fmt.Fprintf(os.Stderr, "moshtty-remote control socket on %s\n", runtime.SocketPath)
+	}
 
 	if err := runtime.Run(ctx); err != nil && err != context.Canceled {
 		exitErr(err)

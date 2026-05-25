@@ -180,7 +180,7 @@ func (s *Server) serveControl(state *sessionState, stream io.ReadWriteCloser) {
 			return
 		}
 
-		result, err := s.dispatch(req)
+		result, err := s.Dispatch(req)
 		if err != nil {
 			resp := jsonrpc.NewErrorResponse(req.ID, jsonrpc.ErrorCode(err), err.Error(), nil)
 			_ = encoder.Encode(resp)
@@ -189,6 +189,11 @@ func (s *Server) serveControl(state *sessionState, stream io.ReadWriteCloser) {
 		resp := jsonrpc.NewResultResponse(req.ID, result)
 		_ = encoder.Encode(resp)
 	}
+}
+
+// Dispatch exposes the JSON-RPC dispatch logic.
+func (s *Server) Dispatch(req jsonrpc.Request) (any, error) {
+	return s.dispatch(req)
 }
 
 func (s *Server) dispatch(req jsonrpc.Request) (any, error) {

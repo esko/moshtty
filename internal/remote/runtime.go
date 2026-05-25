@@ -10,6 +10,8 @@ import (
 
 	"github.com/moshtty/moshtty/internal/certs"
 	"github.com/moshtty/moshtty/internal/config"
+	"github.com/moshtty/moshtty/internal/ctlsocket"
+	"github.com/moshtty/moshtty/internal/jsonrpc"
 	"github.com/moshtty/moshtty/internal/profile"
 	"github.com/moshtty/moshtty/internal/wtserver"
 )
@@ -24,12 +26,14 @@ type HealthStatus struct {
 }
 
 type Runtime struct {
-	Paths      config.Paths
-	Config     config.Config
-	Token      string
-	Started    time.Time
-	healthSrv  *http.Server
-	wtServer   *wtserver.Server
+	Paths        config.Paths
+	Config       config.Config
+	Token        string
+	Started      time.Time
+	SocketPath   string
+	healthSrv    *http.Server
+	wtServer     *wtserver.Server
+	socketServer *ctlsocket.Server
 }
 
 func PrepareRuntime(paths config.Paths) (Runtime, error) {
@@ -84,13 +88,23 @@ func (r *Runtime) Run(ctx context.Context) error {
 	}
 	r.wtServer = wt
 
-	errCh := make(chan error, 2)
+	errCh := make(chan error, 3)
 	go func() {
 		errCh <- r.runHealth()
 	}()
 	go func() {
 		errCh <- wt.ListenAndServe(ctx, r.Config.BindEndpoint())
 	}()
+
+	if r.SocketPath != "" {
+		socketSrv := ctlsocket.NewServer(r.SocketPath, func(req jsonrpc.Request) (any, error) {
+			return wt.Dispatch(req)
+		})
+		r.socketServer = socketSrv
+		go func() {
+			errCh <- socketSrv.Listen(ctx)
+		}()
+	}
 
 	select {
 	case <-ctx.Done():
@@ -100,6 +114,9 @@ func (r *Runtime) Run(ctx context.Context) error {
 			_ = r.healthSrv.Shutdown(shutdownCtx)
 		}
 		_ = wt.Close()
+		if r.socketServer != nil {
+			_ = r.socketServer.Close()
+		}
 		return ctx.Err()
 	case err := <-errCh:
 		if err == http.ErrServerClosed {
