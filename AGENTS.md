@@ -27,6 +27,42 @@ Read these before starting implementation work:
 
 Agents must close out `docs/moshtty-prd.md` before ending completed or blocked work: update task and milestone status, record verification commands, note blockers or follow-ups, and make sure the PRD does not show stale ownership/status for their slice.
 
+## Status Tiers
+
+Use exactly these status values in `docs/moshtty-prd.md`, `docs/moshtty-milestones.md`, and task briefs:
+
+- `Planned` — accepted into the roadmap; no implementation work has started.
+- `In progress` — actively being worked on by a named owner.
+- `Blocked` — cannot progress without an external dependency, decision, or platform; the blocker must be documented in the PRD.
+- `Ready for review` — implementation and tests are complete on the host where development happens; awaiting coordinator review.
+- `Verified on target` — exercised on real target hardware (macOS for the remote, the user's primary Linux/Chromebook for the desktop client). Required for milestones that include native-only behavior (`safeStorage`, WebTransport, etc.).
+- `Done` — final state. Used only after `Verified on target` for milestones that have a target-verification requirement; for purely documentation milestones, `Ready for review` -> `Done` is fine.
+
+Coordinators should never mark a milestone with native dependencies as `Done` from a Linux-only CI run. Use `Verified on target` to make the gap explicit.
+
+## Stop Conditions
+
+If your task drifts into any of the following, **stop and surface to the coordinator** before writing more code:
+
+- a slice would touch `apps/desktop/src/renderer/src/design/tokens.{ts,css}`, `theme.ts`, or `docs/moshtty-design-system.md` (token / theme contract);
+- a slice would change schemas under `apps/desktop/src/common/*.schema.ts` or the IPC contract in `apps/desktop/src/common/moshtty-api.ts` (renderer/main trust boundary);
+- a slice would change `docs/moshtty-prd.md`, `docs/moshtty-milestones.md`, `docs/moshtty-testing.md`, `docs/agents/OWNERS.md`, or `AGENTS.md` outside of the close-out step;
+- a slice would edit files outside the task brief's owned paths in `docs/agents/OWNERS.md`;
+- a slice would add a new top-level dependency, change the Electron, Node, or Go version, or modify `pnpm-workspace.yaml` / `go.mod` toolchain entries;
+- you discover that the agreed approach in the task brief no longer matches the code (the brief is out of date — fix the brief first).
+
+Drift is a coordinator problem, not a worker problem. Pause, write the blocker into the PRD, and wait for direction. Coordinators should give immediate corrective feedback when a worker is on the wrong path; do not let a slice finish on a wrong trajectory.
+
+## Slice Budget
+
+Each task brief should be sized to a single reviewable slice. Soft and hard caps:
+
+- soft cap: **8 changed files** per slice, excluding lockfiles and generated output;
+- hard cap: **20 changed files**;
+- a slice should land in one atomic conventional commit.
+
+If you hit the soft cap, stop and check whether the slice can be split. If you hit the hard cap, stop and surface to the coordinator — either the brief needs to be rescoped, or the work needs to be split across multiple briefs. Do not pad an oversized slice into a single commit.
+
 ## Architecture Rules
 
 - Product name is `Moshtty` for UI/docs and `moshtty` for commands, package IDs, and paths.
@@ -138,12 +174,14 @@ Do not create a marketing landing page. The first screen should be the usable ap
 ## Multi-Agent Workflow
 
 1. Pick one task brief from `docs/agents/`.
-2. Confirm the current git status before editing.
-3. Keep edits inside the task's listed paths unless the brief explains otherwise.
-4. Add or update tests with the implementation.
-5. Run the task's verification commands.
-6. Close out `docs/moshtty-prd.md` for the task: milestone/task status, owner, verification notes, blockers, and follow-ups.
-7. Commit the slice with an atomic conventional commit message.
+2. Claim the brief's owned paths against `docs/agents/OWNERS.md` and confirm no overlap with another in-progress task.
+3. Confirm the current git status before editing. Inspect untracked files; never `git clean -fd` them without explicit coordinator approval.
+4. Keep edits inside the task's listed paths unless the brief explains otherwise. Watch the slice budget.
+5. Add or update tests with the implementation.
+6. Run the task's verification commands.
+7. Fill in `docs/agents/TEMPLATE_HANDOFF.md` (or post the equivalent in the PRD) before closing out: what shipped, what was deferred, what needs follow-up, where the visual or on-device verification stands.
+8. Close out `docs/moshtty-prd.md` for the task: milestone/task status (from the Status Tiers list), owner, verification notes, blockers, and follow-ups.
+9. Commit the slice with an atomic conventional commit message.
 
 Avoid parallel edits to the same files. If two tasks need the same shared module, coordinate through the PRD status notes before editing.
 

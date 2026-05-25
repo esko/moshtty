@@ -1,5 +1,10 @@
 # Moshtty Milestones
 
+Status tiers used in this doc match `AGENTS.md` -> Status Tiers:
+`Planned` -> `In progress` -> (`Blocked`) -> `Ready for review` -> `Verified on target` -> `Done`.
+
+Milestones with native dependencies (`safeStorage`, WebTransport, real Mosh) cannot move from `Ready for review` to `Done` on a Linux-only CI run. They require a `Verified on target` step on actual target hardware, documented under `docs/agents/followups/`.
+
 ## M0 Planning Docs
 
 Status: Done
@@ -83,6 +88,10 @@ Acceptance:
 - IPC tests cover success and failure paths.
 - PRD status updated.
 
+Verified on target requires:
+
+- A real Electron launch on the developer's primary OS (Chromebook Linux container or macOS) where `safeStorage.isEncryptionAvailable()` returns the expected mode, a token is round-tripped, and the state file is observed on disk. See `docs/agents/followups/m2-safestorage-on-device.md`.
+
 Agent brief:
 
 - `docs/agents/2026-05-25-2-desktop-state-shell.md`
@@ -114,6 +123,10 @@ Acceptance:
 - Install script can produce expected LaunchAgent files without requiring root.
 - PRD status updated.
 
+Verified on target requires:
+
+- `moshtty-remote` built and running on the actual Mac mini under LaunchAgent, with `moshtty-remote profile` producing a valid pasteable JSON blob that the desktop client successfully imports.
+
 Agent brief:
 
 - `docs/agents/2026-05-25-3-macos-remote-companion.md`
@@ -143,11 +156,15 @@ Acceptance:
 - Local integration can run at least one remote PTY through WebTransport.
 - PRD status updated.
 
-Follow-ups before M4 is **Done** (see `docs/m4-mosh-adapter.md`):
+Follow-ups before M4 is **Done** (see `docs/m4-mosh-adapter.md` and `docs/agents/followups/m4-mosh-adapter.md`):
 
 - Manual cert-pin WebTransport connect from Electron using an imported profile.
 - One-pane end-to-end muxed mosh traffic against `moshtty-remote` on the Mac (`ssh macmini` / `scp` deploy path).
 - Optional hardening: automated WT integration test, direct `mosh-go` server adapter, cert-hash rotation over control.
+
+Verified on target requires:
+
+- All follow-up items above completed on the developer's actual macOS + Chromebook setup, with screenshots / logs attached in the PRD close-out. Linux unit tests are not sufficient.
 
 Agent brief:
 

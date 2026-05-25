@@ -32,66 +32,69 @@ Moshtty replaces the previous Crostini-local PWA/Go-agent architecture. The old 
 
 ## Locked Decisions
 
-| Area | Decision |
-| --- | --- |
-| Name | `Moshtty`; commands use `moshtty`, `moshtty-remote`, `moshttyctl` |
-| Client | Electron only, ChromeOS/Crostini first |
-| Client stack | `electron-vite`, React + TypeScript, Zustand, CSS modules/plain CSS, pnpm |
-| Renderer | Keep `ghostty-web` |
-| Testing | Vitest, Go tests, Playwright Electron screenshots, and agent-browser exploratory QA |
-| Agent models | See `docs/moshtty-model-routing.md`; Gemini 3.5 Flash for bounded implementation, DeepSeek V4 Pro for large-context review |
-| Client state | Versioned JSON through Electron main, atomic writes |
-| Secrets | Electron `safeStorage`; passphrase-encrypted fallback |
-| Remote first target | macOS host |
-| Remote service | Per-user LaunchAgent |
-| Remote distribution | Manual build + `scp` for first milestone |
-| Transport | WebTransport streams for JSON-RPC; datagrams for muxed Mosh pane traffic |
-| Mosh | `mosh-go v0.5.2`, with narrow server adapter/vendor if required |
-| Control protocol | JSON-RPC 2.0 |
-| Port | WebTransport UDP `4433` by default |
-| Bind | All interfaces by default |
-| Origin | Exact `app://moshtty` plus explicit dev origins |
-| CLI | Included in first milestone set |
-| Vocabulary | `Project`, `Tab`, `Pane`; avoid user-facing `session` |
-| Theme | Light reference baseline; Light/Dark/System setting |
+| Area                | Decision                                                                                                                   |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Name                | `Moshtty`; commands use `moshtty`, `moshtty-remote`, `moshttyctl`                                                          |
+| Client              | Electron only, ChromeOS/Crostini first                                                                                     |
+| Client stack        | `electron-vite`, React + TypeScript, Zustand, CSS modules/plain CSS, pnpm                                                  |
+| Renderer            | Keep `ghostty-web`                                                                                                         |
+| Testing             | Vitest, Go tests, Playwright Electron screenshots, and agent-browser exploratory QA                                        |
+| Agent models        | See `docs/moshtty-model-routing.md`; Gemini 3.5 Flash for bounded implementation, DeepSeek V4 Pro for large-context review |
+| Client state        | Versioned JSON through Electron main, atomic writes                                                                        |
+| Secrets             | Electron `safeStorage`; passphrase-encrypted fallback                                                                      |
+| Remote first target | macOS host                                                                                                                 |
+| Remote service      | Per-user LaunchAgent                                                                                                       |
+| Remote distribution | Manual build + `scp` for first milestone                                                                                   |
+| Transport           | WebTransport streams for JSON-RPC; datagrams for muxed Mosh pane traffic                                                   |
+| Mosh                | `mosh-go v0.5.2`, with narrow server adapter/vendor if required                                                            |
+| Control protocol    | JSON-RPC 2.0                                                                                                               |
+| Port                | WebTransport UDP `4433` by default                                                                                         |
+| Bind                | All interfaces by default                                                                                                  |
+| Origin              | Exact `app://moshtty` plus explicit dev origins                                                                            |
+| CLI                 | Included in first milestone set                                                                                            |
+| Vocabulary          | `Project`, `Tab`, `Pane`; avoid user-facing `session`                                                                      |
+| Theme               | Light reference baseline; Light/Dark/System setting                                                                        |
 
 ## Status Summary
 
-| Planning Item | Status | Notes |
-| --- | --- | --- |
-| Architecture decisions | Locked | Captured in `docs/moshtty-plan.md` and summarized below |
-| Implementation branch | feat/moshtty-scaffold | Branch created from current worktree |
+| Planning Item          | Status                | Notes                                                   |
+| ---------------------- | --------------------- | ------------------------------------------------------- |
+| Architecture decisions | Locked                | Captured in `docs/moshtty-plan.md` and summarized below |
+| Implementation branch  | feat/moshtty-scaffold | Branch created from current worktree                    |
 
-| Milestone | Status | Notes |
-| --- | --- | --- |
-| M0 Planning docs | Done | PRD, plan, milestones, agent briefs, and Moshtty `AGENTS.md` are present |
-| M1 Branch and scaffold | Ready for review | New branch layout, pnpm/electron-vite/root Go module. Old runtime quarantined under quarantine/ |
-| M2 Desktop state shell | Ready for review | Secure `app://moshtty`, typed preload IPC, versioned JSON state, atomic writes, migration, safeStorage + passphrase fallback |
-| M3 macOS remote companion | Ready for review | `moshtty-remote` run/install/profile/health, LaunchAgent plist, config/token/certs, profile JSON |
-| M4 WebTransport and Mosh mux | Ready for review | WebTransport server, JSON-RPC control, mux datagrams, pane lifecycle, renderer transport client |
-| M5 UI and Ghostty integration | Planned | React UI, project rail, tabs, panes, settings, Ghostty renderer |
-| M6 `moshttyctl` CLI | Planned | Connected app commands and offline cleanup |
-| M7 Real remote acceptance | Planned | macOS host smoke and reconnect workflow |
-| Testing plan | Done | See `docs/moshtty-testing.md` |
+| Milestone                     | Status           | Notes                                                                                                                        |
+| ----------------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| M0 Planning docs              | Done             | PRD, plan, milestones, agent briefs, and Moshtty `AGENTS.md` are present                                                     |
+| M1 Branch and scaffold        | Ready for review | New branch layout, pnpm/electron-vite/root Go module. Old runtime quarantined under quarantine/                              |
+| M2 Desktop state shell        | Ready for review | Secure `app://moshtty`, typed preload IPC, versioned JSON state, atomic writes, migration, safeStorage + passphrase fallback |
+| M3 macOS remote companion     | Ready for review | `moshtty-remote` run/install/profile/health, LaunchAgent plist, config/token/certs, profile JSON                             |
+| M4 WebTransport and Mosh mux  | Ready for review | WebTransport server, JSON-RPC control, mux datagrams, pane lifecycle, renderer transport client                              |
+| M5 UI and Ghostty integration | Planned          | React UI, project rail, tabs, panes, settings, Ghostty renderer                                                              |
+| M6 `moshttyctl` CLI           | Planned          | Connected app commands and offline cleanup                                                                                   |
+| M7 Real remote acceptance     | Planned          | macOS host smoke and reconnect workflow                                                                                      |
+| Testing plan                  | Done             | See `docs/moshtty-testing.md`                                                                                                |
 
 ## Task Status
 
-| Task | Owner | Status | Brief |
-| --- | --- | --- | --- |
-| Scaffold Moshtty repo | Antigravity | Ready for review | `docs/agents/2026-05-25-1-moshtty-scaffold.md` |
-| Desktop state shell | Agent | Ready for review | `docs/agents/2026-05-25-2-desktop-state-shell.md` |
-| macOS remote companion | Agent (M3) | Ready for review | `docs/agents/2026-05-25-3-macos-remote-companion.md` |
-| WebTransport Mosh mux | Agent (M4) | Ready for review | `docs/agents/2026-05-25-4-webtransport-mosh-mux.md` |
-| Moshtty UI and Ghostty | Unassigned | Planned | `docs/agents/2026-05-25-5-moshtty-ui-ghostty.md` |
-| `moshttyctl` CLI | Unassigned | Planned | `docs/agents/2026-05-25-6-moshttyctl-cli.md` |
+| Task                   | Owner       | Status           | Brief                                                |
+| ---------------------- | ----------- | ---------------- | ---------------------------------------------------- |
+| Scaffold Moshtty repo  | Antigravity | Ready for review | `docs/agents/2026-05-25-1-moshtty-scaffold.md`       |
+| Desktop state shell    | Agent       | Ready for review | `docs/agents/2026-05-25-2-desktop-state-shell.md`    |
+| macOS remote companion | Agent (M3)  | Ready for review | `docs/agents/2026-05-25-3-macos-remote-companion.md` |
+| WebTransport Mosh mux  | Agent (M4)  | Ready for review | `docs/agents/2026-05-25-4-webtransport-mosh-mux.md`  |
+| Moshtty UI and Ghostty | Unassigned  | Planned          | `docs/agents/2026-05-25-5-moshtty-ui-ghostty.md`     |
+| `moshttyctl` CLI       | Unassigned  | Planned          | `docs/agents/2026-05-25-6-moshttyctl-cli.md`         |
 
-Allowed status values:
+Allowed status values (also defined in `AGENTS.md` -> Status Tiers):
 
 - Planned
 - In progress
 - Blocked
 - Ready for review
+- Verified on target — required for milestones with native dependencies (`safeStorage`, WebTransport, real Mosh) before they can be marked `Done`
 - Done
+
+Linux-only CI cannot move a target-dependent milestone past `Ready for review` on its own. Use the follow-up briefs under `docs/agents/followups/` to record on-target verification.
 
 ## User Experience Requirements
 
@@ -167,15 +170,15 @@ The first full acceptance pass requires:
 
 ## Risks
 
-| Risk | Mitigation |
-| --- | --- |
-| `mosh-go` server APIs are UDP-oriented | Isolate a narrow adapter/vendor layer and test it directly |
-| WebTransport cert hashes expire quickly | Publish next hash while connected; require manual profile reimport if missed |
-| Electron secure origin with WebTransport has quirks | Use `app://moshtty` secure protocol and verify early in M2/M4 |
-| `safeStorage` may be weak/unavailable in Crostini | Add passphrase-encrypted fallback before storing tokens |
-| First milestone is broad | Cut visual polish/settings breadth before cutting transport, multipane, or CLI |
-| Remote macOS unsigned binaries hit Gatekeeper friction | Use personal-use unsigned/ad-hoc path and document quarantine/signing command |
-| Parallel agents conflict | Agents work from briefs, update this PRD, and avoid shared-file edits without coordination |
+| Risk                                                   | Mitigation                                                                                 |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `mosh-go` server APIs are UDP-oriented                 | Isolate a narrow adapter/vendor layer and test it directly                                 |
+| WebTransport cert hashes expire quickly                | Publish next hash while connected; require manual profile reimport if missed               |
+| Electron secure origin with WebTransport has quirks    | Use `app://moshtty` secure protocol and verify early in M2/M4                              |
+| `safeStorage` may be weak/unavailable in Crostini      | Add passphrase-encrypted fallback before storing tokens                                    |
+| First milestone is broad                               | Cut visual polish/settings breadth before cutting transport, multipane, or CLI             |
+| Remote macOS unsigned binaries hit Gatekeeper friction | Use personal-use unsigned/ad-hoc path and document quarantine/signing command              |
+| Parallel agents conflict                               | Agents work from briefs, update this PRD, and avoid shared-file edits without coordination |
 
 ## Current Notes
 
@@ -193,3 +196,4 @@ The first full acceptance pass requires:
 - Remote Mac testing from Crostini uses the local SSH alias `ssh macmini` (and `scp` via the same host) to install binaries, run `moshtty-remote`, and collect profile JSON on the Mac server.
 - safeStorage availability was not exercised in a live Electron session on this Crostini host during M2; unit tests cover both `safeStorage` and passphrase fallback paths. Confirm `safeStorage` behavior manually on first Electron run.
 - The old `agent/` and `web/` architecture remains in the repository only until the scaffold task replaces or removes it.
+- Guardrails recovery (2026-05-25): an off-rails `agy` subagent on a 5a slice prompted `git clean -fd`, which deleted uncommitted infrastructure (design tokens / theme, common-side zod schemas, fixtures, Playwright + axe setup, CI workflow, AGENTS Status Tiers / Stop Conditions / Slice Budget, M5 design contract). The intermediate "recreate" commit (`2fdff46`) restored these in a degraded form (schemas moved out of `common/` with `z.record` shims, profile schema mis-shaped with a `token` field, zod silently bumped to 4.x, CI reduced to 2 jobs, AGENTS process sections lost, M5 brief reverted). Recovery work restored the original strict trust boundary in `apps/desktop/src/common/*.schema.ts`, re-pinned zod to `^3.23.8`, restored CI's `frontend`/`visual`/`go`/`format-and-commits` jobs, the design token contract in Stylelint, the AGENTS Status Tiers / Stop Conditions / Slice Budget, and the full M5 design contract. Verification (2026-05-25): `pnpm --filter @moshtty/desktop` `test` (65 passed), `typecheck`, `lint`, `lint:css`, `build`; `go test ./...` (11 packages); `pnpm format:check`; `git diff --check` — all clean. Follow-up: the M5 visual surfaces still need the renderer-side fixture wiring to actually load `?fixture=<id>` into the store; this is on the M5 brief.
