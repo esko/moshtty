@@ -86,6 +86,11 @@ func GenerateDefault(now time.Time) (*Certificate, error) {
 	return Generate(notBefore, notAfter)
 }
 
+// HashDER returns the WebTransport certificate pin for profile JSON export.
+// It is SHA-256 over the X.509 DER bytes, encoded with standard base64 (RFC
+// 4648). The Electron client must decode this to a 32-byte Uint8Array for
+// WebTransport serverCertificateHashes. M4 must verify the pin against a real
+// Chromium/Electron handshake before closing the milestone.
 func HashDER(der []byte) string {
 	sum := sha256.Sum256(der)
 	return base64.StdEncoding.EncodeToString(sum[:])

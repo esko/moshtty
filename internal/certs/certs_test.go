@@ -46,8 +46,12 @@ func TestGenerateCertificate(t *testing.T) {
 			if cert.Hash == "" {
 				t.Fatal("expected hash")
 			}
-			if _, err := base64.StdEncoding.DecodeString(cert.Hash); err != nil {
+			decoded, err := base64.StdEncoding.DecodeString(cert.Hash)
+			if err != nil {
 				t.Fatalf("hash is not base64: %v", err)
+			}
+			if len(decoded) != 32 {
+				t.Fatalf("hash length = %d, want 32 (sha-256)", len(decoded))
 			}
 			if cert.Hash != certs.HashDER(cert.DER) {
 				t.Fatalf("hash mismatch")

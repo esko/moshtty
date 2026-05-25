@@ -46,7 +46,7 @@ func Install(opts InstallOptions) (InstallResult, error) {
 		}
 	}
 
-	cfg, token, err := ensureRuntimeAssets(paths)
+	_, _, err := ensureRuntimeAssets(paths)
 	if err != nil {
 		return InstallResult{}, err
 	}
@@ -69,9 +69,6 @@ func Install(opts InstallOptions) (InstallResult, error) {
 	if err := os.WriteFile(plistPath, plist, 0o644); err != nil {
 		return InstallResult{}, fmt.Errorf("write launch agent: %w", err)
 	}
-
-	_ = cfg
-	_ = token
 
 	return InstallResult{
 		ConfigPath:      paths.ConfigPath(),
