@@ -1,3 +1,15 @@
+/**
+ * Hand-rolled normalizers/migrators for `MoshttyState`.
+ *
+ * The strict trust boundary lives in `./state.schema.ts` (zod). The
+ * normalizers here are intentionally permissive so we can heal legacy
+ * disk payloads; the zod schema is what runs at IPC boundaries and
+ * before persistence.
+ *
+ * Editing either this file or `state.schema.ts` requires the other to be
+ * updated in the same slice. The TypeScript contract assertion in
+ * `state.schema.ts` will fail the build if they drift.
+ */
 export const MOSHTTY_STATE_VERSION = 1 as const
 
 export type ThemeMode = 'system' | 'light' | 'dark'
@@ -181,7 +193,9 @@ function normalizeProject(value: unknown): MoshttyProject | null {
     color,
     remoteId: asNullableString(value.remoteId),
     tabIds: Array.isArray(value.tabIds)
-      ? value.tabIds.filter((tabId): tabId is string => typeof tabId === 'string' && tabId.length > 0)
+      ? value.tabIds.filter(
+          (tabId): tabId is string => typeof tabId === 'string' && tabId.length > 0
+        )
       : [],
     activeTabId: asNullableString(value.activeTabId)
   }
@@ -202,7 +216,9 @@ function normalizeTab(value: unknown): MoshttyTab | null {
     id,
     title,
     paneIds: Array.isArray(value.paneIds)
-      ? value.paneIds.filter((paneId): paneId is string => typeof paneId === 'string' && paneId.length > 0)
+      ? value.paneIds.filter(
+          (paneId): paneId is string => typeof paneId === 'string' && paneId.length > 0
+        )
       : [],
     activePaneId: asNullableString(value.activePaneId)
   }
@@ -407,7 +423,10 @@ function inferLayoutsFromTabs(tabs: MoshttyTab[]): MoshttyTabLayout[] {
   })
 }
 
-export function migrateState(input: unknown, now: string | Date = new Date()): StateMigrationResult {
+export function migrateState(
+  input: unknown,
+  now: string | Date = new Date()
+): StateMigrationResult {
   if (!isRecord(input)) {
     return { state: createEmptyState(now), warning: 'State payload was not an object' }
   }
@@ -432,7 +451,9 @@ export function migrateState(input: unknown, now: string | Date = new Date()): S
           }
           const tabId = asString(tab.id, '')
           const paneIds = Array.isArray(tab.paneIds)
-            ? tab.paneIds.filter((paneId): paneId is string => typeof paneId === 'string' && paneId.length > 0)
+            ? tab.paneIds.filter(
+                (paneId): paneId is string => typeof paneId === 'string' && paneId.length > 0
+              )
             : []
           if (!tabId || paneIds.length === 0) {
             return null
@@ -466,10 +487,14 @@ export function normalizeState(input: unknown, now: string | Date = new Date()):
   }
 
   const remotes = Array.isArray(input.remotes)
-    ? input.remotes.map(normalizeRemote).filter((remote): remote is MoshttyRemote => remote !== null)
+    ? input.remotes
+        .map(normalizeRemote)
+        .filter((remote): remote is MoshttyRemote => remote !== null)
     : []
   const projects = Array.isArray(input.projects)
-    ? input.projects.map(normalizeProject).filter((project): project is MoshttyProject => project !== null)
+    ? input.projects
+        .map(normalizeProject)
+        .filter((project): project is MoshttyProject => project !== null)
     : []
   const tabs = Array.isArray(input.tabs)
     ? input.tabs.map(normalizeTab).filter((tab): tab is MoshttyTab => tab !== null)
@@ -480,7 +505,9 @@ export function normalizeState(input: unknown, now: string | Date = new Date()):
   const layouts = Array.isArray(input.layouts)
     ? input.layouts
         .map(normalizeLayout)
-        .filter((layout): layout is NonNullable<ReturnType<typeof normalizeLayout>> => layout !== null)
+        .filter(
+          (layout): layout is NonNullable<ReturnType<typeof normalizeLayout>> => layout !== null
+        )
     : inferLayoutsFromTabs(tabs)
 
   return {
