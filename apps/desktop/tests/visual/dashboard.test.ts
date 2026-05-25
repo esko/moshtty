@@ -3,7 +3,8 @@ import { test, expect } from './playwright.setup'
 test.describe('Dashboard', () => {
   test('renders the brand and project rail', async ({ page }) => {
     await expect(page.locator('.project-rail')).toBeVisible()
-    await expect(page.locator('.brand-name')).toContainText('Moshtty')
+    await expect(page.locator('.brand-badge')).toContainText('BETA')
+    await expect(page.locator('.rail-heading')).toContainText('Projects')
   })
 
   test.fixme('matches the rail-expanded reference screenshot', async ({ page }) => {

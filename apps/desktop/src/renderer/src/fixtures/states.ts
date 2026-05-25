@@ -34,6 +34,24 @@ export interface FixtureState {
 
 const base = createSampleState()
 
+const secondPane = {
+  id: 'pane-build',
+  title: 'Build',
+  cwd: '~/src/moshtty',
+  status: 'active' as const,
+  cols: 100,
+  rows: 28
+}
+
+const thirdPane = {
+  id: 'pane-logs',
+  title: 'Logs',
+  cwd: '~/Library/Logs/Moshtty',
+  status: 'active' as const,
+  cols: 100,
+  rows: 20
+}
+
 const lostPane = {
   ...base,
   panes: base.panes.map((pane) => ({ ...pane, status: 'lost' as const }))
@@ -69,6 +87,20 @@ export const FIXTURES: Record<string, FixtureState> = {
     label: 'Project dashboard (light)',
     state: base
   },
+  'dashboard-empty': {
+    id: 'dashboard-empty',
+    label: 'Project dashboard (empty)',
+    state: {
+      ...base,
+      activeProjectId: null,
+      activeTabId: null,
+      activePaneId: null,
+      projects: [],
+      tabs: [],
+      panes: [],
+      layouts: []
+    }
+  },
   'dashboard-dark': {
     id: 'dashboard-dark',
     label: 'Project dashboard (dark)',
@@ -78,6 +110,38 @@ export const FIXTURES: Record<string, FixtureState> = {
     id: 'active-tab',
     label: 'Active project with one tab open',
     state: base
+  },
+  'tab-bar-multi': {
+    id: 'tab-bar-multi',
+    label: 'Multi-tab top bar',
+    state: {
+      ...base,
+      projects: base.projects.map((project) => ({
+        ...project,
+        tabIds: ['tab-welcome', 'tab-build', 'tab-logs']
+      })),
+      tabs: [
+        ...base.tabs,
+        {
+          id: 'tab-build',
+          title: 'Build',
+          paneIds: ['pane-build'],
+          activePaneId: 'pane-build'
+        },
+        {
+          id: 'tab-logs',
+          title: 'Logs',
+          paneIds: ['pane-logs'],
+          activePaneId: 'pane-logs'
+        }
+      ],
+      panes: [...base.panes, secondPane, thirdPane],
+      layouts: [
+        ...base.layouts,
+        { tabId: 'tab-build', root: { kind: 'pane', paneId: 'pane-build' } },
+        { tabId: 'tab-logs', root: { kind: 'pane', paneId: 'pane-logs' } }
+      ]
+    }
   },
   'rail-collapsed': {
     id: 'rail-collapsed',
@@ -94,6 +158,7 @@ export const FIXTURES: Record<string, FixtureState> = {
     label: 'Two-pane row split',
     state: {
       ...base,
+      panes: [...base.panes, secondPane],
       layouts: [
         {
           tabId: 'tab-welcome',
@@ -102,7 +167,7 @@ export const FIXTURES: Record<string, FixtureState> = {
             axis: 'row',
             ratio: 0.5,
             first: { kind: 'pane', paneId: 'pane-welcome' },
-            second: { kind: 'pane', paneId: 'pane-welcome' }
+            second: { kind: 'pane', paneId: 'pane-build' }
           }
         }
       ]
@@ -113,6 +178,7 @@ export const FIXTURES: Record<string, FixtureState> = {
     label: 'Two-pane column split',
     state: {
       ...base,
+      panes: [...base.panes, secondPane],
       layouts: [
         {
           tabId: 'tab-welcome',
@@ -121,7 +187,7 @@ export const FIXTURES: Record<string, FixtureState> = {
             axis: 'column',
             ratio: 0.5,
             first: { kind: 'pane', paneId: 'pane-welcome' },
-            second: { kind: 'pane', paneId: 'pane-welcome' }
+            second: { kind: 'pane', paneId: 'pane-build' }
           }
         }
       ]
@@ -132,17 +198,7 @@ export const FIXTURES: Record<string, FixtureState> = {
     label: 'Three-pane nested split',
     state: {
       ...base,
-      panes: [
-        ...base.panes,
-        {
-          id: 'pane-extra',
-          title: 'Extra',
-          cwd: '~',
-          status: 'active',
-          cols: 120,
-          rows: 32
-        }
-      ],
+      panes: [...base.panes, secondPane, thirdPane],
       layouts: [
         {
           tabId: 'tab-welcome',
@@ -155,8 +211,8 @@ export const FIXTURES: Record<string, FixtureState> = {
               kind: 'split',
               axis: 'column',
               ratio: 0.5,
-              first: { kind: 'pane', paneId: 'pane-welcome' },
-              second: { kind: 'pane', paneId: 'pane-extra' }
+              first: { kind: 'pane', paneId: 'pane-build' },
+              second: { kind: 'pane', paneId: 'pane-logs' }
             }
           }
         }
@@ -180,13 +236,28 @@ export const FIXTURES: Record<string, FixtureState> = {
   },
   'dialog-project-edit': {
     id: 'dialog-project-edit',
-    label: 'Project edit dialog',
+    label: 'Project edit dialog (existing)',
+    state: base
+  },
+  'dialog-project-edit-new': {
+    id: 'dialog-project-edit-new',
+    label: 'Project edit dialog (new)',
     state: base
   },
   'dialog-terminal-settings': {
     id: 'dialog-terminal-settings',
-    label: 'Terminal settings dialog',
+    label: 'Terminal settings dialog (follow app)',
     state: base
+  },
+  'dialog-terminal-settings-light': {
+    id: 'dialog-terminal-settings-light',
+    label: 'Terminal settings dialog (light override)',
+    state: { ...base, settings: { ...base.settings, terminalTheme: 'light' } }
+  },
+  'dialog-terminal-settings-dark': {
+    id: 'dialog-terminal-settings-dark',
+    label: 'Terminal settings dialog (dark override)',
+    state: { ...base, settings: { ...base.settings, terminalTheme: 'dark' } }
   },
   'connection-offline': {
     id: 'connection-offline',
@@ -197,6 +268,17 @@ export const FIXTURES: Record<string, FixtureState> = {
     id: 'connection-connecting',
     label: 'Connection status (connecting)',
     state: connectingRemote
+  },
+  'connection-connected': {
+    id: 'connection-connected',
+    label: 'Connection status (connected)',
+    state: {
+      ...base,
+      remotes: base.remotes.map((remote) => ({
+        ...remote,
+        status: 'connected' as const
+      }))
+    }
   },
   'connection-lost': {
     id: 'connection-lost',

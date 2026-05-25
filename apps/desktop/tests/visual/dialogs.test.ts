@@ -1,9 +1,9 @@
 import { test, expect } from './playwright.setup'
 
 test.describe('Dialogs', () => {
-  test('dev panel exposes its actions', async ({ page }) => {
-    await expect(page.locator('.dev-panel')).toBeVisible()
-    await expect(page.locator('.dev-panel-actions button')).toHaveCount(2)
+  test('state panel exposes workspace actions', async ({ page }) => {
+    await expect(page.locator('.state-panel')).toBeVisible()
+    await expect(page.locator('.state-actions button')).toHaveCount(3)
   })
 
   test.fixme('renders the import-remote dialog (empty)', async ({ loadFixture, page }) => {

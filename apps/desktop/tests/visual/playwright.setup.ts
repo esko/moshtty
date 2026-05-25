@@ -26,7 +26,7 @@ export type MoshttyFixtures = {
 export const test = base.extend<MoshttyFixtures>({
   electronApp: async ({}, use) => {
     const app = await electron.launch({
-      args: [APP_ROOT, '--no-sandbox'],
+      args: ['--no-sandbox', APP_ROOT],
       env: { ...process.env, NODE_ENV: 'test', MOSHTTY_E2E: '1' }
     })
     await use(app)

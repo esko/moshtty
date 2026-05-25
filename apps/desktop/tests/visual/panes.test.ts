@@ -1,8 +1,10 @@
 import { test, expect } from './playwright.setup'
 
 test.describe('Panes', () => {
-  test('terminal canvas is present', async ({ page }) => {
-    await expect(page.locator('.terminal-canvas')).toBeVisible()
+  test('terminal workspace is present for active tab fixture', async ({ loadFixture, page }) => {
+    await loadFixture('active-tab')
+    await expect(page.locator('.terminal-workspace')).toBeVisible()
+    await expect(page.locator('.terminal-pane')).toBeVisible()
   })
 
   test('tab bar shows the active tab', async ({ page }) => {
