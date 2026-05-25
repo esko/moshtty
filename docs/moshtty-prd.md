@@ -66,8 +66,8 @@ Moshtty replaces the previous Crostini-local PWA/Go-agent architecture. The old 
 | --- | --- | --- |
 | M0 Planning docs | Done | PRD, plan, milestones, agent briefs, and Moshtty `AGENTS.md` are present |
 | M1 Branch and scaffold | Ready for review | New branch layout, pnpm/electron-vite/root Go module. Old runtime quarantined under quarantine/ |
-| M2 Desktop state shell | Planned | Electron main/preload, secure protocol, JSON state, secrets |
-| M3 macOS remote companion | Planned | `moshtty-remote`, LaunchAgent, profile JSON, cert/token/config |
+| M2 Desktop state shell | Ready for review | Secure `app://moshtty`, typed preload IPC, versioned JSON state, atomic writes, migration, safeStorage + passphrase fallback |
+| M3 macOS remote companion | Ready for review | `moshtty-remote` run/install/profile/health, LaunchAgent plist, config/token/certs, profile JSON |
 | M4 WebTransport and Mosh mux | Planned | JSON-RPC streams, datagram mux, mosh-go WASM/server adapter |
 | M5 UI and Ghostty integration | Planned | React UI, project rail, tabs, panes, settings, Ghostty renderer |
 | M6 `moshttyctl` CLI | Planned | Connected app commands and offline cleanup |
@@ -79,8 +79,8 @@ Moshtty replaces the previous Crostini-local PWA/Go-agent architecture. The old 
 | Task | Owner | Status | Brief |
 | --- | --- | --- | --- |
 | Scaffold Moshtty repo | Antigravity | Ready for review | `docs/agents/2026-05-25-1-moshtty-scaffold.md` |
-| Desktop state shell | Unassigned | Planned | `docs/agents/2026-05-25-2-desktop-state-shell.md` |
-| macOS remote companion | Unassigned | Planned | `docs/agents/2026-05-25-3-macos-remote-companion.md` |
+| Desktop state shell | Agent | Ready for review | `docs/agents/2026-05-25-2-desktop-state-shell.md` |
+| macOS remote companion | Agent (M3) | Ready for review | `docs/agents/2026-05-25-3-macos-remote-companion.md` |
 | WebTransport Mosh mux | Unassigned | Planned | `docs/agents/2026-05-25-4-webtransport-mosh-mux.md` |
 | Moshtty UI and Ghostty | Unassigned | Planned | `docs/agents/2026-05-25-5-moshtty-ui-ghostty.md` |
 | `moshttyctl` CLI | Unassigned | Planned | `docs/agents/2026-05-25-6-moshttyctl-cli.md` |
@@ -180,5 +180,11 @@ The first full acceptance pass requires:
 ## Current Notes
 
 - M0 documentation is complete and ready for review.
-- Runtime code should not start until the docs and task briefs are present.
+- M1 scaffold is ready for review on `feat/moshtty-scaffold`.
+- M2 desktop state shell is ready for review: secure `app://moshtty` protocol, typed preload `window.moshtty` IPC, versioned `moshtty-state.json` with atomic writes and v0→v1 migration, tab layout schema, Electron `safeStorage` token storage with passphrase-encrypted fallback, and a renderer dev panel to load/save/reset state.
+- M2 verification (2026-05-25): `pnpm --filter @moshtty/desktop test` (15 passed), `pnpm --filter @moshtty/desktop typecheck` (passed), `pnpm --filter @moshtty/desktop build` (passed), `git diff --check` (passed).
+- M3 macOS remote companion is ready for review: `moshtty-remote` subcommands (`run`, `install`, `profile`, `health`), macOS user-local paths under `~/Library/Application Support/Moshtty`, LaunchAgent plist at `~/Library/LaunchAgents/com.moshtty.remote.plist`, recommended binary install path `~/.local/bin`, default bind `0.0.0.0:4433`, persistent auth token, ECDSA P-256 short-lived certs with SHA-256 hashes, and pasteable profile JSON for app import.
+- M3 verification (2026-05-25): `go test ./...` (passed), `go test ./cmd/moshtty-remote ./internal/...` (passed), `git diff --check` (passed). Table-driven tests cover macOS path resolution, config defaults, token generation, cert validity/hash generation, profile JSON shape, LaunchAgent plist generation, and health startup.
+- M3 manual macOS install caveats: build `moshtty-remote` on or for macOS, copy binary to `~/.local/bin`, run `moshtty-remote install --binary ~/.local/bin/moshtty-remote`, then `launchctl load -w ~/Library/LaunchAgents/com.moshtty.remote.plist`. Unsigned binaries may require `xattr -d com.apple.quarantine` or ad-hoc signing before first run. WebTransport listener is not started until M4; `run` currently exposes only the localhost health HTTP endpoint on `127.0.0.1:4434`.
+- safeStorage availability was not exercised in a live Electron session on this Crostini host during M2; unit tests cover both `safeStorage` and passphrase fallback paths. Confirm `safeStorage` behavior manually on first Electron run.
 - The old `agent/` and `web/` architecture remains in the repository only until the scaffold task replaces or removes it.
