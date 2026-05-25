@@ -10,6 +10,7 @@ import (
 	"github.com/moshtty/moshtty/internal/certs"
 	"github.com/moshtty/moshtty/internal/config"
 	"github.com/moshtty/moshtty/internal/jsonrpc"
+	"github.com/moshtty/moshtty/internal/pane"
 )
 
 func TestDispatchHealth(t *testing.T) {
@@ -25,6 +26,50 @@ func TestDispatchHealth(t *testing.T) {
 	payload, ok := result.(map[string]any)
 	if !ok || payload["status"] != "ok" {
 		t.Fatalf("result = %#v", result)
+	}
+}
+
+func TestDispatchPaneList(t *testing.T) {
+	srv := newTestServer(t)
+	srv.panes.SetDatagramSender(func([]byte) error { return nil })
+
+	// Create a pane first
+	createResult, err := srv.dispatch(jsonrpc.Request{
+		JSONRPC: jsonrpc.Version,
+		ID:      json.RawMessage(`2`),
+		Method:  "pane.create",
+		Params:  json.RawMessage(`{"shell":"/bin/sh","cols":80,"rows":24}`),
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	flowID := extractFlowID(t, createResult)
+
+	// List panes
+	listResult, err := srv.dispatch(jsonrpc.Request{
+		JSONRPC: jsonrpc.Version,
+		ID:      json.RawMessage(`3`),
+		Method:  "pane.list",
+	})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+
+	payload, ok := listResult.(map[string]any)
+	if !ok {
+		t.Fatalf("expected map result, got %#v", listResult)
+	}
+	panesVal, ok := payload["panes"]
+	if !ok {
+		t.Fatalf("expected panes key in result")
+	}
+	panes, ok := panesVal.([]pane.Info)
+	if !ok {
+		t.Fatalf("expected []pane.Info, got %#v", panesVal)
+	}
+
+	if len(panes) != 1 || panes[0].FlowID != flowID {
+		t.Fatalf("unexpected panes list: %#v", panes)
 	}
 }
 
