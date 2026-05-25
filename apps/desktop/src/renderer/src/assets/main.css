@@ -551,7 +551,9 @@
   display: grid;
   width: min(100%, calc(var(--space-3xl) * 25));
   min-height: min(70vh, calc(var(--space-3xl) * 11));
+  max-height: calc(100% - var(--space-2xl));
   grid-template-columns: calc(var(--space-3xl) * 5) 1fr;
+  overflow: hidden;
 }
 
 .settings-nav {
@@ -573,6 +575,8 @@
   display: grid;
   align-content: start;
   gap: var(--space-xl);
+  min-height: 0;
+  overflow: auto;
   padding: var(--space-xl);
 }
 

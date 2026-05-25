@@ -22,12 +22,12 @@ On-disk paths (ChromeOS Downloads; stable for this milestone):
 
 ### Reference → surfaces (fill after viewing)
 
-| ID             | Primary surface | Secondary surface(s) | Notes |
-| -------------- | --------------- | -------------------- | ----- |
-| `ref-18.46.04` | TBD             | TBD                  | TBD   |
-| `ref-18.46.17` | TBD             | TBD                  | TBD   |
-| `ref-18.46.25` | TBD             | TBD                  | TBD   |
-| `ref-18.46.36` | TBD             | TBD                  | TBD   |
+| ID             | Primary surface          | Secondary surface(s)  | Notes                                                                                                     |
+| -------------- | ------------------------ | --------------------- | --------------------------------------------------------------------------------------------------------- |
+| `ref-18.46.04` | project dashboard, light | expanded project rail | OpenCode dashboard baseline: compact top chrome, left project rail, centered search, sparse session list. |
+| `ref-18.46.17` | expanded project rail    | project action menu   | Same dashboard with the project action menu open; Moshtty maps this to expanded rail chrome for M5.       |
+| `ref-18.46.25` | project edit dialog      | modal overlay         | Centered project-edit modal, subdued backdrop, project color/icon treatment.                              |
+| `ref-18.46.36` | settings dialog          | settings side nav     | Large settings modal with side navigation and flat setting rows.                                          |
 
 ## Required surface → reference mapping
 
@@ -35,20 +35,20 @@ Surfaces match [docs/moshtty-testing.md](moshtty-testing.md) **Required screensh
 Assign one or more reference IDs per row after viewing refs; use `none` only when
 the four references definitively do not depict that surface.
 
-| Surface (fixture / Playwright name) | Reference ID(s) | Notes                            |
-| ----------------------------------- | --------------- | -------------------------------- |
-| project dashboard, light mode       | TBD             |                                  |
-| project dashboard, dark mode        | TBD             |                                  |
-| active Project with one Tab         | TBD             | Terminal Pane work area dominant |
-| split Panes (2)                     | TBD             |                                  |
-| split Panes (3)                     | TBD             |                                  |
-| collapsed project rail              | TBD             |                                  |
-| expanded project rail               | TBD             |                                  |
-| remote import dialog                | TBD             |                                  |
-| project edit dialog                 | TBD             |                                  |
-| settings dialog                     | TBD             |                                  |
-| lost Pane state                     | TBD             |                                  |
-| connection status popover           | TBD             |                                  |
+| Surface (fixture / Playwright name) | Reference ID(s)                | Notes                                                                                   |
+| ----------------------------------- | ------------------------------ | --------------------------------------------------------------------------------------- |
+| project dashboard, light mode       | `ref-18.46.04`                 | Side-by-side: `docs/visual-qa/m5/project-dashboard-light/side-by-side.png`.             |
+| project dashboard, dark mode        | none                           | The four references are light-mode only; dark is checked against token contrast.        |
+| active Project with one Tab         | none                           | Terminal Pane work area dominant; no terminal reference is included in the four images. |
+| split Panes (2)                     | none                           | No split-pane reference is included in the four images.                                 |
+| split Panes (3)                     | none                           | No split-pane reference is included in the four images.                                 |
+| collapsed project rail              | `ref-18.46.04`                 | Shares top chrome and project rail proportions with the dashboard baseline.             |
+| expanded project rail               | `ref-18.46.04`, `ref-18.46.17` | Side-by-side: `docs/visual-qa/m5/expanded-project-rail/side-by-side.png`.               |
+| remote import dialog                | none                           | No import dialog reference is included in the four images.                              |
+| project edit dialog                 | `ref-18.46.25`                 | Side-by-side: `docs/visual-qa/m5/project-edit-dialog/side-by-side.png`.                 |
+| settings dialog                     | `ref-18.46.36`                 | Side-by-side: `docs/visual-qa/m5/settings-dialog/side-by-side.png`.                     |
+| lost Pane state                     | none                           | No lost-pane reference is included in the four images.                                  |
+| connection status popover           | none                           | No connection-status reference is included in the four images.                          |
 
 ## Claim parity workflow
 

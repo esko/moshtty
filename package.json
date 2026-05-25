@@ -7,6 +7,7 @@
     "dev": "pnpm --filter @moshtty/desktop dev",
     "build": "pnpm --filter @moshtty/desktop build",
     "test": "pnpm --filter @moshtty/desktop test && go test ./...",
+    "test:visual": "pnpm --filter @moshtty/desktop test:visual",
     "typecheck": "pnpm --filter @moshtty/desktop typecheck",
     "lint": "pnpm --filter @moshtty/desktop lint",
     "lint:css": "pnpm --filter @moshtty/desktop lint:css",

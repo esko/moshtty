@@ -172,7 +172,7 @@ Agent brief:
 
 ## M5 UI And Ghostty Integration
 
-Status: In progress
+Status: Ready for review
 
 Objective:
 
