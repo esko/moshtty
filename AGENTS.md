@@ -18,12 +18,17 @@ The old local Go PTY agent and PWA/service-worker architecture are deprecated fo
 
 Read these before starting implementation work:
 
-- `docs/moshtty-prd.md` - product requirements, scope, status, risks.
-- `docs/moshtty-plan.md` - architecture decisions from planning.
-- `docs/moshtty-milestones.md` - implementation roadmap and acceptance criteria.
-- `docs/moshtty-testing.md` - testing strategy, visual regression, and agent-browser QA.
-- `docs/moshtty-model-routing.md` - model choice guidance for external subagents.
-- `docs/agents/*.md` - task briefs for parallel agents.
+- `docs/moshtty-prd.md` — product requirements, scope, status, risks.
+- `docs/moshtty-plan.md` — architecture decisions from planning.
+- `docs/moshtty-milestones.md` — implementation roadmap and acceptance criteria.
+- `docs/moshtty-testing.md` — testing strategy, visual regression, and agent-browser QA.
+- `docs/moshtty-design-system.md` — token / theme contract for renderer work (mandatory before any UI edit).
+- `docs/moshtty-design-references.md` — reference screenshot mapping to UI surfaces.
+- `docs/moshtty-design-checkup.md` — design vital-signs rubric (run at end of M5 and M7).
+- `docs/moshtty-model-routing.md` — model choice guidance for external subagents.
+- `docs/agents/*.md` — task briefs for parallel agents.
+- `docs/agents/OWNERS.md` — path ownership matrix; consult before editing any file.
+- `docs/agents/TEMPLATE_HANDOFF.md` — fill this out before closing a task.
 
 Agents must close out `docs/moshtty-prd.md` before ending completed or blocked work: update task and milestone status, record verification commands, note blockers or follow-ups, and make sure the PRD does not show stale ownership/status for their slice.
 
@@ -42,16 +47,17 @@ Coordinators should never mark a milestone with native dependencies as `Done` fr
 
 ## Stop Conditions
 
-If your task drifts into any of the following, **stop and surface to the coordinator** before writing more code:
+If your task drifts into any of the following, **stop and surface to the coordinator** before writing more code. Do not "just fix it" — these paths are coordinator-owned.
 
-- a slice would touch `apps/desktop/src/renderer/src/design/tokens.{ts,css}`, `theme.ts`, or `docs/moshtty-design-system.md` (token / theme contract);
-- a slice would change schemas under `apps/desktop/src/common/*.schema.ts` or the IPC contract in `apps/desktop/src/common/moshtty-api.ts` (renderer/main trust boundary);
-- a slice would change `docs/moshtty-prd.md`, `docs/moshtty-milestones.md`, `docs/moshtty-testing.md`, `docs/agents/OWNERS.md`, or `AGENTS.md` outside of the close-out step;
-- a slice would edit files outside the task brief's owned paths in `docs/agents/OWNERS.md`;
-- a slice would add a new top-level dependency, change the Electron, Node, or Go version, or modify `pnpm-workspace.yaml` / `go.mod` toolchain entries;
-- you discover that the agreed approach in the task brief no longer matches the code (the brief is out of date — fix the brief first).
+- a slice would edit any file outside the task brief's owned paths in [`docs/agents/OWNERS.md`](docs/agents/OWNERS.md);
+- a slice would touch the **design contract**: `apps/desktop/src/renderer/src/design/tokens.{ts,css}`, `apps/desktop/src/renderer/src/design/theme.ts`, or `docs/moshtty-design-system.md`;
+- a slice would change the **renderer/main trust boundary**: schemas under `apps/desktop/src/common/*.schema.ts` or the IPC contract in `apps/desktop/src/common/moshtty-api.ts`;
+- a slice would touch the **shared process docs**: `docs/moshtty-prd.md`, `docs/moshtty-milestones.md`, `docs/moshtty-testing.md`, `docs/agents/OWNERS.md`, or `AGENTS.md` outside of the close-out step explicitly assigned to your brief;
+- a slice would change **toolchain or top-level deps**: add a new top-level dependency, change the Electron, Node, pnpm, or Go version, or modify `pnpm-workspace.yaml` / `go.mod` toolchain entries / `.github/workflows/**` / `lefthook.yml`;
+- a slice would require a destructive git operation (see [Destructive commands](#destructive-commands));
+- you discover that the agreed approach in the task brief no longer matches the code — the brief is out of date; fix the brief first, then resume.
 
-Drift is a coordinator problem, not a worker problem. Pause, write the blocker into the PRD, and wait for direction. Coordinators should give immediate corrective feedback when a worker is on the wrong path; do not let a slice finish on a wrong trajectory.
+Drift is a coordinator problem, not a worker problem. Pause, write the blocker into the PRD, and wait for direction.
 
 ## Slice Budget
 
@@ -78,25 +84,46 @@ If you hit the soft cap, stop and check whether the slice can be split. If you h
 
 ## Tooling
 
-Frontend/client:
+Install once per checkout; pnpm 9+ and Node 22+ are expected.
 
 ```bash
 pnpm install
-pnpm --filter @moshtty/desktop dev
-pnpm --filter @moshtty/desktop test
-pnpm --filter @moshtty/desktop typecheck
-pnpm --filter @moshtty/desktop build
 ```
 
-Go:
+Desktop client (Electron + React renderer in `apps/desktop`):
+
+```bash
+pnpm --filter @moshtty/desktop dev            # local Electron dev server
+pnpm --filter @moshtty/desktop build          # typecheck + electron-vite build
+pnpm --filter @moshtty/desktop typecheck      # tsc --noEmit (node + web projects)
+pnpm --filter @moshtty/desktop test           # vitest run (unit + integration)
+pnpm --filter @moshtty/desktop test:coverage  # vitest with v8 coverage thresholds
+pnpm --filter @moshtty/desktop lint           # eslint --cache (includes jsx-a11y)
+pnpm --filter @moshtty/desktop lint:css       # stylelint (enforces token contract)
+pnpm --filter @moshtty/desktop test:visual    # Playwright Electron + axe-core
+pnpm --filter @moshtty/desktop test:visual:update  # refresh snapshots
+```
+
+Go remote + CLI (in `cmd/`, `internal/`):
 
 ```bash
 go test ./...
-go test ./internal/...
-go test ./cmd/moshtty-remote ./cmd/moshttyctl
+go vet ./...
+golangci-lint run ./...
 ```
 
-These commands may not exist until the scaffold milestone lands. If a task creates or changes tooling, update this file and the PRD status.
+Repo-wide gates (run before opening a PR or marking `Ready for review`):
+
+```bash
+pnpm format:check    # prettier --check across the workspace
+pnpm verify          # lint + lint:css + typecheck + test + format:check
+go test ./...
+git diff --check     # whitespace / conflict marker scan
+```
+
+Pre-commit hooks (`lefthook.yml`) run prettier, scoped eslint, scoped stylelint, `go vet`, and `golangci-lint --new-from-rev` on staged files. `commit-msg` runs commitlint. Do not bypass with `--no-verify`.
+
+If a task creates or changes tooling, update this section, the PRD status, and `.github/workflows/ci.yml` in the same slice.
 
 ## Code Style
 
@@ -129,60 +156,117 @@ If a required command is unavailable because the scaffold has not landed, docume
 
 ## Design Rules
 
-Use the four screenshots from `/mnt/chromeos/MyFiles/Downloads` as primary visual references:
+The normative design contract lives in [`docs/moshtty-design-system.md`](docs/moshtty-design-system.md). Read it before opening any renderer file. Surface-state, reference-parity, copy/voice, icon system, keyboard map, accessibility floor, and CSP rules live in the M5 brief (`docs/agents/2026-05-25-5-moshtty-ui-ghostty.md`).
+
+Token contract (enforced by Stylelint):
+
+- All colors, spacing, radii, font sizes, line heights, z-index, durations, easings, and shadows in renderer CSS must reference a CSS custom property from `apps/desktop/src/renderer/src/design/tokens.css`. TypeScript renderer code reads the same values from `apps/desktop/src/renderer/src/design/tokens.ts`.
+- Raw `#hex`, `rgb(...)`, `rgba(...)`, `hsl(...)`, `px`, `em`, `rem`, `ms`, and `cubic-bezier(...)` literals outside the token modules are a lint error.
+- Adding or changing a token requires editing `tokens.ts`, `tokens.css`, and `docs/moshtty-design-system.md` together. That edit is a stop condition; coordinate first.
+
+Reference screenshots (the visual ground truth) live in `/mnt/chromeos/MyFiles/Downloads`:
 
 - `Screenshot 2026-05-24 18.46.04.png`
 - `Screenshot 2026-05-24 18.46.17.png`
 - `Screenshot 2026-05-24 18.46.25.png`
 - `Screenshot 2026-05-24 18.46.36.png`
 
-Visual direction:
+The mapping from each screenshot to specific UI surfaces is in [`docs/moshtty-design-references.md`](docs/moshtty-design-references.md). Reference parity is scored against [`docs/moshtty-design-checkup.md`](docs/moshtty-design-checkup.md) at the end of M5 and M7.
 
-- quiet light desktop UI by default;
-- compact left project rail;
-- large terminal work area;
-- flat rows and subtle dividers;
-- minimal top tab/action bar;
-- centered modals for edits/import/settings;
-- compact density by default;
-- Light/Dark/System mode setting;
-- terminal palette linked to app mode by default.
-
-Do not create a marketing landing page. The first screen should be the usable app shell or project dashboard.
+Do not create a marketing landing page. The first screen the user sees is the usable app shell or project dashboard.
 
 ## Git And Commit Rules
 
-- Work in small, reviewable slices.
+### Slice and commit shape
+
+- Work in small, reviewable slices that respect the [Slice Budget](#slice-budget).
 - Always commit completed work before handing it back, unless the user explicitly asks not to commit or the task is intentionally left blocked.
-- Prefer atomic commits: each commit should contain one coherent docs, scaffold, feature, fix, or test slice.
-- Use conventional commits:
-  - `feat:` for features;
-  - `fix:` for defects;
-  - `refactor:` for structure changes;
-  - `test:` for test-only changes;
-  - `docs:` for documentation;
-  - `chore:` for tooling and generated metadata.
+- Prefer atomic commits: each commit should contain one coherent docs, scaffold, feature, fix, or test slice. A formatting-only consequence of a config change is a separate `style:` or `docs:` commit, not part of the config commit.
+- If generated files are introduced, keep source and generated-output commits separate when practical.
 - Do not commit failing tests unless the PRD explicitly marks the task blocked and the commit is a documented handoff.
+- Close out `docs/moshtty-prd.md` before committing a completed or blocked task.
+
+### Conventional commit types
+
+Allowed types (matched by `commitlint.config.js`):
+
+- `feat:` — user-visible feature.
+- `fix:` — defect fix.
+- `refactor:` — structure change with no behavior delta.
+- `perf:` — performance improvement.
+- `test:` — test-only change.
+- `docs:` — documentation only.
+- `style:` — formatting / whitespace / linter auto-fix consequences with no logic change.
+- `chore:` — tooling, dependencies, generated metadata.
+- `ci:` — CI configuration only.
+- `revert:` — reverting a prior commit.
+
+A scope in parentheses is encouraged for cross-cutting work, e.g. `chore(deps):`, `feat(schemas):`, `test(visual):`, `chore(lint):`.
+
+### Destructive commands
+
+Never run any of the following without an explicit coordinator instruction in the current turn:
+
+- `git clean` (any flags) — untracked files may be uncommitted work from another agent.
+- `git reset --hard`, `git restore --staged --worktree`, `git checkout -- <path>` against modified files.
+- `git push --force` / `--force-with-lease`.
+- `git rebase` (interactive or otherwise), branch deletion, tag deletion.
+- `rm -rf` against tracked directories, `pnpm dlx` invocations that mutate the workspace.
+
+"Get the tree clean" or "start fresh" are not enough; ask for the exact command or a different starting point. When in doubt, prefer `git stash` over a destructive operation — stashed work can be recovered.
+
+### Amending and fix-ups
+
+Avoid `git commit --amend`. Only amend when **all** of the following hold:
+
+1. The user explicitly requested it **or** the commit succeeded but a pre-commit hook auto-modified files that belong in the same commit.
+2. The HEAD commit was created by you in the current session (`git log -1 --format='%an %ae'` shows your identity).
+3. The commit has not been pushed.
+
+If a commit failed or was rejected by a hook, fix the issue and make a new commit — never amend. If a commit included files that did not belong (e.g. carried over from a previous failed attempt), `git reset --soft HEAD^` followed by re-staging is the right tool; document the recovery in the next commit message.
+
+### Failed-commit staging hygiene
+
+After any `git commit` that fails (pre-commit hook reject, commitlint failure, etc.), run `git reset HEAD` to clear the staging area before staging the next slice. Git's staging area is sticky across commit attempts, so files staged for a failed slice will silently piggy-back onto the next commit if you do not reset. Failing to do this produced a misleading commit message during the 2026-05-25 guardrails recovery; do not repeat it.
+
+### Pushing and cross-agent etiquette
+
 - Do not push unless the coordinator/user asks.
 - Do not rewrite, revert, or clean up another agent's unrelated changes.
-- Do not run destructive git commands unless explicitly requested.
-- Never run `git clean -fd` without first running `git status` to review untracked files. Prefer `git checkout -- .` for reverting only tracked file changes. Untracked files may represent uncommitted work from prior agents — deleting them without review can destroy in-progress infrastructure.
-- If generated files are introduced, keep source and generated-output commits separate when practical.
-- Close out `docs/moshtty-prd.md` before committing a completed or blocked task.
 - Give immediate corrective feedback when a subagent is on the wrong path. Do not wait for a slice to finish if the scope, model choice, file ownership, or verification plan is wrong; stop, restate the correction, and reassign the work.
 
 ## Multi-Agent Workflow
 
 1. Pick one task brief from `docs/agents/`.
-2. Claim the brief's owned paths against `docs/agents/OWNERS.md` and confirm no overlap with another in-progress task.
-3. Confirm the current git status before editing. Inspect untracked files; never `git clean -fd` them without explicit coordinator approval.
-4. Keep edits inside the task's listed paths unless the brief explains otherwise. Watch the slice budget.
+2. Run the [Subagent Pre-flight](#subagent-pre-flight) checklist before touching any file. This applies to the coordinator too.
+3. Claim the brief's owned paths against [`docs/agents/OWNERS.md`](docs/agents/OWNERS.md) and confirm no overlap with another in-progress task.
+4. Keep edits inside the brief's listed paths. Watch the [Slice Budget](#slice-budget). Editing a path outside the brief's owned globs is a [Stop Condition](#stop-conditions).
 5. Add or update tests with the implementation.
-6. Run the task's verification commands.
-7. Fill in `docs/agents/TEMPLATE_HANDOFF.md` (or post the equivalent in the PRD) before closing out: what shipped, what was deferred, what needs follow-up, where the visual or on-device verification stands.
-8. Close out `docs/moshtty-prd.md` for the task: milestone/task status (from the Status Tiers list), owner, verification notes, blockers, and follow-ups.
-9. Commit the slice with an atomic conventional commit message.
+6. Run the task's verification commands (and `pnpm verify` + `go test ./...` at minimum).
+7. Fill in [`docs/agents/TEMPLATE_HANDOFF.md`](docs/agents/TEMPLATE_HANDOFF.md) (or post the equivalent in the PRD) before closing out: what shipped, what was deferred, what needs follow-up, where the visual or on-device verification stands.
+8. Close out [`docs/moshtty-prd.md`](docs/moshtty-prd.md) for the task: milestone/task status (from the [Status Tiers](#status-tiers) list), owner, verification notes, blockers, and follow-ups.
+9. Commit the slice with one atomic conventional commit.
 
 Avoid parallel edits to the same files. If two tasks need the same shared module, coordinate through the PRD status notes before editing.
 
-The `cmd` harness with model `deepseek/deepseek-v4-pro` is allowed for subagents when a task is well scoped and has a clear write boundary. Gemini 3.5 Flash via Antigravity/`agy` is also allowed for bounded implementation work. Follow `docs/moshtty-model-routing.md` for model selection. Give all external agents the same docs and task-brief instructions, and require the same verification, PRD close-out, and atomic conventional commit behavior. If a worker starts drifting, stop it immediately and correct the scope before more files change.
+## Subagent Pre-flight
+
+Every agent and subagent — including external ones launched through `cmd`, `agy`, the Cursor `Task` tool, or any other harness — must do the following **before writing any file**. Coordinators must include this checklist verbatim in subagent prompts and refuse handoffs that skipped it.
+
+1. Run `git status` and read the output. Report what is modified, what is staged, and what is untracked, in plain text, before doing anything else. If anything is unexpected, stop and ask the coordinator.
+2. Run `git log -1 --format='%h %s'` and confirm the HEAD commit matches what the brief expects. If HEAD has moved since the brief was written, stop and ask.
+3. Treat **every untracked file as potentially uncommitted work from another agent**. Do not delete, move, rename, or `git clean` them. If they appear unrelated to the current task, leave them alone and surface them in the handoff notes.
+4. Do not run any destructive command without an explicit one-shot instruction from the coordinator in the same turn (see [Destructive commands](#destructive-commands)). "Get the tree clean" or "start fresh" is not sufficient — ask for the exact command or a different starting point.
+5. Confirm the brief's owned paths against `docs/agents/OWNERS.md` before opening an editor. Edits outside the owned paths are a stop condition.
+6. Read the docs the brief lists under "Read First", at minimum `AGENTS.md` (this file), the PRD, and any contract docs (`docs/moshtty-design-system.md` for renderer work, OWNERS for any work). Skim is not enough; the [Token contract](#design-rules) and [Stop Conditions](#stop-conditions) are not negotiable.
+7. If a verification command is unavailable on the current host (no display for Playwright, no Mac for `safeStorage`, no working network, etc.), say so explicitly in the handoff and mark the task `Blocked` or `Ready for review` with a verification gap. Never fake a result.
+
+A handoff that does not show the output of step 1 and step 2 is incomplete and will be rejected.
+
+### Approved subagent harnesses
+
+- **`cmd` with `deepseek/deepseek-v4-pro`**: allowed when the task is well scoped and has a clear write boundary documented in the brief.
+- **`agy` (Gemini 3.5 Flash via Antigravity)**: allowed for bounded implementation work; do not give it broad refactor scope.
+- **Cursor `Task` tool** (`composer-2.5-fast` and the coordinator's own model): allowed for parallel work that fits inside one OWNERS row.
+
+Model selection guidance is in [`docs/moshtty-model-routing.md`](docs/moshtty-model-routing.md). Whichever harness is used, give the subagent the same docs the coordinator has read, the same task brief, and the same verification, PRD close-out, and atomic conventional commit requirements. If a worker starts drifting, stop it immediately, correct the scope, and reassign — do not let a slice finish on a wrong trajectory.
