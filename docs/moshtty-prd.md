@@ -68,7 +68,7 @@ Moshtty replaces the previous Crostini-local PWA/Go-agent architecture. The old 
 | M1 Branch and scaffold | Ready for review | New branch layout, pnpm/electron-vite/root Go module. Old runtime quarantined under quarantine/ |
 | M2 Desktop state shell | Ready for review | Secure `app://moshtty`, typed preload IPC, versioned JSON state, atomic writes, migration, safeStorage + passphrase fallback |
 | M3 macOS remote companion | Ready for review | `moshtty-remote` run/install/profile/health, LaunchAgent plist, config/token/certs, profile JSON |
-| M4 WebTransport and Mosh mux | Planned | JSON-RPC streams, datagram mux, mosh-go WASM/server adapter |
+| M4 WebTransport and Mosh mux | Ready for review | WebTransport server, JSON-RPC control, mux datagrams, pane lifecycle, renderer transport client |
 | M5 UI and Ghostty integration | Planned | React UI, project rail, tabs, panes, settings, Ghostty renderer |
 | M6 `moshttyctl` CLI | Planned | Connected app commands and offline cleanup |
 | M7 Real remote acceptance | Planned | macOS host smoke and reconnect workflow |
@@ -81,7 +81,7 @@ Moshtty replaces the previous Crostini-local PWA/Go-agent architecture. The old 
 | Scaffold Moshtty repo | Antigravity | Ready for review | `docs/agents/2026-05-25-1-moshtty-scaffold.md` |
 | Desktop state shell | Agent | Ready for review | `docs/agents/2026-05-25-2-desktop-state-shell.md` |
 | macOS remote companion | Agent (M3) | Ready for review | `docs/agents/2026-05-25-3-macos-remote-companion.md` |
-| WebTransport Mosh mux | Unassigned | Planned | `docs/agents/2026-05-25-4-webtransport-mosh-mux.md` |
+| WebTransport Mosh mux | Agent (M4) | Ready for review | `docs/agents/2026-05-25-4-webtransport-mosh-mux.md` |
 | Moshtty UI and Ghostty | Unassigned | Planned | `docs/agents/2026-05-25-5-moshtty-ui-ghostty.md` |
 | `moshttyctl` CLI | Unassigned | Planned | `docs/agents/2026-05-25-6-moshttyctl-cli.md` |
 
@@ -186,6 +186,9 @@ The first full acceptance pass requires:
 - M2 visual QA (2026-05-25): `agent-browser connect` against Electron on port 9225 (avoid `--disable-gpu` on Crostini/Wayland). Screenshots in `docs/visual-qa/m2/`. Fixed preload path (`index.mjs`), Zustand render loop, CSP for Vite HMR, and ErrorBoundary for renderer failures.
 - M3 macOS remote companion is ready for review: `moshtty-remote` subcommands (`run`, `install`, `profile`, `health`), macOS user-local paths under `~/Library/Application Support/Moshtty`, LaunchAgent plist at `~/Library/LaunchAgents/com.moshtty.remote.plist`, recommended binary install path `~/.local/bin`, default bind `0.0.0.0:4433`, persistent auth token, ECDSA P-256 short-lived certs with SHA-256 hashes, and pasteable profile JSON for app import.
 - M3 verification (2026-05-25): `go test ./...` (passed), `go test ./cmd/moshtty-remote ./internal/...` (passed), `git diff --check` (passed). Table-driven tests cover macOS path resolution, config defaults, token generation, cert validity/hash generation, profile JSON shape, LaunchAgent plist generation, and health startup.
-- M3 manual macOS install caveats: build `moshtty-remote` on or for macOS, copy binary to `~/.local/bin`, run `moshtty-remote install --binary ~/.local/bin/moshtty-remote`, then `launchctl load -w ~/Library/LaunchAgents/com.moshtty.remote.plist`. Unsigned binaries may require `xattr -d com.apple.quarantine` or ad-hoc signing before first run. WebTransport listener is not started until M4; `run` currently exposes only the localhost health HTTP endpoint on `127.0.0.1:4434`.
+- M3 manual macOS install caveats: build `moshtty-remote` on or for macOS, copy binary to `~/.local/bin`, run `moshtty-remote install --binary ~/.local/bin/moshtty-remote`, then `launchctl load -w ~/Library/LaunchAgents/com.moshtty.remote.plist`. Unsigned binaries may require `xattr -d com.apple.quarantine` or ad-hoc signing before first run.
+- M4 WebTransport and Mosh mux is ready for review: `moshtty-remote run` now serves authenticated WebTransport on `0.0.0.0:4433` with token + Origin checks, JSON-RPC control stream (`health`, `pane.create`, `pane.attach`, `pane.resize`, `pane.close`), versioned mux datagram framing, localhost UDP bridge into `mosh-go` pane servers, TLS from M3 certs, and a renderer `MoshttyTransport` client with mux/cert-hash helpers.
+- M4 verification (2026-05-25): `go test ./...` (passed), `pnpm --filter @moshtty/desktop test` (19 passed), `pnpm --filter @moshtty/desktop typecheck` (passed), `git diff --check` (passed). Tests cover mux encode/decode, auth/origin, JSON-RPC dispatch, pane create/close lifecycle, and health + WebTransport startup wiring.
+- M4 follow-ups: confirm profile cert pins against a real Chromium/Electron WebTransport connect; bundle `mosh-go` WASM into the desktop client in M5; replace the localhost UDP bridge with a narrower direct `mosh-go` server adapter when practical; pane shutdown currently waits up to 2s while upstream `mosh-go` tears down.
 - safeStorage availability was not exercised in a live Electron session on this Crostini host during M2; unit tests cover both `safeStorage` and passphrase fallback paths. Confirm `safeStorage` behavior manually on first Electron run.
 - The old `agent/` and `web/` architecture remains in the repository only until the scaffold task replaces or removes it.

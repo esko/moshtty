@@ -73,7 +73,7 @@ func runCommand(args []string) {
 	defer stop()
 
 	fmt.Fprintf(os.Stderr, "moshtty-remote listening on %s (health)\n", runtime.Config.HealthEndpoint())
-	fmt.Fprintf(os.Stderr, "webtransport bind target %s\n", runtime.Config.BindEndpoint())
+	fmt.Fprintf(os.Stderr, "moshtty-remote webtransport on %s\n", runtime.Config.BindEndpoint())
 
 	if err := runtime.Run(ctx); err != nil && err != context.Canceled {
 		exitErr(err)

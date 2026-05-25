@@ -8,8 +8,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/moshtty/moshtty/internal/certs"
 	"github.com/moshtty/moshtty/internal/config"
 	"github.com/moshtty/moshtty/internal/profile"
+	"github.com/moshtty/moshtty/internal/wtserver"
 )
 
 type HealthStatus struct {
@@ -22,11 +24,12 @@ type HealthStatus struct {
 }
 
 type Runtime struct {
-	Paths   config.Paths
-	Config  config.Config
-	Token   string
-	Started time.Time
-	server  *http.Server
+	Paths      config.Paths
+	Config     config.Config
+	Token      string
+	Started    time.Time
+	healthSrv  *http.Server
+	wtServer   *wtserver.Server
 }
 
 func PrepareRuntime(paths config.Paths) (Runtime, error) {
@@ -66,28 +69,37 @@ func (r *Runtime) HealthStatus() HealthStatus {
 }
 
 func (r *Runtime) Run(ctx context.Context) error {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(r.HealthStatus())
-	})
-
-	r.server = &http.Server{
-		Addr:              r.Config.HealthEndpoint(),
-		Handler:           mux,
-		ReadHeaderTimeout: 5 * time.Second,
+	tlsCert, err := certs.LoadTLSCertificate(r.Paths.CurrentCertPath())
+	if err != nil {
+		return fmt.Errorf("load webtransport cert: %w", err)
 	}
 
-	errCh := make(chan error, 1)
+	wt, err := wtserver.New(wtserver.Options{
+		Config: r.Config,
+		Token:  r.Token,
+		Cert:   tlsCert,
+	})
+	if err != nil {
+		return fmt.Errorf("create webtransport server: %w", err)
+	}
+	r.wtServer = wt
+
+	errCh := make(chan error, 2)
 	go func() {
-		errCh <- r.server.ListenAndServe()
+		errCh <- r.runHealth()
+	}()
+	go func() {
+		errCh <- wt.ListenAndServe(ctx, r.Config.BindEndpoint())
 	}()
 
 	select {
 	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = r.server.Shutdown(shutdownCtx)
+		if r.healthSrv != nil {
+			_ = r.healthSrv.Shutdown(shutdownCtx)
+		}
+		_ = wt.Close()
 		return ctx.Err()
 	case err := <-errCh:
 		if err == http.ErrServerClosed {
@@ -95,6 +107,26 @@ func (r *Runtime) Run(ctx context.Context) error {
 		}
 		return err
 	}
+}
+
+func (r *Runtime) runHealth() error {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(r.HealthStatus())
+	})
+
+	r.healthSrv = &http.Server{
+		Addr:              r.Config.HealthEndpoint(),
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	err := r.healthSrv.ListenAndServe()
+	if err == http.ErrServerClosed {
+		return nil
+	}
+	return err
 }
 
 func CheckHealth(ctx context.Context, endpoint string) (HealthStatus, error) {
