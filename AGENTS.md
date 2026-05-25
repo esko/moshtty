@@ -2,218 +2,142 @@
 
 ## Project
 
-This repository is **Crostini Ghostty Terminal**, an installable ChromeOS PWA terminal for Crostini Linux.
+This repository is being reset into **Moshtty**, an Electron desktop remote terminal.
 
-The selected implementation is:
+Moshtty is not the old Crostini-local PWA terminal. New work should target:
 
-- Go PTY/browser bridge in `agent/`
-- `ghostty-web` PWA in `web/`
+- Electron desktop client in `apps/desktop`;
+- Go remote companion in `cmd/moshtty-remote`;
+- Go remote CLI in `cmd/moshttyctl`;
+- shared Go packages under `internal/`;
+- `ghostty-web` as the terminal renderer.
 
-There are no alternate frontend implementations in this repo. Keep new work focused on the `web/` app and the Go agent.
+The old local Go PTY agent and PWA/service-worker architecture are deprecated for Moshtty. Use old code only as reference for terminal rendering, split layout ideas, shortcuts, and theme behavior.
 
-## Commands
+## Canonical Docs
 
-Use Bun for frontend work:
+Read these before starting implementation work:
+
+- `docs/moshtty-prd.md` - product requirements, scope, status, risks.
+- `docs/moshtty-plan.md` - architecture decisions from planning.
+- `docs/moshtty-milestones.md` - implementation roadmap and acceptance criteria.
+- `docs/agents/*.md` - task briefs for parallel agents.
+
+Agents must update `docs/moshtty-prd.md` status before ending completed or blocked work.
+
+## Architecture Rules
+
+- Product name is `Moshtty` for UI/docs and `moshtty` for commands, package IDs, and paths.
+- User-facing model is `Project -> Tab -> Pane`. Avoid user-facing "session" terminology.
+- One project connects to one remote companion.
+- One pane maps to one remote PTY/shell.
+- The Electron app owns projects, tabs, layouts, focus, and visible UI state.
+- The remote companion owns durable pane PTYs and transport state.
+- Use WebTransport streams for JSON-RPC control.
+- Use WebTransport datagrams for muxed Mosh pane traffic.
+- Use `mosh-go` for the Mosh protocol. Vendor or adapt only narrow server-side hooks when needed, with tests.
+- Automatic SSH bootstrap, IWA, Direct Sockets, official `mosh-server` compatibility, and raw UDP fallback are out of scope for the first cut.
+
+## Tooling
+
+Frontend/client:
 
 ```bash
-cd web
-bun install
-bun run build
-bun run test
-bun run test:visual:glyphs
+pnpm install
+pnpm --filter @moshtty/desktop dev
+pnpm --filter @moshtty/desktop test
+pnpm --filter @moshtty/desktop typecheck
+pnpm --filter @moshtty/desktop build
 ```
 
-Use Go for the agent:
+Go:
 
 ```bash
-cd agent
 go test ./...
-go run . -web-dir ../web/dist
+go test ./internal/...
+go test ./cmd/moshtty-remote ./cmd/moshttyctl
 ```
 
-Root shortcuts:
+These commands may not exist until the scaffold milestone lands. If a task creates or changes tooling, update this file and the PRD status.
 
-```bash
-bun run build
-bun run test
-bun run test:visual
-bun run agent
-```
+## Code Style
 
-## Dependency Patch
+- Keep TypeScript strict and explicit at module boundaries.
+- Use React + TypeScript for the renderer.
+- Use Zustand for renderer app state.
+- Use CSS modules or plain CSS. Do not introduce Tailwind or a component library unless the PRD is updated.
+- Keep Electron main/preload APIs narrow and typed. Renderer code must not access arbitrary filesystem APIs directly.
+- Store app state through Electron main as versioned JSON with atomic writes.
+- Store remote tokens through Electron `safeStorage`; if unavailable or weak, use a passphrase-encrypted fallback.
+- Keep Go packages small and protocol-oriented. Prefer table-driven tests for protocol, mux, config, cert, and lifecycle behavior.
+- Use `gofmt` for Go and the configured formatter for TypeScript once present.
+- Every new non-trivial TypeScript module needs a nearby test.
+- Every new Go package needs focused tests unless it is pure command wiring.
 
-`web/scripts/patch-ghostty-web.ts` patches the pinned `ghostty-web` dependency after `bun install`.
+## Testing Rules
 
-Do not edit `web/node_modules/ghostty-web` without updating the patch script. The patch currently covers:
+Run the smallest relevant tests while working. Before committing a task, run the full verification for that task brief.
 
-- fractional-DPR canvas backing scale;
-- pixel-snapped filled rectangles for block glyphs/backgrounds;
-- removal of a canvas resize overwrite in `Terminal.resize`;
-- hidden textarea caret suppression.
+Minimum expectations:
 
-After changing the patch script, run:
+- TypeScript changes: run relevant Vitest tests and typecheck.
+- Electron IPC/state changes: test state migration, IPC contract, and error paths.
+- Go protocol/config changes: run `go test ./...`.
+- Transport changes: test mux framing, JSON-RPC auth/origin checks, and pane lifecycle.
+- UI changes: test reducers/theme/layout behavior and inspect the app manually.
 
-```bash
-cd web
-bun run postinstall
-bun run test
-bun run build
-bun run test:visual:glyphs
-```
+If a required command is unavailable because the scaffold has not landed, document that in `docs/moshtty-prd.md` under status notes.
 
-## Verification
+## Design Rules
 
-For most changes, run:
+Use the four screenshots from `/mnt/chromeos/MyFiles/Downloads` as primary visual references:
 
-```bash
-bun run test
-```
+- `Screenshot 2026-05-24 18.46.04.png`
+- `Screenshot 2026-05-24 18.46.17.png`
+- `Screenshot 2026-05-24 18.46.25.png`
+- `Screenshot 2026-05-24 18.46.36.png`
 
-For rendering, font, DPR, canvas, or `ghostty-web` patch changes, also run:
+Visual direction:
 
-```bash
-bun run test:visual
-```
+- quiet light desktop UI by default;
+- compact left project rail;
+- large terminal work area;
+- flat rows and subtle dividers;
+- minimal top tab/action bar;
+- centered modals for edits/import/settings;
+- compact density by default;
+- Light/Dark/System mode setting;
+- terminal palette linked to app mode by default.
 
-For agent protocol/security changes, add or update `agent/main_test.go` and run:
+Do not create a marketing landing page. The first screen should be the usable app shell or project dashboard.
 
-```bash
-cd agent
-go test ./...
-```
+## Git And Commit Rules
 
-## Runtime
+- Work in small, reviewable slices.
+- Always commit completed work before handing it back, unless the user explicitly asks not to commit or the task is intentionally left blocked.
+- Prefer atomic commits: each commit should contain one coherent docs, scaffold, feature, fix, or test slice.
+- Use conventional commits:
+  - `feat:` for features;
+  - `fix:` for defects;
+  - `refactor:` for structure changes;
+  - `test:` for test-only changes;
+  - `docs:` for documentation;
+  - `chore:` for tooling and generated metadata.
+- Do not commit failing tests unless the PRD explicitly marks the task blocked and the commit is a documented handoff.
+- Do not push unless the coordinator/user asks.
+- Do not rewrite, revert, or clean up another agent's unrelated changes.
+- Do not run destructive git commands unless explicitly requested.
+- If generated files are introduced, keep source and generated-output commits separate when practical.
+- Update `docs/moshtty-prd.md` status before committing a completed or blocked task.
 
-The agent binds to `127.0.0.1:8765` by default. It should remain loopback-only unless a user explicitly asks for a different deployment model.
+## Multi-Agent Workflow
 
-The browser protocol starts with:
+1. Pick one task brief from `docs/agents/`.
+2. Confirm the current git status before editing.
+3. Keep edits inside the task's listed paths unless the brief explains otherwise.
+4. Add or update tests with the implementation.
+5. Run the task's verification commands.
+6. Update `docs/moshtty-prd.md` milestone/task status.
+7. Commit the slice with an atomic conventional commit message.
 
-- `GET /api/health`
-- `GET /api/session`
-- `GET/POST /api/profiles`
-- `GET/PATCH/DELETE /api/profiles/{id}`
-- `GET/POST /api/spaces`
-- `GET/PATCH/DELETE /api/spaces/{id}`
-- `POST /api/spaces/{id}/tabs`
-- `GET/PATCH/DELETE /api/tabs/{id}`
-- `POST /api/tabs/{id}/restart`
-- `POST /api/tabs/{id}/splits`
-- `PATCH /api/tabs/{id}/layout`
-- `PATCH/DELETE /api/panes/{id}`
-- `POST /api/panes/{id}/restart`
-- `GET /api/terminal-sessions`
-- `POST /api/terminal-sessions`
-- `GET /api/terminal-sessions/{id}`
-- `POST /api/terminal-sessions/{id}/splits`
-- `POST /api/terminal-sessions/{id}/detach`
-- `PATCH /api/terminal-sessions/{id}/layout`
-- `DELETE /api/terminal-sessions/{id}`
-- `GET /api/terminal-sessions/orphans`
-- `DELETE /api/terminal-sessions/orphans`
-- `GET /pty?token=<session-token>&session=<session-id>&restore=<0|1>&cols=<cols>&rows=<rows>` WebSocket
-
-Session model:
-
-- A parent terminal session is a workspace listed on the settings/home page.
-- Child sessions are panes nested under a parent layout and are not listed as top-level workspaces.
-- Detaching a child pane clears its `parentId` and creates a single-pane layout so it becomes a parent workspace.
-- Layout PATCH requests may update split ratios only; they must not change pane membership or split structure.
-- Deleting a parent stops and removes the whole pane tree. Deleting a child removes it from its parent layout and deletes that child session directory.
-
-Browser-to-agent WebSocket messages are JSON text frames:
-
-```json
-{"type":"input","data":"..."}
-{"type":"resize","cols":120,"rows":32}
-```
-
-Agent-to-browser PTY output is binary WebSocket frames.
-
-See `docs/sessions.md` for the API shapes.
-
-## Style
-
-- Keep frontend code TypeScript.
-- Prefer small focused modules under `web/src`.
-- Keep terminal control keys working in the shell while passing ChromeOS/PWA shortcuts through `web/src/shortcuts.ts`.
-- Do not add new frontend stacks or renderer experiments without an explicit user request.
-- Every new module MUST have a corresponding `.test.ts` file.
-
-## Testing
-
-### Unit tests (Vitest)
-
-```bash
-bun run test          # 149 tests across 11 files
-bun run test:visual   # glyph-gap Puppeteer visual regression
-```
-
-| Test file | Covers |
-|-----------|--------|
-| `main.test.ts` | `ptyURL()`, `normalizeSettings()`, `clamp()`, `pathBaseName()`, `layoutLeaves()` |
-| `shortcuts.test.ts` | System key passthrough, pane shortcut detection, chord parsing/matching from `actions.ts` |
-| `actions.test.ts` | Action registry (register, get, getAll, overwrite, optional fields, categories), `parseBindingSequence()`, sequence state machine (`startSequence`, `advanceSequence`, `cancelSequence`, timeout) |
-| `themes.test.ts` | All 8 preset palettes, hex color validation, dark/light classification, `getThemePalette()` dispatch, custom palette support |
-| `debug-shell.test.ts` | `isSettingsPath()`, `isAppPath()` path classification |
-| `renderer-scale.test.ts` | Canvas backing-store ratio at fractional DPR |
-| `dom.test.ts` | `clamp()`, `escapeAttribute()`, `escapeHTML()`, `formatNumber()`, `pathBaseName()`, `socketState()`, `concatBytes()` |
-| `layout.test.ts` | `splitRatio()`, `layoutLeaves()`, `firstLeaf()`, `ratioFromKeyboard()` with clamp and shift-step |
-| `api.test.ts` | `ptyURL()` builds ws/wss URLs with all query params, restores, defaults |
-| `settings.test.ts` | `normalizeSettings()` validation for all fields (fontSize, scrollback, accent, density, cursorStyle, theme, custom palette, keybindings, booleans, profileId) |
-| `statusbar.test.ts` | `getClockTimeString()` returns valid 24-hour HH:MM |
-
-### E2E / visual tests (Playwright)
-
-```bash
-bun run test:e2e       # 6 end-to-end tests (requires running agent)
-bun run test:e2e:ui    # Interactive Playwright UI mode
-```
-
-Playwright tests live in `web/e2e/app.spec.ts` and use the `web/playwright.config.ts` configuration.
-The config auto-starts the Go agent and runs against `http://127.0.0.1:8765`.
-
-Tests cover:
-- App shell rendering (settings page, hero section, form elements)
-- Command palette visibility on page load
-- Agent health and session token API endpoints
-
-## Module Map
-
-| Module | Purpose |
-|--------|---------|
-| `web/src/main.ts` | App bootstrap, workspace rendering, layout, panes, context menu, settings form (Display, History, Status Bar, Keybindings) and spaces landing page |
-| `web/src/actions.ts` | Action registry, key chord parser/matcher, multi-key sequence state machine, keyboard shortcut mapping |
-| `web/src/palette.ts` | Command palette overlay (`Ctrl+Shift+P`), substring search, keyboard navigation |
-| `web/src/themes.ts` | Theme preset gallery (8 themes), `getThemePalette()` for color table lookup |
-| `web/src/debug-shell.ts` | In-app PWA tab strip for MCP automation (`?debug-shell=1`) |
-| `web/src/statusbar.ts` | Status bar DOM helpers (render, clock, highlight) and chord progress indicator |
-| `web/src/settings.ts` | `loadSettings()`/`saveSettings()`/`normalizeSettings()`, font loading, app appearance |
-| `web/src/types.ts` | All TypeScript types: settings, sessions, spaces, profiles, layout nodes, API shapes |
-| `web/src/shortcuts.ts` | System shortcut passthrough, pane shortcut detection |
-| `web/src/layout.ts` | Split layout math: leaves, ratios, pointer/keyboard resize, spatial navigation |
-| `web/src/api.ts` | HTTP helpers (`getJSON`, `postJSON`, `patchJSON`), token fetch, WebSocket URL builder |
-| `web/src/dom.ts` | DOM utilities: `clamp`, `escapeAttribute`, `escapeHTML`, `formatNumber`, `pathBaseName`, `socketState`, `concatBytes`, `requiredElement` |
-| `web/src/styles.css` | Full app stylesheet with CSS variables for theming, chord indicator pulse animation |
-| `agent/main.go` | HTTP server, routing, WebSocket PTY handler, security middleware, embedded web dist serving |
-| `agent/sessions.go` | Session manager: CRUD for spaces, tabs, panes, profiles, layouts |
-| `agent/worker.go` | Worker process: PTY owner, output capture, client broadcast |
-
-## Agent Workflow
-
-When using the `agy` CLI with Gemini for multi-agent parallel work:
-
-1. **Write agent docs** in `docs/agents/` with precise instructions, file paths, and validation steps.
-2. **Launch agents** with `agy --add-dir <workdir> --print-timeout 12m --print "$(cat docs/agents/N-*.md)"`.
-3. **Avoid parallel worktrees for extraction** — agents overwrite each other's changes. Use worktrees only for fully independent features.
-4. **Always run** `cd web && bun run test && bun run build` after agent work to verify.
-5. **Commit conventions:** `feat:` for features, `chore:` for dist/assets, `refactor:` for extractions.
-6. **Separate source and dist commits** — source changes first, then `web/dist/` assets.
-
-## Pre-commit Checklist
-
-```bash
-bun run test          # 149 tests across 11 files
-bun run build         # TypeScript + Vite bundle
-git diff --check      # No trailing whitespace
-gofmt -w agent/*.go   # Format Go code if agent changed
-```
+Avoid parallel edits to the same files. If two tasks need the same shared module, coordinate through the PRD status notes before editing.
