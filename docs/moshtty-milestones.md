@@ -143,6 +143,12 @@ Acceptance:
 - Local integration can run at least one remote PTY through WebTransport.
 - PRD status updated.
 
+Follow-ups before M4 is **Done** (see `docs/m4-mosh-adapter.md`):
+
+- Manual cert-pin WebTransport connect from Electron using an imported profile.
+- One-pane end-to-end muxed mosh traffic against `moshtty-remote` on the Mac (`ssh macmini` / `scp` deploy path).
+- Optional hardening: automated WT integration test, direct `mosh-go` server adapter, cert-hash rotation over control.
+
 Agent brief:
 
 - `docs/agents/2026-05-25-4-webtransport-mosh-mux.md`

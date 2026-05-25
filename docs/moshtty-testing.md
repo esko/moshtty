@@ -11,6 +11,32 @@ Moshtty needs tests at four levels:
 
 `electron-vite` provides the Electron/Vite build and dev pipeline. It does not provide a visual regression framework by itself, so Moshtty should add explicit screenshot tooling.
 
+## macOS Remote Host Access
+
+For manual remote testing from Crostini or Linux dev environments, use the local SSH config alias to reach the Mac server:
+
+```bash
+ssh macmini
+```
+
+Copy built binaries, install scripts, or profile JSON with `scp` through the same host:
+
+```bash
+scp ./moshtty-remote macmini:~/.local/bin/moshtty-remote
+scp ./profile.json macmini:~/Downloads/moshtty-profile.json
+```
+
+Run `moshtty-remote install`, `profile`, and LaunchAgent checks on the Mac over that SSH session; run the Electron client locally and point it at the imported profile.
+
+### M4 manual verification
+
+Before marking M4 **Done**, run the checklist in `docs/m4-mosh-adapter.md` under **M4 follow-ups**:
+
+- deploy `moshtty-remote` to the Mac via `ssh macmini` / `scp`;
+- import profile JSON into Electron;
+- confirm cert-pin WebTransport connect;
+- create one pane and verify muxed mosh datagram traffic end to end.
+
 ## Test Layers
 
 ### TypeScript Unit Tests
