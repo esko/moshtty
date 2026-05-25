@@ -69,6 +69,30 @@ describe('Moshtty state helpers', () => {
     expect(migration.state.layouts[0]?.root).toEqual({ kind: 'pane', paneId: 'pane-1' })
   })
 
+  test('normalizeState preserves valid remote pane flow IDs', () => {
+    const state = normalizeState(
+      {
+        version: 1,
+        projects: [{ id: 'p1', name: 'Project One', tabIds: ['t1'], activeTabId: 't1' }],
+        tabs: [{ id: 't1', title: 'Shell', paneIds: ['pane-1'], activePaneId: 'pane-1' }],
+        panes: [
+          {
+            id: 'pane-1',
+            title: 'Pane',
+            cwd: '~',
+            status: 'active',
+            cols: 80,
+            rows: 24,
+            remoteFlowId: 12
+          }
+        ]
+      },
+      '2026-05-25T00:00:00.000Z'
+    )
+
+    expect(state.panes[0]?.remoteFlowId).toBe(12)
+  })
+
   test('createSampleState includes a tab layout root', () => {
     const state = createSampleState()
     expect(state.layouts[0]?.tabId).toBe('tab-welcome')

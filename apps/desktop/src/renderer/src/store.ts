@@ -33,6 +33,7 @@ interface AppState {
   snapshot: WorkspaceSnapshot | null
   paneFlows: Record<string, { flowId: number; key: string }>
   setPaneFlow: (paneId: string, flowId: number, key: string) => void
+  bindPaneFlow: (paneId: string, flowId: number, key: string) => Promise<void>
   hydrate: () => Promise<void>
   saveWorkspace: () => Promise<void>
   resetWorkspace: () => Promise<void>
@@ -77,6 +78,32 @@ export const useAppStore = create<AppState>((set, get) => ({
         [paneId]: { flowId, key }
       }
     }))
+  },
+  bindPaneFlow: async (paneId, flowId, key) => {
+    get().setPaneFlow(paneId, flowId, key)
+
+    const snapshot = get().snapshot
+    if (!snapshot) {
+      return
+    }
+
+    const pane = snapshot.state.panes.find((entry) => entry.id === paneId)
+    if (!pane || pane.remoteFlowId === flowId) {
+      return
+    }
+
+    set({
+      snapshot: {
+        ...snapshot,
+        state: withUpdatedTimestamp({
+          ...snapshot.state,
+          panes: snapshot.state.panes.map((entry) =>
+            entry.id === paneId ? { ...entry, remoteFlowId: flowId } : entry
+          )
+        })
+      }
+    })
+    await get().saveWorkspace()
   },
 
   hydrate: async () => {

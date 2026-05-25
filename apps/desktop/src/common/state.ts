@@ -60,6 +60,7 @@ export interface MoshttyPane {
   status: PaneStatus
   cols: number
   rows: number
+  remoteFlowId?: number
 }
 
 export type SplitAxis = 'row' | 'column'
@@ -297,7 +298,8 @@ function normalizePane(value: unknown): MoshttyPane | null {
     cwd: asString(value.cwd, '~'),
     status: normalizePaneStatus(value.status),
     cols: asPositiveNumber(value.cols, 120),
-    rows: asPositiveNumber(value.rows, 32)
+    rows: asPositiveNumber(value.rows, 32),
+    remoteFlowId: asPositiveNumber(value.remoteFlowId, 0) || undefined
   }
 }
 

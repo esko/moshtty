@@ -142,3 +142,22 @@ test('toggleProjectRail persists the collapsed setting', async () => {
   expect(useAppStore.getState().snapshot!.state.settings.projectRailCollapsed).toBe(true)
   expect(mockApi.saveState).toHaveBeenCalled()
 })
+
+test('bindPaneFlow persists the remote flow ID for reload reattach', async () => {
+  const sample = createSampleState('2026-05-25T00:00:00.000Z')
+  useAppStore.setState({
+    hydrated: true,
+    snapshot: { state: sample, source: 'disk' },
+    paneFlows: {}
+  })
+  mockApi.saveState.mockImplementation(async (state) => ({ state, source: 'disk' }))
+
+  await useAppStore.getState().bindPaneFlow('pane-welcome', 42, 'mosh-key')
+
+  expect(useAppStore.getState().paneFlows['pane-welcome']).toEqual({
+    flowId: 42,
+    key: 'mosh-key'
+  })
+  expect(useAppStore.getState().snapshot!.state.panes[0]?.remoteFlowId).toBe(42)
+  expect(mockApi.saveState).toHaveBeenCalled()
+})

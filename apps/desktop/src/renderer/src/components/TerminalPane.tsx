@@ -33,6 +33,7 @@ export function TerminalPane({
   const [ready, setReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const setPaneFlow = useAppStore((state) => state.setPaneFlow)
+  const bindPaneFlow = useAppStore((state) => state.bindPaneFlow)
   const disposablesRef = useRef<{ dispose: () => void }[]>([])
   const lost = pane.status === 'lost'
   const title = pane.title ?? 'Terminal'
@@ -93,9 +94,16 @@ export function TerminalPane({
         if (transport && connectionManager && !disposed) {
           let flow = useAppStore.getState().paneFlows[pane.id]
           if (!flow) {
-            const info = await transport.createPane({ cols, rows, shell: '/bin/sh' })
+            const info =
+              pane.remoteFlowId !== undefined
+                ? await transport.attachPane(pane.remoteFlowId)
+                : await transport.createPane({ cols, rows, shell: '/bin/sh' })
             if (disposed) return
-            setPaneFlow(pane.id, info.flowId, info.key)
+            if (pane.remoteFlowId === undefined) {
+              await bindPaneFlow(pane.id, info.flowId, info.key)
+            } else {
+              setPaneFlow(pane.id, info.flowId, info.key)
+            }
             flow = { flowId: info.flowId, key: info.key }
           }
 
@@ -156,7 +164,17 @@ export function TerminalPane({
       disposablesRef.current.forEach((d) => d.dispose())
       disposablesRef.current = []
     }
-  }, [connectionManager, pane.cols, pane.id, pane.rows, setPaneFlow, terminalMode, transport])
+  }, [
+    bindPaneFlow,
+    connectionManager,
+    pane.cols,
+    pane.id,
+    pane.remoteFlowId,
+    pane.rows,
+    setPaneFlow,
+    terminalMode,
+    transport
+  ])
 
   return (
     <section

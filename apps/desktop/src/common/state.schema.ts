@@ -74,7 +74,8 @@ export const MoshttyPaneSchema = z.object({
   cwd: NonEmptyString,
   status: PaneStatusSchema,
   cols: PositiveInt,
-  rows: PositiveInt
+  rows: PositiveInt,
+  remoteFlowId: PositiveInt.optional()
 })
 
 const MoshttyPaneLayoutLeafSchema = z.object({

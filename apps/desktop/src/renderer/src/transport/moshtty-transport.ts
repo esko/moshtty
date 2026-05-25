@@ -90,6 +90,10 @@ export class MoshttyTransport {
     return this.call<PaneInfo>('pane.create', params ?? {})
   }
 
+  async attachPane(flowId: number): Promise<PaneInfo> {
+    return this.call<PaneInfo>('pane.attach', { flowId })
+  }
+
   async sendPaneDatagram(flowId: number, payload: Uint8Array): Promise<void> {
     const frame = encodeMuxFrame({ version: 1, flowId, payload })
     await this.datagramWriter?.write(frame)

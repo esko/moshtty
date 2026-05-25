@@ -239,7 +239,7 @@ Agent brief:
 
 ## M7 Real Remote Acceptance
 
-Status: Planned
+Status: In progress
 
 Objective:
 

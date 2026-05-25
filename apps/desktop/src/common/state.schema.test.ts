@@ -64,6 +64,26 @@ describe('MoshttyStateSchema', () => {
     expect(MoshttyStateSchema.safeParse(corrupted).success).toBe(false)
   })
 
+  test('accepts persisted remote pane flow IDs', () => {
+    const state = createSampleState('2026-05-25T00:00:00.000Z')
+    const parsed = parseMoshttyState({
+      ...state,
+      panes: state.panes.map((pane) => ({ ...pane, remoteFlowId: 7 }))
+    })
+
+    expect(parsed.panes[0]?.remoteFlowId).toBe(7)
+  })
+
+  test('rejects invalid remote pane flow IDs', () => {
+    const state = createSampleState('2026-05-25T00:00:00.000Z')
+    const corrupted = {
+      ...state,
+      panes: state.panes.map((pane) => ({ ...pane, remoteFlowId: 0 }))
+    }
+
+    expect(MoshttyStateSchema.safeParse(corrupted).success).toBe(false)
+  })
+
   test('accepts nested split layouts within the ratio bounds', () => {
     const state = createSampleState('2026-05-25T00:00:00.000Z')
     const layouts = [
