@@ -98,7 +98,7 @@ Agent brief:
 
 ## M3 macOS Remote Companion
 
-Status: Ready for review
+Status: Verified on target
 
 Objective:
 
@@ -133,7 +133,7 @@ Agent brief:
 
 ## M4 WebTransport And Mosh Mux
 
-Status: Ready for review
+Status: Verified on target
 
 Objective:
 

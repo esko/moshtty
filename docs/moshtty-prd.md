@@ -62,28 +62,28 @@ Moshtty replaces the previous Crostini-local PWA/Go-agent architecture. The old 
 | Architecture decisions | Locked                | Captured in `docs/moshtty-plan.md` and summarized below |
 | Implementation branch  | feat/moshtty-scaffold | Branch created from current worktree                    |
 
-| Milestone                     | Status           | Notes                                                                                                                                 |
-| ----------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| M0 Planning docs              | Done             | PRD, plan, milestones, agent briefs, and Moshtty `AGENTS.md` are present                                                              |
-| M1 Branch and scaffold        | Ready for review | New branch layout, pnpm/electron-vite/root Go module. Old runtime quarantined under quarantine/                                       |
-| M2 Desktop state shell        | Ready for review | Secure `app://moshtty`, typed preload IPC, versioned JSON state, atomic writes, migration, safeStorage + passphrase fallback          |
-| M3 macOS remote companion     | Ready for review | `moshtty-remote` run/install/profile/health, LaunchAgent plist, config/token/certs, profile JSON                                      |
-| M4 WebTransport and Mosh mux  | Ready for review | WebTransport server, JSON-RPC control, mux datagrams, pane lifecycle, renderer transport client                                       |
-| M5 UI and Ghostty integration | In progress      | Renderer shell, visual matrix, keymap/settings, and live app actions are wired; Ghostty/parity close-out remains                      |
-| M6 `moshttyctl` CLI           | Ready for review | Companion Unix socket transport, CLI commands (list, pane close, cleanup), and errors for app-side commands implemented and verified. |
-| M7 Real remote acceptance     | Planned          | macOS host smoke and reconnect workflow                                                                                               |
-| Testing plan                  | Done             | See `docs/moshtty-testing.md`                                                                                                         |
+| Milestone                     | Status             | Notes                                                                                                                                 |
+| ----------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| M0 Planning docs              | Done               | PRD, plan, milestones, agent briefs, and Moshtty `AGENTS.md` are present                                                              |
+| M1 Branch and scaffold        | Ready for review   | New branch layout, pnpm/electron-vite/root Go module. Old runtime quarantined under quarantine/                                       |
+| M2 Desktop state shell        | Ready for review   | Secure `app://moshtty`, typed preload IPC, versioned JSON state, atomic writes, migration, safeStorage + passphrase fallback          |
+| M3 macOS remote companion     | Verified on target | `moshtty-remote` run/install/profile/health, LaunchAgent plist, config/token/certs, profile JSON; verified on macOS remote host       |
+| M4 WebTransport and Mosh mux  | Verified on target | WebTransport server, JSON-RPC control, mux datagrams, pane lifecycle, renderer transport client; verified E2E against macOS host      |
+| M5 UI and Ghostty integration | In progress        | Renderer shell, visual matrix, keymap/settings, and live app actions are wired; Ghostty/parity close-out remains                      |
+| M6 `moshttyctl` CLI           | Ready for review   | Companion Unix socket transport, CLI commands (list, pane close, cleanup), and errors for app-side commands implemented and verified. |
+| M7 Real remote acceptance     | Planned            | macOS host smoke and reconnect workflow                                                                                               |
+| Testing plan                  | Done               | See `docs/moshtty-testing.md`                                                                                                         |
 
 ## Task Status
 
-| Task                   | Owner       | Status           | Brief                                                |
-| ---------------------- | ----------- | ---------------- | ---------------------------------------------------- |
-| Scaffold Moshtty repo  | Antigravity | Ready for review | `docs/agents/2026-05-25-1-moshtty-scaffold.md`       |
-| Desktop state shell    | Agent       | Ready for review | `docs/agents/2026-05-25-2-desktop-state-shell.md`    |
-| macOS remote companion | Agent (M3)  | Ready for review | `docs/agents/2026-05-25-3-macos-remote-companion.md` |
-| WebTransport Mosh mux  | Agent (M4)  | Ready for review | `docs/agents/2026-05-25-4-webtransport-mosh-mux.md`  |
-| Moshtty UI and Ghostty | Codex       | In progress      | `docs/agents/2026-05-25-5-moshtty-ui-ghostty.md`     |
-| `moshttyctl` CLI       | agy         | Ready for review | `docs/agents/2026-05-25-6-moshttyctl-cli.md`         |
+| Task                   | Owner       | Status             | Brief                                                |
+| ---------------------- | ----------- | ------------------ | ---------------------------------------------------- |
+| Scaffold Moshtty repo  | Antigravity | Ready for review   | `docs/agents/2026-05-25-1-moshtty-scaffold.md`       |
+| Desktop state shell    | Agent       | Ready for review   | `docs/agents/2026-05-25-2-desktop-state-shell.md`    |
+| macOS remote companion | Agent (M3)  | Verified on target | `docs/agents/2026-05-25-3-macos-remote-companion.md` |
+| WebTransport Mosh mux  | Agent (M4)  | Verified on target | `docs/agents/2026-05-25-4-webtransport-mosh-mux.md`  |
+| Moshtty UI and Ghostty | Codex       | In progress        | `docs/agents/2026-05-25-5-moshtty-ui-ghostty.md`     |
+| `moshttyctl` CLI       | agy         | Ready for review   | `docs/agents/2026-05-25-6-moshttyctl-cli.md`         |
 
 Allowed status values (also defined in `AGENTS.md` -> Status Tiers):
 
@@ -204,3 +204,4 @@ The first full acceptance pass requires:
 - M5 action-wiring slice (2026-05-25): wired live renderer controls and shortcuts to local store actions for project creation through the dialog, tab creation, project rail collapse, settings/import dialog open/close, and remote profile import via `parseMoshttyProfileText` before state insertion. Added dialog fixture routing tests and store tests for tab creation, remote profile import, and rail collapse persistence. Agent-browser exploratory QA connected to Electron over CDP port 9333 and verified dashboard actions, settings dialog open/Escape close, import validation, and new-tab creation; screenshots were saved to `docs/visual-qa/m5/agent-browser-dashboard-actions.png`, `docs/visual-qa/m5/agent-browser-settings-actions.png`, and `docs/visual-qa/m5/agent-browser-import-validation.png`. Verification: `pnpm --filter @moshtty/desktop typecheck` (passed), `lint` (passed after rerun; first parallel run hit transient ESLint temp-file ENOENT), `lint:css` (passed), `test` (77 passed), `build` (passed), and `test:visual` (34 passed after rebuilding before the final run).
 - M5 follow-ups: Ghostty-web rendering is still represented by a token-styled pane placeholder. Reference screenshot mapping and side-by-side parity artifacts under `docs/visual-qa/m5/<surface>/` remain needed before `Ready for review`; the current Playwright baselines prove deterministic UI coverage but are not yet scored against the four reference screenshots. `test:coverage`, `pnpm verify`, and `golangci-lint` have the blockers noted above.
 - M6 `moshttyctl` CLI (2026-05-25): Companion Unix socket JSON-RPC server and client transport implemented. Fully supported commands include `moshttyctl list` (alias `cleanup list`) and `moshttyctl pane close <flow-id>` (alias `cleanup kill <flow-id>`). Commands for tab layout and splits (`tab`, `pane split/focus/rename`) properly return clear errors requiring active Electron application connection. Verification: `go test ./...` (passed), `go vet ./...` (passed), `git diff --check` (clean). All 12 packages in internal Go modules passed tests, including new ctlsocket and pane manager unit tests.
+- M3 & M4 target verification (2026-05-25): Compiled and deployed `moshtty-remote` to remote host `macmini` (macOS x86_64). Installed and ran companion under launchd LaunchAgent, listening on port 4433. Generated profile JSON, normalized and imported it into the running Electron desktop app (CDP port 9222). Verified successful cert-pinned WebTransport handshake between Electron and remote companion. Verified remote pane creation via WebTransport control stream and verified socket-based CLI controls using `moshttyctl list` and `moshttyctl pane close` from the macOS host. Screenshots captured at `docs/visual-qa/m6-initial.png` and `docs/visual-qa/m6-imported.png`. Verification clean.
