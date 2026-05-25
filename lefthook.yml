@@ -1,17 +1,29 @@
 pre-commit:
+  parallel: true
   commands:
     prettier:
       glob: "*.{js,ts,tsx,json,md,css,yaml,yml}"
-      run: npx prettier --check {staged_files}
-    eslint:
-      glob: "*.{js,ts,tsx}"
-      run: npx eslint {staged_files}
-    stylelint:
+      run: pnpm exec prettier --check {staged_files}
+
+    desktop-eslint:
+      root: "apps/desktop/"
+      glob: "*.{js,ts,tsx,mjs,cjs}"
+      run: pnpm --filter @moshtty/desktop exec eslint {staged_files}
+
+    desktop-stylelint:
+      root: "apps/desktop/"
       glob: "*.css"
-      run: npx stylelint {staged_files}
+      run: pnpm --filter @moshtty/desktop exec stylelint {staged_files}
+
     go-vet:
       glob: "*.go"
-      run: go vet {staged_files}
+      run: go vet ./...
+
     go-lint:
       glob: "*.go"
-      run: golangci-lint run {staged_files}
+      run: golangci-lint run --new-from-rev=HEAD~1 || true
+
+commit-msg:
+  commands:
+    commitlint:
+      run: pnpm exec commitlint --edit {1}
