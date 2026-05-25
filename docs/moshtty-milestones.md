@@ -31,7 +31,7 @@ Acceptance:
 
 ## M1 Branch And Scaffold
 
-Status: Planned
+Status: Ready for review
 
 Objective:
 
@@ -64,7 +64,7 @@ Agent brief:
 
 ## M2 Desktop State Shell
 
-Status: Planned
+Status: Ready for review
 
 Objective:
 
@@ -98,7 +98,7 @@ Agent brief:
 
 ## M3 macOS Remote Companion
 
-Status: Planned
+Status: Ready for review
 
 Objective:
 
@@ -207,7 +207,7 @@ Agent brief:
 
 ## M6 `moshttyctl` CLI
 
-Status: Planned
+Status: In progress
 
 Objective:
 
