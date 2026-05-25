@@ -64,8 +64,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         api.getSecretStorageInfo()
       ])
 
-      const state =
-        loadResult.state.projects.length === 0 ? createSampleState() : loadResult.state
+      const state = loadResult.state.projects.length === 0 ? createSampleState() : loadResult.state
 
       set({
         hydrated: true,

@@ -51,7 +51,11 @@ function App(): React.JSX.Element {
           ))}
         </div>
         <div className="rail-actions">
-          <button type="button" className="ghost-button" onClick={() => void addProject('New project')}>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => void addProject('New project')}
+          >
             New project
           </button>
         </div>
@@ -102,10 +106,18 @@ Secret storage: ${snapshot?.secretInfo?.mode ?? 'unknown'}
               </div>
             ) : null}
             <div className="dev-panel-actions">
-              <button type="button" disabled={!hydrated || saving} onClick={() => void saveWorkspace()}>
+              <button
+                type="button"
+                disabled={!hydrated || saving}
+                onClick={() => void saveWorkspace()}
+              >
                 {saving ? 'Saving…' : 'Save state'}
               </button>
-              <button type="button" disabled={!hydrated || saving} onClick={() => void resetWorkspace()}>
+              <button
+                type="button"
+                disabled={!hydrated || saving}
+                onClick={() => void resetWorkspace()}
+              >
                 Reset state
               </button>
             </div>

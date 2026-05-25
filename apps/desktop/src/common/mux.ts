@@ -44,8 +44,7 @@ export function decodeMuxFrame(data: Uint8Array): MuxFrame {
   if (version !== MUX_VERSION) {
     throw new MuxError(`unknown mux version: ${version}`)
   }
-  const flowId =
-    (data[1] << 24) | (data[2] << 16) | (data[3] << 8) | data[4]
+  const flowId = (data[1] << 24) | (data[2] << 16) | (data[3] << 8) | data[4]
   const payload = data.slice(MUX_HEADER_SIZE)
   if (payload.byteLength === 0) {
     throw new MuxError('mux payload must not be empty')

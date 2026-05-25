@@ -50,7 +50,15 @@ describe('createMoshttyStateStore', () => {
       store.stateFilePath(),
       `${JSON.stringify(
         {
-          projects: [{ id: 'project-1', name: 'Legacy', color: '#000', tabIds: ['tab-1'], activeTabId: 'tab-1' }],
+          projects: [
+            {
+              id: 'project-1',
+              name: 'Legacy',
+              color: '#000',
+              tabIds: ['tab-1'],
+              activeTabId: 'tab-1'
+            }
+          ],
           tabs: [{ id: 'tab-1', title: 'Shell', paneIds: ['pane-1'], activePaneId: 'pane-1' }],
           panes: [{ id: 'pane-1', title: 'Pane', cwd: '~', status: 'active', cols: 80, rows: 24 }]
         },

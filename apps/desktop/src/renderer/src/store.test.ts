@@ -67,7 +67,7 @@ test('addProject persists through saveState', async () => {
   await useAppStore.getState().addProject('Remote dev')
 
   expect(mockApi.saveState).toHaveBeenCalled()
-  expect(useAppStore.getState().snapshot?.state.projects.some((project) => project.name === 'Remote dev')).toBe(
-    true
-  )
+  expect(
+    useAppStore.getState().snapshot?.state.projects.some((project) => project.name === 'Remote dev')
+  ).toBe(true)
 })

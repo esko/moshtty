@@ -8,8 +8,10 @@ const moshtty: MoshttyApi = {
   resetState: () => ipcRenderer.invoke(MOSHTTY_IPC_CHANNELS.stateReset),
   getAppInfo: () => ipcRenderer.invoke(MOSHTTY_IPC_CHANNELS.appInfo),
   getSecretStorageInfo: () => ipcRenderer.invoke(MOSHTTY_IPC_CHANNELS.secretInfo),
-  setPassphrase: (passphrase) => ipcRenderer.invoke(MOSHTTY_IPC_CHANNELS.secretSetPassphrase, passphrase),
-  storeToken: (label, token) => ipcRenderer.invoke(MOSHTTY_IPC_CHANNELS.secretStoreToken, label, token),
+  setPassphrase: (passphrase) =>
+    ipcRenderer.invoke(MOSHTTY_IPC_CHANNELS.secretSetPassphrase, passphrase),
+  storeToken: (label, token) =>
+    ipcRenderer.invoke(MOSHTTY_IPC_CHANNELS.secretStoreToken, label, token),
   loadToken: (label) => ipcRenderer.invoke(MOSHTTY_IPC_CHANNELS.secretLoadToken, label),
   deleteToken: (label) => ipcRenderer.invoke(MOSHTTY_IPC_CHANNELS.secretDeleteToken, label)
 }

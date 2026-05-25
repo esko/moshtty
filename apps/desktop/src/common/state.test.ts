@@ -31,7 +31,10 @@ describe('Moshtty state helpers', () => {
   })
 
   test('normalizeState recovers malformed input safely', () => {
-    const state = normalizeState({ version: 1, projects: [{ id: 'p1', name: 'Project One' }] }, '2026-05-25T00:00:00.000Z')
+    const state = normalizeState(
+      { version: 1, projects: [{ id: 'p1', name: 'Project One' }] },
+      '2026-05-25T00:00:00.000Z'
+    )
 
     expect(state.projects).toHaveLength(1)
     expect(state.projects[0].name).toBe('Project One')
@@ -39,7 +42,16 @@ describe('Moshtty state helpers', () => {
   })
 
   test('projectDisplayInitial derives a visible label', () => {
-    expect(projectDisplayInitial({ id: 'p1', name: '  moshtty', color: '#000', remoteId: null, tabIds: [], activeTabId: null })).toBe('M')
+    expect(
+      projectDisplayInitial({
+        id: 'p1',
+        name: '  moshtty',
+        color: '#000',
+        remoteId: null,
+        tabIds: [],
+        activeTabId: null
+      })
+    ).toBe('M')
   })
 
   test('migrateState upgrades legacy payloads and infers layouts', () => {

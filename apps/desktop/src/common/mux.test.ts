@@ -14,9 +14,7 @@ describe('mux framing', () => {
   })
 
   it('rejects unknown version', () => {
-    expect(() =>
-      decodeMuxFrame(new Uint8Array([2, 0, 0, 0, 1, 0x01]))
-    ).toThrow(MuxError)
+    expect(() => decodeMuxFrame(new Uint8Array([2, 0, 0, 0, 1, 0x01]))).toThrow(MuxError)
   })
 
   it('decodes cert hash to 32 bytes', () => {

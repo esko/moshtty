@@ -157,8 +157,9 @@ function registerIpcHandlers(): void {
   ipcMain.handle(MOSHTTY_IPC_CHANNELS.secretSetPassphrase, async (_event, passphrase: string) =>
     secretStore.setPassphrase(passphrase)
   )
-  ipcMain.handle(MOSHTTY_IPC_CHANNELS.secretStoreToken, async (_event, label: string, token: string) =>
-    secretStore.storeToken(label, token)
+  ipcMain.handle(
+    MOSHTTY_IPC_CHANNELS.secretStoreToken,
+    async (_event, label: string, token: string) => secretStore.storeToken(label, token)
   )
   ipcMain.handle(MOSHTTY_IPC_CHANNELS.secretLoadToken, async (_event, label: string) =>
     secretStore.loadToken(label)

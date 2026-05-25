@@ -108,7 +108,11 @@ export function createSecretStore(options: {
 
   async function writePassphraseMeta(meta: PassphraseMeta): Promise<void> {
     const directory = await ensureSecretsDirectory()
-    await writeFile(join(directory, PASSPHRASE_META_FILE), `${JSON.stringify(meta, null, 2)}\n`, 'utf8')
+    await writeFile(
+      join(directory, PASSPHRASE_META_FILE),
+      `${JSON.stringify(meta, null, 2)}\n`,
+      'utf8'
+    )
     passphraseMeta = meta
   }
 
@@ -185,7 +189,11 @@ export function createSecretStore(options: {
       }
 
       const { passphrase: activePassphrase, meta } = await requirePassphrase()
-      const encrypted = encryptWithPassphrase(token, activePassphrase, Buffer.from(meta.salt, 'base64'))
+      const encrypted = encryptWithPassphrase(
+        token,
+        activePassphrase,
+        Buffer.from(meta.salt, 'base64')
+      )
       await writeFile(passphrasePath(safeLabel), encrypted, 'utf8')
       await rm(safeStoragePath(safeLabel), { force: true })
       return { mode: 'passphrase' }
@@ -208,7 +216,11 @@ export function createSecretStore(options: {
         const { passphrase: activePassphrase, meta } = await requirePassphrase()
         return decryptWithPassphrase(encrypted, activePassphrase, Buffer.from(meta.salt, 'base64'))
       } catch (error) {
-        if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+        if (
+          error instanceof Error &&
+          'code' in error &&
+          (error as NodeJS.ErrnoException).code === 'ENOENT'
+        ) {
           return null
         }
         throw error

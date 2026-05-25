@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { resolveColors, lightColors, darkColors, space, radius, fontSize, motion, density } from './tokens'
+import {
+  resolveColors,
+  lightColors,
+  darkColors,
+  space,
+  radius,
+  fontSize,
+  motion,
+  density
+} from './tokens'
 
 describe('tokens', () => {
   describe('resolveColors', () => {
