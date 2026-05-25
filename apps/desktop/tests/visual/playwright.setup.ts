@@ -45,7 +45,8 @@ export const test = base.extend<MoshttyFixtures>({
       url.searchParams.set('fixture', id)
       await page.goto(url.toString())
       await page.waitForLoadState('domcontentloaded')
-      await expect(page.locator('[data-fixture-banner]')).toHaveAttribute('data-fixture-id', id)
+      await page.waitForURL((current) => current.searchParams.get('fixture') === id)
+      await expect(page.locator(`[data-fixture-id="${id}"]`)).toBeVisible()
     }
     await use(navigate)
   }

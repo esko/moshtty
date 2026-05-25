@@ -44,15 +44,12 @@ test.describe('Accessibility (axe-core)', () => {
     await expectNoCriticalOrSeriousViolations(page)
   })
 
-  test.fixme('active tab has no critical or serious violations', async ({ loadFixture, page }) => {
+  test('active tab has no critical or serious violations', async ({ loadFixture, page }) => {
     await loadFixture('active-tab')
     await expectNoCriticalOrSeriousViolations(page)
   })
 
-  test.fixme('import dialog has no critical or serious violations', async ({
-    loadFixture,
-    page
-  }) => {
+  test('import dialog has no critical or serious violations', async ({ loadFixture, page }) => {
     await loadFixture('dialog-import-empty')
     await expectNoCriticalOrSeriousViolations(page)
   })

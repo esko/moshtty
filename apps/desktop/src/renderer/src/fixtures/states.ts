@@ -34,6 +34,13 @@ export interface FixtureState {
 
 const base = createSampleState()
 
+const longTabs = Array.from({ length: 10 }, (_, index) => ({
+  id: `tab-overflow-${index + 1}`,
+  title: `Remote shell ${index + 1}`,
+  paneIds: ['pane-welcome'],
+  activePaneId: 'pane-welcome'
+}))
+
 const secondPane = {
   id: 'pane-build',
   title: 'Build',
@@ -153,6 +160,70 @@ export const FIXTURES: Record<string, FixtureState> = {
     label: 'Project rail expanded',
     state: { ...base, settings: { ...base.settings, projectRailCollapsed: false } }
   },
+  'rail-empty': {
+    id: 'rail-empty',
+    label: 'Project rail empty',
+    state: {
+      ...base,
+      activeProjectId: null,
+      activeTabId: null,
+      activePaneId: null,
+      projects: [],
+      tabs: [],
+      panes: [],
+      layouts: []
+    }
+  },
+  'tab-bar-dragging': {
+    id: 'tab-bar-dragging',
+    label: 'Tab bar dragging stand-in',
+    state: {
+      ...base,
+      projects: base.projects.map((project) => ({
+        ...project,
+        tabIds: ['tab-welcome', 'tab-build', 'tab-logs']
+      })),
+      tabs: [
+        ...base.tabs,
+        {
+          id: 'tab-build',
+          title: 'Build',
+          paneIds: ['pane-build'],
+          activePaneId: 'pane-build'
+        },
+        {
+          id: 'tab-logs',
+          title: 'Logs',
+          paneIds: ['pane-logs'],
+          activePaneId: 'pane-logs'
+        }
+      ],
+      panes: [...base.panes, secondPane, thirdPane],
+      layouts: [
+        ...base.layouts,
+        { tabId: 'tab-build', root: { kind: 'pane', paneId: 'pane-build' } },
+        { tabId: 'tab-logs', root: { kind: 'pane', paneId: 'pane-logs' } }
+      ]
+    }
+  },
+  'tab-bar-overflow': {
+    id: 'tab-bar-overflow',
+    label: 'Tab bar overflow',
+    state: {
+      ...base,
+      projects: base.projects.map((project) => ({
+        ...project,
+        tabIds: longTabs.map((tab) => tab.id),
+        activeTabId: longTabs[0].id
+      })),
+      activeTabId: longTabs[0].id,
+      tabs: longTabs,
+      layouts: longTabs.map((tab) => ({
+        tabId: tab.id,
+        root: { kind: 'pane', paneId: 'pane-welcome' }
+      }))
+    }
+  },
   'split-2-row': {
     id: 'split-2-row',
     label: 'Two-pane row split',
@@ -232,6 +303,11 @@ export const FIXTURES: Record<string, FixtureState> = {
   'dialog-import-invalid': {
     id: 'dialog-import-invalid',
     label: 'Remote import dialog (invalid profile)',
+    state: base
+  },
+  'dialog-import-valid': {
+    id: 'dialog-import-valid',
+    label: 'Remote import dialog (valid profile)',
     state: base
   },
   'dialog-project-edit': {

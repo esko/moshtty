@@ -184,7 +184,14 @@ function ProjectDialog({
   )
 }
 
-function ImportDialog({ invalid }: { invalid: boolean }): React.JSX.Element {
+function ImportDialog({ mode }: { mode: 'empty' | 'valid' | 'invalid' }): React.JSX.Element {
+  const invalid = mode === 'invalid'
+  const validProfile = `{
+  "label": "Mac mini",
+  "host": "macmini.local",
+  "platform": "macos"
+}`
+
   return (
     <div className="dialog-backdrop">
       <section
@@ -202,7 +209,7 @@ function ImportDialog({ invalid }: { invalid: boolean }): React.JSX.Element {
         <label className="field">
           <span>Profile JSON</span>
           <textarea
-            defaultValue={invalid ? '{ "host": ' : ''}
+            defaultValue={invalid ? '{ "host": ' : mode === 'valid' ? validProfile : ''}
             placeholder="Paste profile JSON"
             aria-invalid={invalid}
           />
@@ -329,7 +336,11 @@ function App(): React.JSX.Element {
     : []
 
   return (
-    <div className={`moshtty-app ${railCollapsed ? 'rail-collapsed' : ''}`}>
+    <div
+      className={`moshtty-app ${railCollapsed ? 'rail-collapsed' : ''} ${
+        fixtureId === 'tab-bar-dragging' ? 'tab-dragging' : ''
+      }`}
+    >
       {fixture ? <FixtureBanner fixtureId={fixture.id} fixtureLabel={fixture.label} /> : null}
       <aside className="project-rail" aria-label="Projects">
         <div className="brand">
@@ -478,8 +489,9 @@ function App(): React.JSX.Element {
           </section>
         ) : null}
 
-        {fixtureId === 'dialog-import-empty' ? <ImportDialog invalid={false} /> : null}
-        {fixtureId === 'dialog-import-invalid' ? <ImportDialog invalid /> : null}
+        {fixtureId === 'dialog-import-empty' ? <ImportDialog mode="empty" /> : null}
+        {fixtureId === 'dialog-import-valid' ? <ImportDialog mode="valid" /> : null}
+        {fixtureId === 'dialog-import-invalid' ? <ImportDialog mode="invalid" /> : null}
         {fixtureId === 'dialog-project-edit-new' ? (
           <ProjectDialog mode="new" projectName="Moshtty" />
         ) : null}

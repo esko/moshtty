@@ -11,23 +11,16 @@ test.describe('Panes', () => {
     await expect(page.locator('.tab.active')).toBeVisible()
   })
 
-  test.fixme('renders a 2-pane row split fixture', async ({ loadFixture, page }) => {
+  for (const fixtureId of ['split-2-row', 'split-2-column', 'split-3-nested', 'pane-lost']) {
+    test(`matches ${fixtureId} screenshot`, async ({ loadFixture, page }) => {
+      await loadFixture(fixtureId)
+      await expect(page).toHaveScreenshot(`${fixtureId}.png`)
+    })
+  }
+
+  test('matches split handle hover screenshot', async ({ loadFixture, page }) => {
     await loadFixture('split-2-row')
-    await expect(page).toHaveScreenshot('split-2-row.png')
-  })
-
-  test.fixme('renders a 2-pane column split fixture', async ({ loadFixture, page }) => {
-    await loadFixture('split-2-column')
-    await expect(page).toHaveScreenshot('split-2-column.png')
-  })
-
-  test.fixme('renders a 3-pane nested split fixture', async ({ loadFixture, page }) => {
-    await loadFixture('split-3-nested')
-    await expect(page).toHaveScreenshot('split-3-nested.png')
-  })
-
-  test.fixme('renders a pane-lost state', async ({ loadFixture, page }) => {
-    await loadFixture('pane-lost')
-    await expect(page).toHaveScreenshot('pane-lost.png')
+    await page.locator('.split-handle').first().hover()
+    await expect(page).toHaveScreenshot('split-handle-hover.png')
   })
 })

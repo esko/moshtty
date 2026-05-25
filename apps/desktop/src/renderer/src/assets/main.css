@@ -211,6 +211,7 @@
   align-items: end;
   gap: var(--space-xs);
   align-self: stretch;
+  overflow: hidden;
 }
 
 .tab {
@@ -234,6 +235,11 @@
   background: var(--color-workspace-bg);
   border: var(--space-2xs) solid var(--color-border);
   border-bottom-color: var(--color-workspace-bg);
+}
+
+.tab-dragging .tab.active {
+  transform: translateY(var(--space-xs));
+  box-shadow: var(--elevation-popover);
 }
 
 .top-actions {
