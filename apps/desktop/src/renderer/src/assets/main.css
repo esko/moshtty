@@ -300,6 +300,12 @@
   color: var(--color-danger);
 }
 
+.pane-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
 .dashboard {
   display: grid;
   width: min(65%, calc(var(--space-3xl) * 18));

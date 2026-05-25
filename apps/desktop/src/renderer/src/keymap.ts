@@ -18,6 +18,10 @@ export type AppActionId =
   | 'select-project'
   | 'show-general-settings'
   | 'show-shortcuts-settings'
+  | 'split-pane-right'
+  | 'split-pane-down'
+  | 'close-pane'
+  | 'close-tab'
 
 export interface KeyChord {
   key: string
@@ -124,6 +128,26 @@ export const APP_ACTIONS: readonly AppAction[] = [
     label: 'Show shortcuts',
     mouseOnly: true,
     mouseOnlyReason: 'Settings sections are local dialog tabs.'
+  },
+  {
+    id: 'split-pane-right',
+    label: 'Split pane right',
+    shortcut: { key: 'ArrowRight', ctrl: true, shift: true }
+  },
+  {
+    id: 'split-pane-down',
+    label: 'Split pane down',
+    shortcut: { key: 'ArrowDown', ctrl: true, shift: true }
+  },
+  {
+    id: 'close-pane',
+    label: 'Close pane',
+    shortcut: { key: 'x', ctrl: true, shift: true }
+  },
+  {
+    id: 'close-tab',
+    label: 'Close tab',
+    shortcut: { key: 'w', ctrl: true, shift: true }
   }
 ] as const
 

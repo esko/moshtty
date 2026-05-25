@@ -6,7 +6,8 @@ import {
   type MoshttyPane,
   type MoshttyPaneLayoutNode,
   type MoshttyRemote,
-  type MoshttyState
+  type MoshttyState,
+  type SplitAxis
 } from '../../common/state'
 import { parseMoshttyProfileText } from '../../common/profile.schema'
 import {
@@ -70,12 +71,16 @@ function SplitNode({
   state,
   node,
   activePaneId,
-  terminalMode
+  terminalMode,
+  onSplit,
+  onClosePane
 }: {
   state: MoshttyState
   node: MoshttyPaneLayoutNode | null
   activePaneId: string | null
   terminalMode: 'light' | 'dark'
+  onSplit: (axis: SplitAxis) => void
+  onClosePane: () => void
 }): React.JSX.Element {
   if (!node) {
     return (
@@ -94,11 +99,14 @@ function SplitNode({
         </div>
       )
     }
+    const isActive = pane.id === state.activePaneId
     return (
       <TerminalPane
         pane={pane}
-        active={pane.id === state.activePaneId}
+        active={isActive}
         terminalMode={terminalMode}
+        onSplit={isActive ? onSplit : undefined}
+        onClose={isActive ? onClosePane : undefined}
       />
     )
   }
@@ -110,6 +118,8 @@ function SplitNode({
         node={node.first}
         activePaneId={activePaneId}
         terminalMode={terminalMode}
+        onSplit={onSplit}
+        onClosePane={onClosePane}
       />
       <div
         className="split-handle"
@@ -121,6 +131,8 @@ function SplitNode({
         node={node.second}
         activePaneId={activePaneId}
         terminalMode={terminalMode}
+        onSplit={onSplit}
+        onClosePane={onClosePane}
       />
     </div>
   )
@@ -436,6 +448,9 @@ function App(): React.JSX.Element {
   const importRemoteProfile = useAppStore((state) => state.importRemoteProfile)
   const setActiveProject = useAppStore((state) => state.setActiveProject)
   const toggleProjectRail = useAppStore((state) => state.toggleProjectRail)
+  const splitPane = useAppStore((state) => state.splitPane)
+  const closeActivePane = useAppStore((state) => state.closeActivePane)
+  const closeActiveTab = useAppStore((state) => state.closeActiveTab)
 
   const state = fixture?.state ?? snapshot?.state ?? null
   const projects = state?.projects ?? EMPTY_PROJECTS
@@ -492,9 +507,23 @@ function App(): React.JSX.Element {
       'add-project': () => openDialog({ kind: 'project', mode: 'new' }),
       'close-dialog': closeDialog,
       'cancel-dialog': closeDialog,
-      'confirm-dialog': () => undefined
+      'confirm-dialog': () => undefined,
+      'split-pane-right': () => void splitPane('row'),
+      'split-pane-down': () => void splitPane('column'),
+      'close-pane': () => void closeActivePane(),
+      'close-tab': () => void closeActiveTab()
     }),
-    [addTab, closeDialog, openDialog, resetWorkspace, saveWorkspace, toggleProjectRail]
+    [
+      addTab,
+      closeDialog,
+      closeActivePane,
+      closeActiveTab,
+      openDialog,
+      resetWorkspace,
+      saveWorkspace,
+      splitPane,
+      toggleProjectRail
+    ]
   )
   useRegisteredShortcuts(shortcutHandlers)
 
@@ -663,6 +692,8 @@ function App(): React.JSX.Element {
               node={activeLayout?.root ?? null}
               activePaneId={state?.activePaneId ?? null}
               terminalMode={terminalMode}
+              onSplit={(axis) => void splitPane(axis)}
+              onClosePane={() => void closeActivePane()}
             />
           </section>
         ) : (

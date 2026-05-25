@@ -1,7 +1,14 @@
 import { create } from 'zustand'
 import type { MoshttyAppInfo, MoshttySecretStorageInfo } from '../../common/moshtty-api'
 import type { ParsedMoshttyProfile } from '../../common/profile.schema'
-import type { MoshttyProject, MoshttyState, StateLoadResult } from '../../common/state'
+import type {
+  MoshttyPaneLayoutNode,
+  MoshttyPaneLayoutSplit,
+  MoshttyProject,
+  MoshttyState,
+  SplitAxis,
+  StateLoadResult
+} from '../../common/state'
 import {
   createSampleState,
   getActiveProject,
@@ -32,6 +39,9 @@ interface AppState {
   importRemoteProfile: (profile: ParsedMoshttyProfile) => Promise<void>
   setActiveProject: (projectId: string) => Promise<void>
   toggleProjectRail: () => Promise<void>
+  splitPane: (axis: SplitAxis) => Promise<void>
+  closeActivePane: () => Promise<void>
+  closeActiveTab: () => Promise<void>
 }
 
 function getMoshttyApi(): Window['moshtty'] {
@@ -364,8 +374,170 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     })
     await get().saveWorkspace()
+  },
+
+  splitPane: async (axis: SplitAxis) => {
+    const snapshot = get().snapshot
+    if (!snapshot || !snapshot.state.activePaneId || !snapshot.state.activeTabId) {
+      return
+    }
+
+    const activeTab = snapshot.state.tabs.find((tab) => tab.id === snapshot.state.activeTabId)
+    if (!activeTab) {
+      return
+    }
+
+    const newPaneId = `pane-${crypto.randomUUID()}`
+    const activePane = snapshot.state.panes.find((pane) => pane.id === snapshot.state.activePaneId)
+    const newPane: typeof activePane = {
+      id: newPaneId,
+      title: 'Shell',
+      cwd: activePane?.cwd ?? '~',
+      status: 'active',
+      cols: activePane?.cols ?? 120,
+      rows: activePane?.rows ?? 32
+    }
+
+    const nextState = withUpdatedTimestamp({
+      ...snapshot.state,
+      activePaneId: newPaneId,
+      tabs: snapshot.state.tabs.map((tab) =>
+        tab.id === activeTab.id
+          ? {
+              ...tab,
+              paneIds: [...tab.paneIds, newPaneId],
+              activePaneId: newPaneId
+            }
+          : tab
+      ),
+      panes: [...snapshot.state.panes, newPane],
+      layouts: snapshot.state.layouts.map((layout) => {
+        if (layout.tabId !== activeTab.id) {
+          return layout
+        }
+        const existingPane: MoshttyPaneLayoutNode = {
+          kind: 'pane',
+          paneId: snapshot.state.activePaneId!
+        }
+        const newSplit: MoshttyPaneLayoutSplit = {
+          kind: 'split',
+          axis,
+          ratio: 0.5,
+          first: existingPane,
+          second: { kind: 'pane', paneId: newPaneId }
+        }
+        return { ...layout, root: newSplit }
+      })
+    })
+
+    set({ snapshot: { ...snapshot, state: nextState } })
+    await get().saveWorkspace()
+  },
+
+  closeActivePane: async () => {
+    const snapshot = get().snapshot
+    if (!snapshot || !snapshot.state.activePaneId || !snapshot.state.activeTabId) {
+      return
+    }
+
+    const activeTab = snapshot.state.tabs.find((tab) => tab.id === snapshot.state.activeTabId)
+    if (!activeTab || activeTab.paneIds.length <= 1) {
+      return
+    }
+
+    const closingId = snapshot.state.activePaneId
+    const nextPaneId = activeTab.paneIds.find((id) => id !== closingId) ?? null
+
+    const nextState = withUpdatedTimestamp({
+      ...snapshot.state,
+      activePaneId: nextPaneId,
+      tabs: snapshot.state.tabs.map((tab) =>
+        tab.id === activeTab.id
+          ? {
+              ...tab,
+              paneIds: tab.paneIds.filter((id) => id !== closingId),
+              activePaneId: nextPaneId
+            }
+          : tab
+      ),
+      panes: snapshot.state.panes.filter((pane) => pane.id !== closingId),
+      layouts: snapshot.state.layouts.map((layout) => {
+        if (layout.tabId !== activeTab.id) {
+          return layout
+        }
+        return { ...layout, root: removePaneFromLayout(layout.root, closingId) }
+      })
+    })
+
+    set({ snapshot: { ...snapshot, state: nextState } })
+    await get().saveWorkspace()
+  },
+
+  closeActiveTab: async () => {
+    const snapshot = get().snapshot
+    if (!snapshot || !snapshot.state.activeTabId || !snapshot.state.activeProjectId) {
+      return
+    }
+
+    const activeProject = snapshot.state.projects.find(
+      (project) => project.id === snapshot.state.activeProjectId
+    )
+    if (!activeProject || activeProject.tabIds.length <= 1) {
+      return
+    }
+
+    const closingId = snapshot.state.activeTabId
+    const tab = snapshot.state.tabs.find((t) => t.id === closingId)
+    const paneIds = tab?.paneIds ?? []
+    const nextTabId = activeProject.tabIds.find((id) => id !== closingId) ?? null
+    const nextTab = snapshot.state.tabs.find((t) => t.id === nextTabId)
+
+    const nextState = withUpdatedTimestamp({
+      ...snapshot.state,
+      activeTabId: nextTabId,
+      activePaneId: nextTab?.activePaneId ?? null,
+      projects: snapshot.state.projects.map((project) =>
+        project.id === activeProject.id
+          ? {
+              ...project,
+              tabIds: project.tabIds.filter((id) => id !== closingId),
+              activeTabId: nextTabId
+            }
+          : project
+      ),
+      tabs: snapshot.state.tabs.filter((t) => t.id !== closingId),
+      panes: snapshot.state.panes.filter((pane) => !paneIds.includes(pane.id)),
+      layouts: snapshot.state.layouts.filter((layout) => layout.tabId !== closingId)
+    })
+
+    set({ snapshot: { ...snapshot, state: nextState } })
+    await get().saveWorkspace()
   }
 }))
+
+function removePaneFromLayout(
+  node: MoshttyPaneLayoutNode | null,
+  paneId: string
+): MoshttyPaneLayoutNode | null {
+  if (!node) {
+    return null
+  }
+  if (node.kind === 'pane') {
+    return node.paneId === paneId ? null : node
+  }
+  const first = removePaneFromLayout(node.first, paneId)
+  const second = removePaneFromLayout(node.second, paneId)
+  if (!first && !second) {
+    return null
+  }
+  if (!first) {
+    return second
+  }
+  if (!second) {
+    return first
+  }
+  return { ...node, first, second }
+}
 
 export function selectProjects(state: AppState): MoshttyProject[] {
   return state.snapshot?.state.projects ?? EMPTY_PROJECTS
