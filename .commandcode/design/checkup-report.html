@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Design Checkup — Crostini Ghostty Terminal</title>
+<style>
+  :root { color-scheme: dark; --bg: #05080b; --surface: #0a1119; --border: #273849; --text: #e6edf3; --text-strong: #f0f4f8; --text-muted: #94a7b8; --accent: #7bd88f; --danger: #ff9b85; --warning: #f7c76b; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: var(--bg); color: var(--text); }
+  body { max-width: 720px; margin: 0 auto; padding: 48px 24px; }
+  h1 { color: var(--text-strong); font-size: 28px; margin: 0 0 4px; }
+  .meta { color: var(--text-muted); font-size: 13px; margin: 0 0 32px; }
+  .score-card { display: flex; align-items: center; gap: 16px; padding: 20px 24px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); margin: 0 0 32px; }
+  .score-num { font-size: 56px; font-weight: 700; color: var(--warning); line-height: 1; }
+  .score-label { font-size: 13px; color: var(--text-muted); }
+  table { width: 100%; border-collapse: collapse; margin: 0 0 32px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; }
+  th { color: var(--text-muted); font-weight: 600; }
+  .status-healthy { color: var(--accent); }
+  .status-watch { color: var(--warning); }
+  .status-critical { color: var(--danger); }
+  h2 { color: var(--text-strong); font-size: 18px; margin: 32px 0 12px; border-top: 1px solid var(--border); padding-top: 24px; }
+  h3 { color: var(--text-strong); font-size: 14px; margin: 20px 0 8px; }
+  p, li { font-size: 13px; line-height: 1.5; color: var(--text); }
+  ul { padding-left: 20px; margin: 8px 0; }
+  .blocker { border-left: 3px solid var(--danger); padding-left: 12px; margin: 12px 0; }
+  .blocker p { color: var(--danger); margin: 0 0 4px; }
+  .blocker span { color: var(--text); }
+  .prescription { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin: 12px 0; }
+  .prescription h4 { margin: 0 0 6px; font-size: 13px; color: var(--text-strong); }
+  .prescription p { margin: 0; font-size: 12px; color: var(--text-muted); }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+  .tag-blocker { background: rgba(255, 155, 133, 0.15); color: var(--danger); }
+</style>
+</head>
+<body>
+
+<h1>Design Checkup</h1>
+<p class="meta">Crostini Ghostty Terminal &middot; 2026-05-23 &middot; Product Register &middot; Full PWA</p>
+
+<div class="score-card">
+  <div class="score-num">30</div>
+  <div>
+    <div style="font-size:16px;font-weight:600;color:var(--text-strong);margin:0 0 4px">/60 &middot; Watch</div>
+    <div class="score-label">1 critical, 4 watch, 1 healthy</div>
+  </div>
+</div>
+
+<table>
+  <tr><th>Vital Sign</th><th>Status</th><th>Score</th></tr>
+  <tr><td>Intentionality</td><td class="status-watch">Watch</td><td>5/10</td></tr>
+  <tr><td>Readability</td><td class="status-watch">Watch</td><td>5/10</td></tr>
+  <tr><td>Usability</td><td class="status-watch">Watch</td><td>5/10</td></tr>
+  <tr><td>Responsiveness</td><td class="status-watch">Watch</td><td>5/10</td></tr>
+  <tr><td>Speed</td><td class="status-healthy">Healthy</td><td>10/10</td></tr>
+  <tr><td>Accessibility</td><td class="status-critical">Critical</td><td>0/10</td></tr>
+</table>
+
+<h2>Critical</h2>
+
+<h3><span class="tag tag-blocker">BLOCKER</span> outline: none without replacement</h3>
+<div class="blocker">
+  <p>4 interactive elements disable focus rings with no visible replacement</p>
+  <span><code>#commandPaletteInput</code>, <code>.space-select</code>, <code>.icon-button</code>, <code>.context-menu button</code></span>
+</div>
+
+<h3><span class="tag tag-blocker">BLOCKER</span> Undefined CSS variables</h3>
+<div class="blocker">
+  <p><code>--color-foreground-1</code>, <code>--color-foreground-2</code>, <code>--color-foreground-3</code> used but never defined</p>
+  <span>Palette, status bar, and keybinding editor text colors resolve to browser defaults</span>
+</div>
+
+<h2>Prescriptions</h2>
+
+<div class="prescription">
+  <h4>Fix 1: Define foreground tokens</h4>
+  <p>Map to existing --color-text-strong, --color-text, --color-text-muted</p>
+</div>
+
+<div class="prescription">
+  <h4>Fix 2: Visible focus indicators</h4>
+  <p>Replace outline:none with 2px solid var(--color-focus) on all disabled elements</p>
+</div>
+
+<div class="prescription">
+  <h4>Fix 3: prefers-reduced-motion</h4>
+  <p>Wrap @keyframes keybinding-pulse in @media (prefers-reduced-motion: no-preference)</p>
+</div>
+
+<div class="prescription">
+  <h4>Fix 4: Touch target sizing</h4>
+  <p>Add @media (pointer: coarse) rule bumping minimum targets to 44px</p>
+</div>
+
+</body>
+</html>
