@@ -65,5 +65,6 @@ Set:
 
 - `M4 WebTransport and Mosh mux` to `Ready for review` when verification passes;
 - this task to `Ready for review`;
-- document any remaining protocol risks or upstream `mosh-go` gaps.
-
+- add verification commands and results;
+- document any remaining protocol risks or upstream `mosh-go` gaps;
+- do not commit until `docs/moshtty-prd.md` is closed out for this task.

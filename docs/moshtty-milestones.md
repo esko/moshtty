@@ -2,7 +2,7 @@
 
 ## M0 Planning Docs
 
-Status: In progress
+Status: Done
 
 Objective:
 
@@ -14,6 +14,7 @@ Deliverables:
 - `docs/moshtty-prd.md`.
 - `docs/moshtty-plan.md`.
 - `docs/moshtty-milestones.md`.
+- `docs/moshtty-testing.md`.
 - Agent briefs under `docs/agents/`.
 
 Acceptance:
@@ -21,6 +22,7 @@ Acceptance:
 - Docs preserve all locked decisions from planning.
 - Agent briefs have clear scope, paths, deliverables, and verification.
 - PRD status table is present and current.
+- Test plan covers unit, Go, visual regression, exploratory QA, and real remote acceptance.
 
 ## M1 Branch And Scaffold
 
@@ -171,6 +173,8 @@ Acceptance:
 
 - Reducer/store tests cover projects, tabs, panes, layout, active selection, and lost panes.
 - Theme tests cover system/light/dark and linked terminal palette behavior.
+- Playwright Electron screenshots cover dashboard, terminal tabs, split panes, collapsed rail, dialogs, settings, and lost pane state.
+- agent-browser exploratory QA captures review screenshots for light and dark modes.
 - Manual inspection confirms no major text overlap and compact desktop layout.
 - PRD status updated.
 

@@ -62,5 +62,6 @@ Set:
 
 - `M1 Branch and scaffold` to `Ready for review` when verification passes;
 - this task to `Ready for review`;
-- add status notes for any old files intentionally left in place.
-
+- add verification commands and results;
+- add status notes for any old files intentionally left in place;
+- do not commit until `docs/moshtty-prd.md` is closed out for this task.

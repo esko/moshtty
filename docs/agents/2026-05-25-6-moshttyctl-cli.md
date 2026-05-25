@@ -74,5 +74,6 @@ Set:
 
 - `M6 moshttyctl CLI` to `Ready for review` when verification passes;
 - this task to `Ready for review`;
-- document final command syntax in the PRD or a linked CLI docs file.
-
+- add verification commands and results;
+- document final command syntax in the PRD or a linked CLI docs file;
+- do not commit until `docs/moshtty-prd.md` is closed out for this task.

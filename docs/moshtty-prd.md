@@ -38,6 +38,7 @@ Moshtty replaces the previous Crostini-local PWA/Go-agent architecture. The old 
 | Client | Electron only, ChromeOS/Crostini first |
 | Client stack | `electron-vite`, React + TypeScript, Zustand, CSS modules/plain CSS, pnpm |
 | Renderer | Keep `ghostty-web` |
+| Testing | Vitest, Go tests, Playwright Electron screenshots, and agent-browser exploratory QA |
 | Client state | Versioned JSON through Electron main, atomic writes |
 | Secrets | Electron `safeStorage`; passphrase-encrypted fallback |
 | Remote first target | macOS host |
@@ -70,6 +71,7 @@ Moshtty replaces the previous Crostini-local PWA/Go-agent architecture. The old 
 | M5 UI and Ghostty integration | Planned | React UI, project rail, tabs, panes, settings, Ghostty renderer |
 | M6 `moshttyctl` CLI | Planned | Connected app commands and offline cleanup |
 | M7 Real remote acceptance | Planned | macOS host smoke and reconnect workflow |
+| Testing plan | Done | See `docs/moshtty-testing.md` |
 
 ## Task Status
 
@@ -159,6 +161,8 @@ The first full acceptance pass requires:
 8. `moshttyctl pane split` from the remote host creates a pane in the active app project.
 9. Restarting the companion marks panes lost and offers restart without deleting local layout.
 10. Relevant unit/integration tests pass for the touched components.
+11. Electron visual regression screenshots pass for the required UI states before UI milestones are marked done.
+12. agent-browser exploratory QA is used for UI review before M5/M7 acceptance.
 
 ## Risks
 

@@ -64,5 +64,6 @@ Set:
 
 - `M3 macOS remote companion` to `Ready for review` when verification passes;
 - this task to `Ready for review`;
-- add any manual macOS install caveats to PRD notes.
-
+- add verification commands and results;
+- add any manual macOS install caveats to PRD notes;
+- do not commit until `docs/moshtty-prd.md` is closed out for this task.

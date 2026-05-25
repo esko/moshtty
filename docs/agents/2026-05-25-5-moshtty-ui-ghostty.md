@@ -6,6 +6,7 @@
 - `docs/moshtty-prd.md`
 - `docs/moshtty-plan.md`
 - `docs/moshtty-milestones.md`
+- `docs/moshtty-testing.md`
 
 ## Objective
 
@@ -51,6 +52,8 @@ Avoid:
 - Terminal panes render through `ghostty-web`.
 - Keyboard/app actions wired to store.
 - Tests for reducers, theme resolution, layout behavior, and import validation.
+- Playwright Electron visual screenshots for the key UI states listed in `docs/moshtty-testing.md`.
+- agent-browser review screenshots for light and dark mode before marking the task ready.
 
 ## Verification
 
@@ -60,6 +63,7 @@ Run:
 pnpm --filter @moshtty/desktop test
 pnpm --filter @moshtty/desktop typecheck
 pnpm --filter @moshtty/desktop build
+pnpm --filter @moshtty/desktop test:visual
 git diff --check
 ```
 
@@ -71,6 +75,7 @@ Manual inspection:
 - split panes;
 - centered dialogs;
 - no obvious text overlap at desktop and narrow widths.
+- agent-browser snapshot and screenshot pass against the running Electron app.
 
 ## PRD Update
 
@@ -78,5 +83,6 @@ Set:
 
 - `M5 UI and Ghostty integration` to `Ready for review` when verification passes;
 - this task to `Ready for review`;
-- record any visual or renderer limitations.
-
+- add verification commands and results, including visual checks;
+- record any visual or renderer limitations;
+- do not commit until `docs/moshtty-prd.md` is closed out for this task.

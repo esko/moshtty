@@ -21,9 +21,10 @@ Read these before starting implementation work:
 - `docs/moshtty-prd.md` - product requirements, scope, status, risks.
 - `docs/moshtty-plan.md` - architecture decisions from planning.
 - `docs/moshtty-milestones.md` - implementation roadmap and acceptance criteria.
+- `docs/moshtty-testing.md` - testing strategy, visual regression, and agent-browser QA.
 - `docs/agents/*.md` - task briefs for parallel agents.
 
-Agents must update `docs/moshtty-prd.md` status before ending completed or blocked work.
+Agents must close out `docs/moshtty-prd.md` before ending completed or blocked work: update task and milestone status, record verification commands, note blockers or follow-ups, and make sure the PRD does not show stale ownership/status for their slice.
 
 ## Architecture Rules
 
@@ -85,6 +86,7 @@ Minimum expectations:
 - Go protocol/config changes: run `go test ./...`.
 - Transport changes: test mux framing, JSON-RPC auth/origin checks, and pane lifecycle.
 - UI changes: test reducers/theme/layout behavior and inspect the app manually.
+- Visual/UI changes: add or update Playwright Electron screenshots and use `agent-browser` for exploratory Electron QA when reviewing real app states.
 
 If a required command is unavailable because the scaffold has not landed, document that in `docs/moshtty-prd.md` under status notes.
 
@@ -128,7 +130,7 @@ Do not create a marketing landing page. The first screen should be the usable ap
 - Do not rewrite, revert, or clean up another agent's unrelated changes.
 - Do not run destructive git commands unless explicitly requested.
 - If generated files are introduced, keep source and generated-output commits separate when practical.
-- Update `docs/moshtty-prd.md` status before committing a completed or blocked task.
+- Close out `docs/moshtty-prd.md` before committing a completed or blocked task.
 
 ## Multi-Agent Workflow
 
@@ -137,7 +139,9 @@ Do not create a marketing landing page. The first screen should be the usable ap
 3. Keep edits inside the task's listed paths unless the brief explains otherwise.
 4. Add or update tests with the implementation.
 5. Run the task's verification commands.
-6. Update `docs/moshtty-prd.md` milestone/task status.
+6. Close out `docs/moshtty-prd.md` for the task: milestone/task status, owner, verification notes, blockers, and follow-ups.
 7. Commit the slice with an atomic conventional commit message.
 
 Avoid parallel edits to the same files. If two tasks need the same shared module, coordinate through the PRD status notes before editing.
+
+The `cmd` harness with model `deepseek/deepseek-v4-pro` is allowed for subagents when a task is well scoped and has a clear write boundary. Give those agents the same docs and task-brief instructions, and require the same verification, PRD status update, and atomic conventional commit behavior.

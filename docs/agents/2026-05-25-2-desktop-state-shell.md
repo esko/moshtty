@@ -53,5 +53,6 @@ Set:
 
 - `M2 Desktop state shell` to `Ready for review` when verification passes;
 - this task to `Ready for review`;
-- add notes about any safeStorage behavior observed in Crostini.
-
+- add verification commands and results;
+- add notes about any safeStorage behavior observed in Crostini;
+- do not commit until `docs/moshtty-prd.md` is closed out for this task.
