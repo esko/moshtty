@@ -672,7 +672,7 @@ function handleActionShortcut(event: KeyboardEvent): boolean {
 function shouldHandleAppShortcut(event: KeyboardEvent): boolean {
   if (event.defaultPrevented || isSettingsRoute() || !currentWorkspace) return false;
   if (isPaletteOpen()) return false;
-  if (document.querySelector("dialog[open]")) return false;
+  if (renameDialog.open || profileDialog.open || spaceDialog.open || shortcutsDialog.open) return false;
   const target = event.target;
   return !(target instanceof Element && isEditableShortcutTarget(target) && !terminalRoot.contains(target));
 }
