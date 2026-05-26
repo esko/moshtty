@@ -2,26 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   getActiveProject,
   getActiveTab,
-  projectDisplayInitial,
   type MoshttyPane,
   type MoshttyPaneLayoutNode,
   type MoshttyRemote,
   type MoshttyState,
   type SplitAxis
 } from '../../common/state'
-import { parseMoshttyProfileText } from '../../common/profile.schema'
-import {
-  EditIcon,
-  FolderPlusIcon,
-  GearIcon,
-  GridIcon,
-  HamburgerIcon,
-  HelpIcon,
-  KeyboardIcon,
-  PlusIcon,
-  SearchIcon,
-  XIcon
-} from './design/icons'
 import { TerminalPane } from './components/TerminalPane'
 import { getFixtureDialog, type AppDialog } from './dialogs'
 import { resolveTerminalThemeMode, useResolvedThemeMode } from './design/theme'
@@ -29,18 +15,22 @@ import { FixtureBanner } from './fixtures/FixtureBanner'
 import { getFixture } from './fixtures/states'
 import { loadFixtureFromQuery } from './fixtures/loader'
 import {
-  APP_ACTIONS,
   formatShortcut,
   getAction,
-  getShortcutActions,
   useRegisteredShortcuts,
   type AppActionId,
   type AppActionHandlerMap
 } from './keymap'
-import { EMPTY_PROJECTS, useAppStore } from './store'
+import { useAppStore } from './store'
 import { MoshttyTransport } from './transport/moshtty-transport'
 import { MoshConnectionManager } from './mosh-connection-manager'
 import { buildRemoteWebTransportUrl } from './remote-url'
+
+// New modular components
+import { TopBar } from './components/TopBar'
+import { Sidebar } from './components/Sidebar'
+import { Dashboard } from './components/Dashboard'
+import { Dialogs } from './components/Dialogs'
 
 const EMPTY_REMOTES: MoshttyRemote[] = []
 
@@ -151,336 +141,15 @@ function SplitNode({
   )
 }
 
-function ProjectDialog({
-  mode,
-  projectName,
-  onClose,
-  onSave
-}: {
-  mode: 'new' | 'existing'
-  projectName: string
-  onClose: () => void
-  onSave: (name: string) => void
-}): React.JSX.Element {
-  const [name, setName] = useState(mode === 'new' ? '' : projectName)
-
-  return (
-    <div className="dialog-backdrop">
-      <section
-        className="dialog project-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="project-dialog-title"
-      >
-        <header className="dialog-header">
-          <h2 id="project-dialog-title">{mode === 'new' ? 'New project' : 'Edit project'}</h2>
-          <button
-            className="icon-button"
-            type="button"
-            aria-label="Close project dialog"
-            data-action-id="close-dialog"
-            title={actionTitle('close-dialog')}
-            onClick={onClose}
-          >
-            <XIcon />
-          </button>
-        </header>
-        <label className="field">
-          <span>Name</span>
-          <input
-            value={name}
-            placeholder="Remote dev"
-            onChange={(event) => setName(event.target.value)}
-          />
-        </label>
-        <div className="project-chip-editor">
-          <div className="large-chip">{projectName.charAt(0).toUpperCase() || 'M'}</div>
-          <div>
-            <span className="field-label">Project color</span>
-            <div className="swatch-row" aria-label="Project color choices">
-              <button
-                className="swatch active"
-                type="button"
-                aria-label="Use accent color"
-                data-action-id="choose-project-color"
-              />
-              <button
-                className="swatch muted"
-                type="button"
-                aria-label="Use muted color"
-                data-action-id="choose-project-color"
-              />
-              <button
-                className="swatch warm"
-                type="button"
-                aria-label="Use warning color"
-                data-action-id="choose-project-color"
-              />
-            </div>
-          </div>
-        </div>
-        <footer className="dialog-actions">
-          <button
-            className="button secondary"
-            type="button"
-            data-action-id="cancel-dialog"
-            title={actionTitle('cancel-dialog')}
-            onClick={onClose}
-          >
-            Cancel
-          </button>
-          <button
-            className="button primary"
-            type="button"
-            data-action-id="confirm-dialog"
-            title={actionTitle('confirm-dialog')}
-            onClick={() => onSave(name)}
-          >
-            Save
-          </button>
-        </footer>
-      </section>
-    </div>
-  )
-}
-
-function ImportDialog({
-  mode,
-  secretMode,
-  onClose,
-  onImport
-}: {
-  mode: 'empty' | 'valid' | 'invalid'
-  secretMode: string | null
-  onClose: () => void
-  onImport: (profileText: string, passphrase: string) => Promise<boolean>
-}): React.JSX.Element {
-  const validProfile = `{
-  "schemaVersion": 1,
-  "remoteId": "remote-mac-mini",
-  "hostLabel": "Mac mini",
-  "platform": "macos",
-  "serviceVersion": "0.1.0",
-  "url": "https://macmini.local:4433",
-  "tokenLabel": "default",
-  "currentCertHash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-  "nextCertHash": null,
-  "defaults": {
-    "cols": 120,
-    "rows": 32
-  }
-}`
-  const initialText = mode === 'valid' ? validProfile : mode === 'invalid' ? '{ "host": ' : ''
-  const [profileText, setProfileText] = useState(initialText)
-  const [passphrase, setPassphrase] = useState('')
-  const [parseFailed, setParseFailed] = useState(mode === 'invalid')
-  const parsedProfile = profileText.trim() ? parseMoshttyProfileText(profileText) : null
-  const needsPassphrase =
-    secretMode === 'passphrase' &&
-    parsedProfile?.ok === true &&
-    Boolean(parsedProfile.profile.token)
-  const invalid = parseFailed
-
-  return (
-    <div className="dialog-backdrop">
-      <section
-        className="dialog import-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="import-dialog-title"
-      >
-        <header className="dialog-header">
-          <h2 id="import-dialog-title">Import remote</h2>
-          <button
-            className="icon-button"
-            type="button"
-            aria-label="Close import dialog"
-            data-action-id="close-dialog"
-            title={actionTitle('close-dialog')}
-            onClick={onClose}
-          >
-            <XIcon />
-          </button>
-        </header>
-        <label className="field">
-          <span>Profile JSON</span>
-          <textarea
-            value={profileText}
-            placeholder="Paste profile JSON"
-            aria-invalid={invalid}
-            onChange={(event) => {
-              setProfileText(event.target.value)
-              setParseFailed(false)
-            }}
-          />
-        </label>
-        {invalid ? (
-          <p className="error-text">
-            Could not import profile. Check the JSON and token passphrase, then try again.
-          </p>
-        ) : null}
-        {needsPassphrase ? (
-          <label className="field">
-            <span>Token passphrase</span>
-            <input
-              value={passphrase}
-              type="password"
-              placeholder="Encrypt remote token"
-              onChange={(event) => setPassphrase(event.target.value)}
-            />
-          </label>
-        ) : null}
-        <footer className="dialog-actions">
-          <button
-            className="button secondary"
-            type="button"
-            data-action-id="cancel-dialog"
-            title={actionTitle('cancel-dialog')}
-            onClick={onClose}
-          >
-            Cancel
-          </button>
-          <button
-            className="button primary"
-            type="button"
-            data-action-id="confirm-dialog"
-            title={actionTitle('confirm-dialog')}
-            onClick={() =>
-              void onImport(profileText, passphrase).then((imported) => setParseFailed(!imported))
-            }
-          >
-            Import
-          </button>
-        </footer>
-      </section>
-    </div>
-  )
-}
-
-function SettingsDialog({
-  terminalMode,
-  onClose
-}: {
-  terminalMode: string
-  onClose: () => void
-}): React.JSX.Element {
-  const shortcutActions = getShortcutActions()
-  const mouseOnlyActions = APP_ACTIONS.filter((action) => action.mouseOnly)
-
-  return (
-    <div className="dialog-backdrop">
-      <section
-        className="settings-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="settings-title"
-      >
-        <aside className="settings-nav" aria-label="Settings sections">
-          <span className="settings-section">Desktop</span>
-          <button
-            className="settings-tab active"
-            type="button"
-            data-action-id="show-general-settings"
-          >
-            <GearIcon />
-            General
-          </button>
-          <button className="settings-tab" type="button" data-action-id="show-shortcuts-settings">
-            <KeyboardIcon />
-            Shortcuts
-          </button>
-        </aside>
-        <div className="settings-panel">
-          <header className="dialog-header">
-            <h2 id="settings-title">Terminal settings</h2>
-            <button
-              className="icon-button"
-              type="button"
-              aria-label="Close settings"
-              data-action-id="close-dialog"
-              title={actionTitle('close-dialog')}
-              onClick={onClose}
-            >
-              <XIcon />
-            </button>
-          </header>
-          <div className="settings-list">
-            <div className="settings-row">
-              <div>
-                <strong>App theme</strong>
-                <span>Light, dark, or system</span>
-              </div>
-              <span>System</span>
-            </div>
-            <div className="settings-row">
-              <div>
-                <strong>Terminal palette</strong>
-                <span>Current mode: {terminalMode}</span>
-              </div>
-              <span>Follow app</span>
-            </div>
-            <div className="settings-row">
-              <div>
-                <strong>Font size</strong>
-                <span>Compact terminal density</span>
-              </div>
-              <span>14</span>
-            </div>
-            <div className="settings-row">
-              <div>
-                <strong>Cursor</strong>
-                <span>Block cursor</span>
-              </div>
-              <span>Block</span>
-            </div>
-            <div className="settings-row shortcuts-row">
-              <div>
-                <strong>Keyboard shortcuts</strong>
-                <span>Registered app actions</span>
-              </div>
-              <div className="shortcut-list">
-                {shortcutActions.map((action) => (
-                  <span key={action.id}>
-                    {action.label}
-                    <kbd>{formatShortcut(action.shortcut)}</kbd>
-                  </span>
-                ))}
-              </div>
-            </div>
-            <div className="settings-row shortcuts-row">
-              <div>
-                <strong>Pointer-only actions</strong>
-                <span>Documented exceptions</span>
-              </div>
-              <div className="shortcut-list">
-                {mouseOnlyActions.map((action) => (
-                  <span key={action.id}>{action.label}</span>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-    </div>
-  )
-}
-
 function App(): React.JSX.Element {
   const fixtureId = getFixtureId()
   const fixture = fixtureId ? getFixture(fixtureId) : undefined
   const [activeDialog, setActiveDialog] = useState<AppDialog | null>(null)
-  const hydrated = useAppStore((state) => state.hydrated)
-  const loading = useAppStore((state) => state.loading)
-  const saving = useAppStore((state) => state.saving)
-  const error = useAppStore((state) => state.error)
   const snapshot = useAppStore((state) => state.snapshot)
   const hydrate = useAppStore((state) => state.hydrate)
   const saveWorkspace = useAppStore((state) => state.saveWorkspace)
   const resetWorkspace = useAppStore((state) => state.resetWorkspace)
-  const addProject = useAppStore((state) => state.addProject)
   const addTab = useAppStore((state) => state.addTab)
-  const importRemoteProfile = useAppStore((state) => state.importRemoteProfile)
-  const setActiveProject = useAppStore((state) => state.setActiveProject)
   const toggleProjectRail = useAppStore((state) => state.toggleProjectRail)
   const splitPane = useAppStore((state) => state.splitPane)
   const closeActivePane = useAppStore((state) => state.closeActivePane)
@@ -491,7 +160,6 @@ function App(): React.JSX.Element {
   const [liveStatus, setLiveStatus] = useState<MoshttyRemote['status'] | null>(null)
 
   const state = fixture?.state ?? snapshot?.state ?? null
-  const projects = state?.projects ?? EMPTY_PROJECTS
   const remotes = state?.remotes ?? EMPTY_REMOTES
   const activeProject = state ? getActiveProject(state) : null
   const activeTab = state ? getActiveTab(state) : null
@@ -509,34 +177,11 @@ function App(): React.JSX.Element {
   const dashboardMode = !activeTab || fixtureId?.startsWith('dashboard')
   const fixtureDialog = getFixtureDialog(fixtureId)
   const visibleDialog = fixtureDialog ?? activeDialog
-  const closeDialog = useCallback((): void => setActiveDialog(null), [])
-  const openDialog = useCallback((dialog: AppDialog): void => setActiveDialog(dialog), [])
-  const saveProjectDialog = (name: string): void => {
-    if (visibleDialog?.kind === 'project' && visibleDialog.mode === 'new') {
-      void addProject(name)
-    }
-    closeDialog()
-  }
-  const importProfileDialog = async (profileText: string, passphrase: string): Promise<boolean> => {
-    const result = parseMoshttyProfileText(profileText)
-    if (!result.ok) {
-      return false
-    }
-    if (result.profile.token) {
-      try {
-        if (passphrase.trim()) {
-          await window.moshtty.setPassphrase(passphrase)
-        }
-        await window.moshtty.storeToken(result.profile.tokenLabel, result.profile.token)
-      } catch (error) {
-        console.error('Failed to store remote token:', error)
-        return false
-      }
-    }
-    await importRemoteProfile(result.profile)
-    closeDialog()
-    return true
-  }
+  const closeDialog = useCallback((): void => setActiveDialog(null), [setActiveDialog])
+  const openDialog = useCallback(
+    (dialog: AppDialog): void => setActiveDialog(dialog),
+    [setActiveDialog]
+  )
 
   useEffect(() => {
     if (!fixture) {
@@ -652,247 +297,55 @@ function App(): React.JSX.Element {
   )
   useRegisteredShortcuts(shortcutHandlers)
 
-  const tabs = activeProject
-    ? (state?.tabs.filter((tab) => activeProject.tabIds.includes(tab.id)) ?? [])
-    : []
-
   return (
     <div
       className={`moshtty-app ${railCollapsed ? 'rail-collapsed' : ''} ${
         fixtureId === 'tab-bar-dragging' ? 'tab-dragging' : ''
       }`}
     >
-      {fixture ? <FixtureBanner fixtureId={fixture.id} fixtureLabel={fixture.label} /> : null}
-      <aside className="project-rail" aria-label="Projects">
-        <div className="brand">
-          <span className="brand-badge">BETA</span>
-          <button
-            className="icon-button"
-            type="button"
-            aria-label="Toggle project rail"
-            data-action-id="toggle-project-rail"
-            title={actionTitle('toggle-project-rail')}
-            onClick={() => void toggleProjectRail()}
-          >
-            <HamburgerIcon />
-          </button>
-          <button
-            className="icon-button selected"
-            type="button"
-            aria-label="Show projects"
-            data-action-id="show-projects"
-            title={actionTitle('show-projects')}
-            onClick={closeDialog}
-          >
-            <GridIcon />
-          </button>
-          <button
-            className="icon-button"
-            type="button"
-            aria-label="New project"
-            data-action-id="new-project"
-            title={actionTitle('new-project')}
-            onClick={() => openDialog({ kind: 'project', mode: 'new' })}
-          >
-            <PlusIcon />
-          </button>
-        </div>
+      {fixture && <FixtureBanner fixtureId={fixture.id} fixtureLabel={fixture.label} />}
 
-        <div className="rail-content">
-          <div className="rail-heading">
-            <span>Projects</span>
-            <button
-              className="icon-button"
-              type="button"
-              aria-label="Import remote"
-              data-action-id="import-remote"
-              title={actionTitle('import-remote')}
-              onClick={() => openDialog({ kind: 'import', mode: 'empty' })}
-            >
-              <FolderPlusIcon />
-            </button>
-          </div>
+      <TopBar liveStatus={liveStatus} remoteStatus={remoteStatus} remote={remote} />
 
-          <div className="project-list">
-            {projects.map((project) => (
-              <button
-                key={project.id}
-                type="button"
-                className={`project-item ${activeProject?.id === project.id ? 'active' : ''}`}
-                data-action-id="select-project"
-                onClick={() => void setActiveProject(project.id)}
-              >
-                <span className="project-chip">{projectDisplayInitial(project)}</span>
-                <span className="project-label">{project.name}</span>
-              </button>
-            ))}
-            {projects.length === 0 ? <p className="empty-copy">No projects</p> : null}
-          </div>
+      <div className="moshtty-body">
+        <Sidebar openDialog={openDialog} actionTitle={actionTitle} />
 
-          <nav className="rail-links" aria-label="Application">
-            <button
-              className="rail-link"
-              type="button"
-              data-action-id="open-settings"
-              title={actionTitle('open-settings')}
-              onClick={() => openDialog({ kind: 'settings' })}
-            >
-              <GearIcon />
-              Settings
-            </button>
-            <button
-              className="rail-link"
-              type="button"
-              data-action-id="open-help"
-              title={actionTitle('open-help')}
-              onClick={closeDialog}
-            >
-              <HelpIcon />
-              Help
-            </button>
-          </nav>
-        </div>
-      </aside>
+        <main className="workspace">
+          {dashboardMode ? (
+            <Dashboard actionTitle={actionTitle} />
+          ) : state ? (
+            <section className="terminal-workspace" aria-label="Terminal panes">
+              <SplitNode
+                state={state}
+                node={activeLayout?.root ?? null}
+                activePaneId={state?.activePaneId ?? null}
+                terminalMode={terminalMode}
+                onSplit={(axis): void => {
+                  splitPane(axis).catch(console.error)
+                }}
+                onClosePane={(): void => {
+                  closeActivePane().catch(console.error)
+                }}
+                transport={transport}
+                connectionManager={connectionManager}
+              />
+            </section>
+          ) : (
+            <section className="terminal-workspace" aria-label="Terminal panes">
+              <div className="empty-pane">
+                <span>Loading workspace</span>
+              </div>
+            </section>
+          )}
+        </main>
+      </div>
 
-      <main className="workspace">
-        <header className="top-bar">
-          <div className="tabs" role="tablist" aria-label="Tabs">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                className={`tab ${tab.id === activeTab?.id ? 'active' : ''}`}
-                role="tab"
-                aria-selected={tab.id === activeTab?.id}
-              >
-                <span className="tab-title">{tab.title}</span>
-              </button>
-            ))}
-          </div>
-          <div className="top-actions">
-            <button
-              className="button subtle"
-              type="button"
-              data-action-id="new-tab"
-              title={actionTitle('new-tab')}
-              onClick={() => void addTab('Shell')}
-            >
-              <EditIcon />
-              New tab
-            </button>
-            <span className={`connection-status ${liveStatus ?? remote?.status ?? 'offline'}`}>
-              {remoteStatus}
-            </span>
-          </div>
-        </header>
-
-        {dashboardMode ? (
-          <section className="dashboard" aria-labelledby="dashboard-title">
-            <div className="search-row">
-              <SearchIcon />
-              <span>Search tabs</span>
-            </div>
-            <div className="dashboard-head">
-              <h1 id="dashboard-title">Today</h1>
-              <button
-                className="button subtle"
-                type="button"
-                data-action-id="new-tab"
-                title={actionTitle('new-tab')}
-                onClick={() => void addTab('Shell')}
-              >
-                <EditIcon />
-                New tab
-              </button>
-            </div>
-            <div className="recent-row">
-              <strong>{activeTab?.title ?? 'No tab'}</strong>
-              <span>{activeProject?.name ?? 'Create a project to begin'}</span>
-            </div>
-          </section>
-        ) : state ? (
-          <section className="terminal-workspace" aria-label="Terminal panes">
-            <SplitNode
-              state={state}
-              node={activeLayout?.root ?? null}
-              activePaneId={state?.activePaneId ?? null}
-              terminalMode={terminalMode}
-              onSplit={(axis) => void splitPane(axis)}
-              onClosePane={() => void closeActivePane()}
-              transport={transport}
-              connectionManager={connectionManager}
-            />
-          </section>
-        ) : (
-          <section className="terminal-workspace" aria-label="Terminal panes">
-            <div className="empty-pane">
-              <span>Loading workspace</span>
-            </div>
-          </section>
-        )}
-
-        {!fixture && !loading ? (
-          <section className="state-panel" aria-label="State controls">
-            <div>
-              <strong>State</strong>
-              <span>{snapshot?.source ?? 'not loaded'}</span>
-            </div>
-            {error ? <p>{error}</p> : null}
-            <div className="state-actions">
-              <button
-                className="button secondary"
-                type="button"
-                disabled={!hydrated || saving}
-                data-action-id="save-state"
-                title={actionTitle('save-state')}
-                onClick={() => void saveWorkspace()}
-              >
-                {saving ? 'Saving' : 'Save'}
-              </button>
-              <button
-                className="button secondary"
-                type="button"
-                disabled={!hydrated || saving}
-                data-action-id="reset-state"
-                title={actionTitle('reset-state')}
-                onClick={() => void resetWorkspace()}
-              >
-                Reset
-              </button>
-              <button
-                className="button secondary"
-                type="button"
-                disabled={!hydrated || saving}
-                data-action-id="add-project"
-                title={actionTitle('add-project')}
-                onClick={() => openDialog({ kind: 'project', mode: 'new' })}
-              >
-                Add project
-              </button>
-            </div>
-          </section>
-        ) : null}
-
-        {visibleDialog?.kind === 'import' ? (
-          <ImportDialog
-            mode={visibleDialog.mode}
-            secretMode={snapshot?.secretInfo?.mode ?? null}
-            onClose={closeDialog}
-            onImport={importProfileDialog}
-          />
-        ) : null}
-        {visibleDialog?.kind === 'project' ? (
-          <ProjectDialog
-            mode={visibleDialog.mode}
-            projectName={activeProject?.name ?? 'Moshtty'}
-            onClose={closeDialog}
-            onSave={saveProjectDialog}
-          />
-        ) : null}
-        {visibleDialog?.kind === 'settings' ? (
-          <SettingsDialog terminalMode={terminalMode} onClose={closeDialog} />
-        ) : null}
-      </main>
+      <Dialogs
+        visibleDialog={visibleDialog}
+        closeDialog={closeDialog}
+        actionTitle={actionTitle}
+        terminalMode={terminalMode}
+      />
     </div>
   )
 }
