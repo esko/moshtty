@@ -9,7 +9,10 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/quic-go/quic-go/http3"
 	"github.com/quic-go/webtransport-go"
@@ -39,7 +42,8 @@ type Server struct {
 	closed bool
 
 	sessionMu sync.Mutex
-	session   *webtransport.Session
+	session   *sessionState
+	nextAppID atomic.Uint64
 }
 
 func New(opts Options) (*Server, error) {
@@ -140,22 +144,43 @@ func (s *Server) handleWebTransport(w http.ResponseWriter, r *http.Request) {
 
 type sessionState struct {
 	session *webtransport.Session
+	encoder *json.Encoder
+	writeMu sync.Mutex
+	pending map[string]chan appResponse
+	mu      sync.Mutex
+}
+
+type controlMessage struct {
+	JSONRPC string               `json:"jsonrpc"`
+	ID      json.RawMessage      `json:"id,omitempty"`
+	Method  string               `json:"method,omitempty"`
+	Params  json.RawMessage      `json:"params,omitempty"`
+	Result  json.RawMessage      `json:"result,omitempty"`
+	Error   *jsonrpc.ErrorObject `json:"error,omitempty"`
+}
+
+type appResponse struct {
+	result json.RawMessage
+	err    error
 }
 
 func (s *Server) serveSession(session *webtransport.Session) {
+	state := &sessionState{
+		session: session,
+		pending: make(map[string]chan appResponse),
+	}
 	s.sessionMu.Lock()
-	s.session = session
+	s.session = state
 	s.sessionMu.Unlock()
 	defer func() {
 		s.sessionMu.Lock()
-		if s.session == session {
+		if s.session == state {
 			s.session = nil
 		}
 		s.sessionMu.Unlock()
+		state.closePending(errors.New("app control session closed"))
 		_ = session.CloseWithError(0, "")
 	}()
-
-	state := &sessionState{session: session}
 
 	ctx := context.Background()
 	controlStream, err := session.AcceptStream(ctx)
@@ -170,27 +195,37 @@ func (s *Server) serveSession(session *webtransport.Session) {
 func (s *Server) serveControl(state *sessionState, stream io.ReadWriteCloser) {
 	defer func() { _ = stream.Close() }()
 	decoder := json.NewDecoder(stream)
-	encoder := json.NewEncoder(stream)
+	state.encoder = json.NewEncoder(stream)
 
 	for {
-		var req jsonrpc.Request
-		if err := decoder.Decode(&req); err != nil {
+		var msg controlMessage
+		if err := decoder.Decode(&msg); err != nil {
 			if errors.Is(err, io.EOF) {
 				return
 			}
-			resp := jsonrpc.NewErrorResponse(nil, jsonrpc.CodeParseError, err.Error(), nil)
-			_ = encoder.Encode(resp)
+			_ = state.writeJSON(jsonrpc.NewErrorResponse(nil, jsonrpc.CodeParseError, err.Error(), nil))
 			return
 		}
 
+		if msg.Method == "" {
+			state.resolveResponse(msg)
+			continue
+		}
+
+		req := jsonrpc.Request{
+			JSONRPC: msg.JSONRPC,
+			ID:      msg.ID,
+			Method:  msg.Method,
+			Params:  msg.Params,
+		}
 		result, err := s.Dispatch(req)
 		if err != nil {
 			resp := jsonrpc.NewErrorResponse(req.ID, jsonrpc.ErrorCode(err), err.Error(), nil)
-			_ = encoder.Encode(resp)
+			_ = state.writeJSON(resp)
 			continue
 		}
 		resp := jsonrpc.NewResultResponse(req.ID, result)
-		_ = encoder.Encode(resp)
+		_ = state.writeJSON(resp)
 	}
 }
 
@@ -210,6 +245,8 @@ func (s *Server) dispatch(req jsonrpc.Request) (any, error) {
 		}, nil
 	case "pane.list":
 		return map[string]any{"panes": s.panes.List()}, nil
+	case "app.pane.split":
+		return s.requestApp(context.Background(), req.Method, req.Params)
 	case "pane.create":
 		var params struct {
 			Shell string `json:"shell"`
@@ -277,10 +314,99 @@ func (s *Server) readDatagrams(state *sessionState) {
 
 func (s *Server) sendDatagram(data []byte) error {
 	s.sessionMu.Lock()
-	session := s.session
+	state := s.session
 	s.sessionMu.Unlock()
-	if session == nil {
+	if state == nil {
 		return errors.New("no active webtransport session")
 	}
-	return session.SendDatagram(data)
+	return state.session.SendDatagram(data)
+}
+
+func (s *Server) requestApp(ctx context.Context, method string, params json.RawMessage) (any, error) {
+	s.sessionMu.Lock()
+	state := s.session
+	s.sessionMu.Unlock()
+	if state == nil {
+		return nil, errors.New("not connected to Moshtty app")
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	id := fmt.Sprintf("app-%d", s.nextAppID.Add(1))
+	ch := make(chan appResponse, 1)
+	state.mu.Lock()
+	state.pending[id] = ch
+	state.mu.Unlock()
+
+	req := jsonrpc.Request{
+		JSONRPC: jsonrpc.Version,
+		ID:      json.RawMessage(strconv.Quote(id)),
+		Method:  method,
+		Params:  params,
+	}
+	if err := state.writeJSON(req); err != nil {
+		state.mu.Lock()
+		delete(state.pending, id)
+		state.mu.Unlock()
+		return nil, err
+	}
+
+	select {
+	case <-ctx.Done():
+		state.mu.Lock()
+		delete(state.pending, id)
+		state.mu.Unlock()
+		return nil, ctx.Err()
+	case response := <-ch:
+		if response.err != nil {
+			return nil, response.err
+		}
+		if len(response.result) == 0 {
+			return map[string]any{"ok": true}, nil
+		}
+		var result any
+		if err := json.Unmarshal(response.result, &result); err != nil {
+			return nil, fmt.Errorf("decode app response: %w", err)
+		}
+		return result, nil
+	}
+}
+
+func (state *sessionState) writeJSON(value any) error {
+	state.writeMu.Lock()
+	defer state.writeMu.Unlock()
+	if state.encoder == nil {
+		return errors.New("app control stream is not connected")
+	}
+	return state.encoder.Encode(value)
+}
+
+func (state *sessionState) resolveResponse(msg controlMessage) {
+	var id string
+	if err := json.Unmarshal(msg.ID, &id); err != nil {
+		id = string(msg.ID)
+	}
+	state.mu.Lock()
+	ch := state.pending[id]
+	delete(state.pending, id)
+	state.mu.Unlock()
+	if ch == nil {
+		return
+	}
+	if msg.Error != nil {
+		ch <- appResponse{err: fmt.Errorf("app error: %s", msg.Error.Message)}
+		return
+	}
+	ch <- appResponse{result: msg.Result}
+}
+
+func (state *sessionState) closePending(err error) {
+	state.mu.Lock()
+	pending := state.pending
+	state.pending = make(map[string]chan appResponse)
+	state.mu.Unlock()
+	for _, ch := range pending {
+		ch <- appResponse{err: err}
+	}
 }

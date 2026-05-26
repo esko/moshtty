@@ -239,12 +239,12 @@ Agent brief:
 
 ## M7 Real Remote Acceptance
 
-Status: In progress
+Status: Ready for review
 
 Objective:
 
 - Prove the real first-use path against a macOS remote.
-- 2026-05-26 update: reload reattach now preserves the same remote pane and renders new shell output after reconnect; companion restart now marks stale panes lost and can restart them without deleting layout. Split/app-layout still needs the remaining acceptance pass.
+- 2026-05-26 update: reload reattach now preserves the same remote pane and renders new shell output after reconnect; companion restart now marks stale panes lost and can restart them without deleting layout; `moshttyctl pane split` now drives the active Electron layout through bidirectional app control.
 
 Deliverables:
 

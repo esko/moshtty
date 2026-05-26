@@ -110,6 +110,18 @@ func TestDispatchUnknownMethod(t *testing.T) {
 	}
 }
 
+func TestDispatchAppPaneSplitRequiresActiveApp(t *testing.T) {
+	srv := newTestServer(t)
+	_, err := srv.dispatch(jsonrpc.Request{
+		JSONRPC: jsonrpc.Version,
+		Method:  "app.pane.split",
+		Params:  json.RawMessage(`{"axis":"row"}`),
+	})
+	if err == nil || err.Error() != "not connected to Moshtty app" {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "current.pem")

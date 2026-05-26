@@ -64,7 +64,9 @@ func main() {
 		switch sub {
 		case "close":
 			cmdErr = cmdPaneClose(ctx, client, cmdArgs[1:])
-		case "split", "focus", "rename":
+		case "split":
+			cmdErr = cmdPaneSplit(ctx, client, cmdArgs[1:])
+		case "focus", "rename":
 			cmdErr = errAppRequired(sub)
 		default:
 			fmt.Fprintf(os.Stderr, "moshttyctl pane: unknown subcommand %q\n", sub)
@@ -147,6 +149,30 @@ func cmdPaneClose(ctx context.Context, client *ctlsocket.Client, args []string) 
 	}
 
 	fmt.Printf("Pane %d closed.\n", id)
+	return nil
+}
+
+func cmdPaneSplit(ctx context.Context, client *ctlsocket.Client, args []string) error {
+	axis := "row"
+	if len(args) > 0 {
+		switch args[0] {
+		case "right", "--right", "row", "--row":
+			axis = "row"
+		case "down", "--down", "column", "--column":
+			axis = "column"
+		default:
+			return fmt.Errorf("pane split argument must be right or down")
+		}
+	}
+
+	params := struct {
+		Axis string `json:"axis"`
+	}{Axis: axis}
+	if _, err := client.Call(ctx, "app.pane.split", params); err != nil {
+		return err
+	}
+
+	fmt.Println("Pane split.")
 	return nil
 }
 

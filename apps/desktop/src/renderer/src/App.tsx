@@ -581,6 +581,16 @@ function App(): React.JSX.Element {
 
         const manager = new MoshConnectionManager(tx)
         currentManager = manager
+        tx.setRequestHandler(async (request) => {
+          if (request.method === 'app.pane.split') {
+            const params = request.params as { axis?: SplitAxis } | undefined
+            window.setTimeout(() => {
+              void splitPane(params?.axis === 'column' ? 'column' : 'row')
+            }, 0)
+            return { ok: true }
+          }
+          throw new Error(`unsupported app request: ${request.method}`)
+        })
 
         setTransport(tx)
         setConnectionManager(manager)
@@ -606,7 +616,7 @@ function App(): React.JSX.Element {
         void currentTransport.close()
       }
     }
-  }, [remote, fixture])
+  }, [remote, fixture, splitPane])
 
   const shortcutHandlers = useMemo<AppActionHandlerMap>(
     () => ({
