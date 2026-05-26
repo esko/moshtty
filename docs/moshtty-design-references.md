@@ -13,12 +13,14 @@ Related docs:
 
 On-disk paths (ChromeOS Downloads; stable for this milestone):
 
-| ID             | Path                                                                 |
-| -------------- | -------------------------------------------------------------------- |
-| `ref-18.46.04` | `/mnt/chromeos/MyFiles/Downloads/Screenshot 2026-05-24 18.46.04.png` |
-| `ref-18.46.17` | `/mnt/chromeos/MyFiles/Downloads/Screenshot 2026-05-24 18.46.17.png` |
-| `ref-18.46.25` | `/mnt/chromeos/MyFiles/Downloads/Screenshot 2026-05-24 18.46.25.png` |
-| `ref-18.46.36` | `/mnt/chromeos/MyFiles/Downloads/Screenshot 2026-05-24 18.46.36.png` |
+| ID                  | Path                                                                                      |
+| ------------------- | ----------------------------------------------------------------------------------------- |
+| `ref-18.46.04`      | `/mnt/chromeos/MyFiles/Downloads/Screenshot 2026-05-24 18.46.04.png`                      |
+| `ref-18.46.17`      | `/mnt/chromeos/MyFiles/Downloads/Screenshot 2026-05-24 18.46.17.png`                      |
+| `ref-18.46.25`      | `/mnt/chromeos/MyFiles/Downloads/Screenshot 2026-05-24 18.46.25.png`                      |
+| `ref-18.46.36`      | `/mnt/chromeos/MyFiles/Downloads/Screenshot 2026-05-24 18.46.36.png`                      |
+| `ref-warp-dark`     | `/mnt/chromeos/MyFiles/Downloads/b6015136900ed1449b5be369cb18ec7255754d40-4800x3000.webp` |
+| `ref-warp-terminal` | `/mnt/chromeos/MyFiles/Downloads/Screenshot 2026-05-27 00.08.43.png`                      |
 
 ### Reference → surfaces (fill after viewing)
 
@@ -84,3 +86,16 @@ side-by-side artifacts exist under `docs/visual-qa/`.
 ## Adding surfaces later
 
 Any new UI surface introduced in a future milestone must be added to **Required surface → reference mapping** before merge. If no reference screenshot applies, set Reference ID(s) to `none` and add a new reference row or external ref in the PRD.
+
+## M8 UI Refresh Screenshots
+
+The visual ground truth for M8 is captured in the following screenshots located in `docs/visual-qa/m8/`:
+
+- `m8-topbar.png` — Unified top bar containing tabs, toggle button, and WindowControls.
+- `m8-sidebar-expanded.png` — Projects-only sidebar expanded.
+- `m8-sidebar-collapsed.png` — Projects-only sidebar collapsed (full workspace).
+- `m8-dashboard-dark.png` — Neutral dark dashboard landing page.
+- `m8-terminal-dark.png` — Neutral dark active terminal window.
+- `m8-split-panes.png` — Two-pane terminal split layout.
+- `m8-settings-dialog.png` — Redesigned terminal settings dialog.
+- `m8-frameless-window.png` — Frameless Electron app shell.

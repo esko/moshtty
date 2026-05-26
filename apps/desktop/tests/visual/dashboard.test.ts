@@ -1,10 +1,10 @@
 import { test, expect } from './playwright.setup'
 
 test.describe('Dashboard', () => {
-  test('renders the brand and project rail', async ({ page }) => {
-    await expect(page.locator('.project-rail')).toBeVisible()
+  test('renders the brand and sidebar', async ({ page }) => {
+    await expect(page.locator('.sidebar')).toBeVisible()
     await expect(page.locator('.brand-badge')).toContainText('BETA')
-    await expect(page.locator('.rail-heading')).toContainText('Projects')
+    await expect(page.locator('.sidebar-title')).toContainText('Projects')
   })
 
   for (const fixtureId of [

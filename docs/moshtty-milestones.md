@@ -259,3 +259,33 @@ Acceptance:
 - The ten acceptance criteria in `docs/moshtty-prd.md` pass.
 - Failures and gaps are recorded in PRD status notes.
 - Any remaining risks have explicit follow-up tasks.
+
+## M8 UI Refresh
+
+Status: Ready for review
+
+Objective:
+
+- Redesign the Moshtty app shell to achieve a minimal, dark gray/white aesthetic with gray borders, a unified top bar (containing tabs, window controls, and sidebar toggle), and a collapsible project-only sidebar.
+- Shrink the monolithic `App.tsx` down to under 200 lines by extracting components.
+
+Deliverables:
+
+- Dark/light custom color property updates in `tokens.css` and `tokens.ts`.
+- Electron configuration for frameless window.
+- Custom WindowControls component containing minimize, maximize, close buttons.
+- Unified TopBar component containing tabs, toggle, status indicator, and WindowControls.
+- Projects-only Sidebar component with toggle animation support.
+- Centralized Dialogs component.
+- Extracted Dashboard component.
+- Modularized App.tsx under 200 lines.
+
+Acceptance:
+
+- Visual regression screenshots regenerated and verified.
+- Axe-core accessibility checks updated and fully passing.
+- Root `pnpm verify:full` completes successfully.
+
+Agent brief:
+
+- `docs/agents/2026-05-27-8-moshtty-ui-refresh.md`

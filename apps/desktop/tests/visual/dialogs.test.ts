@@ -1,11 +1,6 @@
 import { test, expect } from './playwright.setup'
 
 test.describe('Dialogs', () => {
-  test('state panel exposes workspace actions', async ({ page }) => {
-    await expect(page.locator('.state-panel')).toBeVisible()
-    await expect(page.locator('.state-actions button')).toHaveCount(3)
-  })
-
   for (const fixtureId of [
     'dialog-import-empty',
     'dialog-import-valid',

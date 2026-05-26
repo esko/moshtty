@@ -7,8 +7,9 @@ test.describe('Panes', () => {
     await expect(page.locator('.terminal-pane')).toBeVisible()
   })
 
-  test('tab bar shows the active tab', async ({ page }) => {
-    await expect(page.locator('.tab.active')).toBeVisible()
+  test('tab bar shows the active tab', async ({ loadFixture, page }) => {
+    await loadFixture('active-tab')
+    await expect(page.locator('.tab-wrapper.active')).toBeVisible()
   })
 
   for (const fixtureId of ['split-2-row', 'split-2-column', 'split-3-nested', 'pane-lost']) {
