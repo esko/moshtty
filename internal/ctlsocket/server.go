@@ -49,14 +49,14 @@ func (s *Server) Listen(ctx context.Context) error {
 
 	s.mu.Lock()
 	if s.closed {
-		l.Close()
+		_ = l.Close()
 		s.mu.Unlock()
 		return net.ErrClosed
 	}
 	s.listener = l
 	s.mu.Unlock()
 
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	// Watch for context cancellation
 	doneCh := make(chan struct{})
@@ -64,7 +64,7 @@ func (s *Server) Listen(ctx context.Context) error {
 	go func() {
 		select {
 		case <-ctx.Done():
-			s.Close()
+			_ = s.Close()
 		case <-doneCh:
 		}
 	}()
@@ -101,7 +101,7 @@ func (s *Server) Close() error {
 }
 
 func (s *Server) serveConn(conn net.Conn) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	decoder := json.NewDecoder(conn)
 	encoder := json.NewEncoder(conn)
 

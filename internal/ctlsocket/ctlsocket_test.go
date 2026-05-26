@@ -18,7 +18,7 @@ func TestServerStaleSocketCleanup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	socketPath := filepath.Join(tmpDir, "stale.sock")
 
@@ -60,7 +60,7 @@ func TestHappyPathDialAndCall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	socketPath := filepath.Join(tmpDir, "test.sock")
 
@@ -90,7 +90,7 @@ func TestHappyPathDialAndCall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to dial: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	// Call 1: Ping (success)
 	res, err := client.Call(ctx, "ping", nil)
@@ -140,7 +140,7 @@ func TestConcurrentCalls(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	socketPath := filepath.Join(tmpDir, "concurrent.sock")
 
@@ -167,7 +167,7 @@ func TestConcurrentCalls(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to dial: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	var wg sync.WaitGroup
 	const numGoroutines = 10

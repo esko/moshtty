@@ -7,8 +7,8 @@ import (
 )
 
 var (
-	ErrMissingToken = errors.New("missing auth token")
-	ErrInvalidToken = errors.New("invalid auth token")
+	ErrMissingToken  = errors.New("missing auth token")
+	ErrInvalidToken  = errors.New("invalid auth token")
 	ErrInvalidOrigin = errors.New("invalid origin")
 )
 

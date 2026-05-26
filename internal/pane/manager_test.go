@@ -98,13 +98,17 @@ func TestListPanes(t *testing.T) {
 		t.Fatalf("missing expected flow IDs in list: got %v", panes)
 	}
 
-	manager.Close(info1.FlowID)
+	if err := manager.Close(info1.FlowID); err != nil {
+		t.Fatalf("close pane 1: %v", err)
+	}
 	panes = manager.List()
 	if len(panes) != 1 {
 		t.Fatalf("expected 1 pane after close, got %d", len(panes))
 	}
 
-	manager.Close(info2.FlowID)
+	if err := manager.Close(info2.FlowID); err != nil {
+		t.Fatalf("close pane 2: %v", err)
+	}
 	panes = manager.List()
 	if len(panes) != 0 {
 		t.Fatalf("expected 0 panes after all closed, got %d", len(panes))

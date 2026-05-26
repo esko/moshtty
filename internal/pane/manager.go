@@ -301,7 +301,7 @@ type attachment struct {
 func (a *attachment) close() {
 	a.once.Do(func() {
 		a.bridge.close()
-		a.rw.Close()
+		_ = a.rw.Close()
 		select {
 		case <-a.done:
 		case <-time.After(shutdownTimeout):

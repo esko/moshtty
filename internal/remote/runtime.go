@@ -156,7 +156,7 @@ func CheckHealth(ctx context.Context, endpoint string) (HealthStatus, error) {
 	if err != nil {
 		return HealthStatus{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return HealthStatus{}, fmt.Errorf("health check returned %s", resp.Status)

@@ -14,8 +14,6 @@ import (
 	"github.com/moshtty/moshtty/internal/ctlsocket"
 )
 
-type cmdFunc func(ctx context.Context, client *ctlsocket.Client, args []string) error
-
 func main() {
 	defaultSocket := filepath.Join(config.DefaultPaths().ApplicationSupportDir(), "moshtty.sock")
 
@@ -48,7 +46,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "moshttyctl: %v\n", err)
 		os.Exit(1)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	cmd := args[0]
 	cmdArgs := args[1:]

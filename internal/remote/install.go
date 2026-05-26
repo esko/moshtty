@@ -13,9 +13,9 @@ import (
 )
 
 type InstallOptions struct {
-	Paths       config.Paths
-	BinaryPath  string
-	ForcePlist  bool
+	Paths      config.Paths
+	BinaryPath string
+	ForcePlist bool
 }
 
 type InstallResult struct {
@@ -57,11 +57,11 @@ func Install(opts InstallOptions) (InstallResult, error) {
 	}
 
 	plist, err := RenderLaunchAgent(LaunchAgentInput{
-		Label:       config.LaunchAgentLabel,
-		BinaryPath:  opts.BinaryPath,
-		WorkingDir:  paths.ApplicationSupportDir(),
-		StdOutPath:  paths.StdOutLogPath(),
-		StdErrPath:  paths.StdErrLogPath(),
+		Label:      config.LaunchAgentLabel,
+		BinaryPath: opts.BinaryPath,
+		WorkingDir: paths.ApplicationSupportDir(),
+		StdOutPath: paths.StdOutLogPath(),
+		StdErrPath: paths.StdErrLogPath(),
 	})
 	if err != nil {
 		return InstallResult{}, err

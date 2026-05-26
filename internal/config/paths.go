@@ -7,9 +7,9 @@ import (
 )
 
 const (
-	AppName          = "Moshtty"
+	AppName           = "Moshtty"
 	DefaultUserBinDir = ".local/bin"
-	LaunchAgentLabel = "com.moshtty.remote"
+	LaunchAgentLabel  = "com.moshtty.remote"
 )
 
 // Paths resolves Moshtty user-local directories. Home overrides the user home

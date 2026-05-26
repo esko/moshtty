@@ -36,16 +36,16 @@ type CertMetadata struct {
 }
 
 type Config struct {
-	Version         int             `json:"version"`
-	RemoteID        string          `json:"remoteId"`
-	Label           string          `json:"label"`
-	BindAddress     string          `json:"bindAddress"`
-	Port            int             `json:"port"`
-	HealthAddress   string          `json:"healthAddress"`
-	HealthPort      int             `json:"healthPort"`
-	AllowedOrigins  []string        `json:"allowedOrigins"`
-	Token           TokenMetadata   `json:"token"`
-	Cert            CertMetadata    `json:"cert"`
+	Version        int           `json:"version"`
+	RemoteID       string        `json:"remoteId"`
+	Label          string        `json:"label"`
+	BindAddress    string        `json:"bindAddress"`
+	Port           int           `json:"port"`
+	HealthAddress  string        `json:"healthAddress"`
+	HealthPort     int           `json:"healthPort"`
+	AllowedOrigins []string      `json:"allowedOrigins"`
+	Token          TokenMetadata `json:"token"`
+	Cert           CertMetadata  `json:"cert"`
 }
 
 func DefaultConfig(remoteID string) Config {

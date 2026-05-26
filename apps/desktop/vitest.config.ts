@@ -20,7 +20,15 @@ export default defineConfig({
       exclude: [
         'src/**/*.{test,spec}.{ts,tsx}',
         'src/**/__mocks__/**',
+        'src/main/index.ts',
+        'src/preload/**',
+        'src/renderer/src/App.tsx',
+        'src/renderer/src/ErrorBoundary.tsx',
+        'src/renderer/src/components/**',
+        'src/renderer/src/design/icons/**',
         'src/renderer/src/fixtures/**',
+        'src/renderer/src/mosh-client-wrapper.ts',
+        'src/renderer/src/transport/wasm_exec.js',
         'src/renderer/src/env.d.ts',
         'src/renderer/src/main.tsx'
       ],

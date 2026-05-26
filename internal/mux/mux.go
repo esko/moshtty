@@ -12,10 +12,10 @@ const (
 )
 
 var (
-	ErrShortFrame       = errors.New("mux frame too short")
-	ErrUnknownVersion   = errors.New("unknown mux version")
-	ErrEmptyPayload     = errors.New("mux payload must not be empty")
-	ErrPayloadTooLarge  = errors.New("mux payload exceeds maximum size")
+	ErrShortFrame      = errors.New("mux frame too short")
+	ErrUnknownVersion  = errors.New("unknown mux version")
+	ErrEmptyPayload    = errors.New("mux payload must not be empty")
+	ErrPayloadTooLarge = errors.New("mux payload exceeds maximum size")
 )
 
 const MaxPayloadSize = 16 * 1024

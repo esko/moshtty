@@ -94,7 +94,7 @@ func (s *Server) ListenAndServe(ctx context.Context, bind string) error {
 
 	select {
 	case <-ctx.Done():
-		s.Close()
+		_ = s.Close()
 		return ctx.Err()
 	case err := <-errCh:
 		return err
@@ -140,7 +140,6 @@ func (s *Server) handleWebTransport(w http.ResponseWriter, r *http.Request) {
 
 type sessionState struct {
 	session *webtransport.Session
-	sendMu  sync.Mutex
 }
 
 func (s *Server) serveSession(session *webtransport.Session) {
@@ -153,7 +152,7 @@ func (s *Server) serveSession(session *webtransport.Session) {
 			s.session = nil
 		}
 		s.sessionMu.Unlock()
-		session.CloseWithError(0, "")
+		_ = session.CloseWithError(0, "")
 	}()
 
 	state := &sessionState{session: session}
@@ -169,7 +168,7 @@ func (s *Server) serveSession(session *webtransport.Session) {
 }
 
 func (s *Server) serveControl(state *sessionState, stream io.ReadWriteCloser) {
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 	decoder := json.NewDecoder(stream)
 	encoder := json.NewEncoder(stream)
 

@@ -10,10 +10,10 @@ import (
 
 func TestValidateToken(t *testing.T) {
 	tests := []struct {
-		name    string
+		name     string
 		provided string
 		expected string
-		wantErr error
+		wantErr  error
 	}{
 		{name: "valid", provided: "secret", expected: "secret"},
 		{name: "missing", provided: "", expected: "secret", wantErr: auth.ErrMissingToken},

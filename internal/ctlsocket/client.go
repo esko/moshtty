@@ -75,9 +75,9 @@ func (c *Client) Call(ctx context.Context, method string, params any) (json.RawM
 	}
 
 	type clientResponse struct {
-		JSONRPC string                `json:"jsonrpc"`
-		ID      json.RawMessage       `json:"id,omitempty"`
-		Result  json.RawMessage       `json:"result,omitempty"`
+		JSONRPC string               `json:"jsonrpc"`
+		ID      json.RawMessage      `json:"id,omitempty"`
+		Result  json.RawMessage      `json:"result,omitempty"`
 		Error   *jsonrpc.ErrorObject `json:"error,omitempty"`
 	}
 

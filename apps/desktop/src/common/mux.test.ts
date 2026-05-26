@@ -15,6 +15,28 @@ describe('mux framing', () => {
 
   it('rejects unknown version', () => {
     expect(() => decodeMuxFrame(new Uint8Array([2, 0, 0, 0, 1, 0x01]))).toThrow(MuxError)
+    expect(() =>
+      encodeMuxFrame({ version: 2, flowId: 1, payload: new Uint8Array([0x01]) })
+    ).toThrow(MuxError)
+  })
+
+  it('rejects empty and oversized payloads', () => {
+    expect(() => encodeMuxFrame({ version: 1, flowId: 1, payload: new Uint8Array() })).toThrow(
+      MuxError
+    )
+    expect(() =>
+      encodeMuxFrame({ version: 1, flowId: 1, payload: new Uint8Array(16 * 1024 + 1) })
+    ).toThrow(MuxError)
+
+    expect(() => decodeMuxFrame(new Uint8Array([1, 0, 0, 0, 1]))).toThrow(MuxError)
+    expect(() =>
+      decodeMuxFrame(new Uint8Array([1, 0, 0, 0, 1, ...new Uint8Array(16 * 1024 + 1)]))
+    ).toThrow(MuxError)
+  })
+
+  it('rejects malformed frames and cert hashes', () => {
+    expect(() => decodeMuxFrame(new Uint8Array([1, 0, 0, 0]))).toThrow(MuxError)
+    expect(() => decodeCertHash(btoa('too-short'))).toThrow(MuxError)
   })
 
   it('decodes cert hash to 32 bytes', () => {
