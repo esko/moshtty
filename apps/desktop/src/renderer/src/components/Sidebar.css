@@ -111,7 +111,7 @@
 .empty-copy {
   font-family: var(--font-family-ui);
   font-size: var(--font-size-small, 12px);
-  color: var(--color-text-subtle);
+  color: var(--color-text-muted);
   padding: var(--space-sm, 8px) 0;
   text-align: center;
 }

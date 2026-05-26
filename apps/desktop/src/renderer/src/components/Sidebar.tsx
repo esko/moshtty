@@ -5,17 +5,17 @@ import { projectDisplayInitial } from '../../../common/state'
 import './Sidebar.css'
 
 interface SidebarProps {
+  state: import('../../../common/state').MoshttyState | null
   openDialog: (dialog: import('../dialogs').AppDialog) => void
   actionTitle: (actionId: import('../keymap').AppActionId) => string
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ openDialog, actionTitle }) => {
-  const snapshot = useAppStore((state) => state.snapshot)
+export const Sidebar: React.FC<SidebarProps> = ({ state, openDialog, actionTitle }) => {
   const setActiveProject = useAppStore((state) => state.setActiveProject)
 
-  const projects = snapshot?.state.projects ?? []
-  const activeProjectId = snapshot?.state.activeProjectId
-  const railCollapsed = snapshot?.state.settings?.projectRailCollapsed ?? false
+  const projects = state?.projects ?? []
+  const activeProjectId = state?.activeProjectId
+  const railCollapsed = state?.settings?.projectRailCollapsed ?? false
 
   if (railCollapsed) {
     return null

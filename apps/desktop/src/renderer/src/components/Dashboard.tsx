@@ -5,14 +5,13 @@ import { getActiveProject, getActiveTab } from '../../../common/state'
 import './Dashboard.css'
 
 interface DashboardProps {
+  state: import('../../../common/state').MoshttyState | null
   actionTitle: (actionId: import('../keymap').AppActionId) => string
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ actionTitle }) => {
-  const snapshot = useAppStore((state) => state.snapshot)
+export const Dashboard: React.FC<DashboardProps> = ({ state, actionTitle }) => {
   const addTab = useAppStore((state) => state.addTab)
 
-  const state = snapshot?.state
   const activeTab = state ? getActiveTab(state) : null
   const activeProject = state ? getActiveProject(state) : null
 

@@ -7,6 +7,8 @@ import type { AppDialog } from '../dialogs'
 import './Dialogs.css'
 
 interface DialogsProps {
+  state: import('../../../common/state').MoshttyState | null
+  secretMode: string | null
   visibleDialog: AppDialog | null
   closeDialog: () => void
   actionTitle: (actionId: import('../keymap').AppActionId) => string
@@ -14,17 +16,18 @@ interface DialogsProps {
 }
 
 export const Dialogs: React.FC<DialogsProps> = ({
+  state,
+  secretMode,
   visibleDialog,
   closeDialog,
   actionTitle,
   terminalMode
 }) => {
-  const snapshot = useAppStore((state) => state.snapshot)
   const addProject = useAppStore((state) => state.addProject)
   const importRemoteProfile = useAppStore((state) => state.importRemoteProfile)
 
-  const activeProjectId = snapshot?.state.activeProjectId
-  const activeProject = snapshot?.state.projects.find((p) => p.id === activeProjectId)
+  const activeProjectId = state?.activeProjectId
+  const activeProject = state?.projects.find((p) => p.id === activeProjectId)
 
   if (!visibleDialog) {
     return null
@@ -63,7 +66,7 @@ export const Dialogs: React.FC<DialogsProps> = ({
       return (
         <ImportDialog
           mode={visibleDialog.mode}
-          secretMode={snapshot?.secretInfo?.mode ?? null}
+          secretMode={secretMode}
           onClose={closeDialog}
           onImport={importProfileDialog}
           actionTitle={actionTitle}

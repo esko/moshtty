@@ -45,7 +45,7 @@
   letter-spacing: 0.05em;
   padding: var(--space-2xs, 2px) var(--space-xs, 4px);
   background-color: var(--color-border-strong);
-  color: var(--color-text-muted);
+  color: var(--color-text-main);
   border-radius: var(--radius-sm, 4px);
 }
 
@@ -204,5 +204,5 @@
 
 .connection-status.offline {
   background-color: var(--color-border-strong);
-  color: var(--color-text-muted);
+  color: var(--color-text-main);
 }

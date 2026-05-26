@@ -5,23 +5,23 @@ import { WindowControls } from './WindowControls'
 import './TopBar.css'
 
 interface TopBarProps {
+  state: import('../../../common/state').MoshttyState | null
   liveStatus: string | null
   remoteStatus: string
   remote: import('../../../common/state').MoshttyRemote | null
 }
 
-export const TopBar: React.FC<TopBarProps> = ({ liveStatus, remoteStatus, remote }) => {
-  const snapshot = useAppStore((state) => state.snapshot)
+export const TopBar: React.FC<TopBarProps> = ({ state, liveStatus, remoteStatus, remote }) => {
   const addTab = useAppStore((state) => state.addTab)
   const setActiveTab = useAppStore((state) => state.setActiveTab)
   const closeTab = useAppStore((state) => state.closeTab)
   const toggleProjectRail = useAppStore((state) => state.toggleProjectRail)
 
-  const activeProjectId = snapshot?.state.activeProjectId
-  const activeProject = snapshot?.state.projects.find((p) => p.id === activeProjectId)
-  const activeTabId = snapshot?.state.activeTabId
+  const activeProjectId = state?.activeProjectId
+  const activeProject = state?.projects.find((p) => p.id === activeProjectId)
+  const activeTabId = state?.activeTabId
   const tabs = activeProject
-    ? (snapshot?.state.tabs.filter((tab) => activeProject.tabIds.includes(tab.id)) ?? [])
+    ? (state?.tabs.filter((tab) => activeProject.tabIds.includes(tab.id)) ?? [])
     : []
 
   const handleNewTab = (): void => {

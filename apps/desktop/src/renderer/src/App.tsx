@@ -305,14 +305,14 @@ function App(): React.JSX.Element {
     >
       {fixture && <FixtureBanner fixtureId={fixture.id} fixtureLabel={fixture.label} />}
 
-      <TopBar liveStatus={liveStatus} remoteStatus={remoteStatus} remote={remote} />
+      <TopBar state={state} liveStatus={liveStatus} remoteStatus={remoteStatus} remote={remote} />
 
       <div className="moshtty-body">
-        <Sidebar openDialog={openDialog} actionTitle={actionTitle} />
+        <Sidebar state={state} openDialog={openDialog} actionTitle={actionTitle} />
 
         <main className="workspace">
           {dashboardMode ? (
-            <Dashboard actionTitle={actionTitle} />
+            <Dashboard state={state} actionTitle={actionTitle} />
           ) : state ? (
             <section className="terminal-workspace" aria-label="Terminal panes">
               <SplitNode
@@ -341,6 +341,8 @@ function App(): React.JSX.Element {
       </div>
 
       <Dialogs
+        state={state}
+        secretMode={snapshot?.secretInfo?.mode ?? null}
         visibleDialog={visibleDialog}
         closeDialog={closeDialog}
         actionTitle={actionTitle}
