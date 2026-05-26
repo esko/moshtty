@@ -1,0 +1,38 @@
+.dashboard {
+  display: grid;
+  width: min(65%, calc(var(--space-3xl) * 18));
+  align-content: start;
+  gap: var(--space-xl);
+  padding: var(--space-3xl) 0;
+  margin: 0 auto;
+}
+
+.search-row {
+  display: flex;
+  min-height: var(--density-tab-bar-height);
+  align-items: center;
+  gap: var(--space-md);
+  padding: 0 var(--space-lg);
+  background: var(--color-app-bg);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-muted);
+}
+
+.dashboard-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dashboard h1 {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-body-lg);
+  line-height: var(--line-height-tight);
+}
+
+.recent-row {
+  display: flex;
+  gap: var(--space-md);
+  align-items: baseline;
+}

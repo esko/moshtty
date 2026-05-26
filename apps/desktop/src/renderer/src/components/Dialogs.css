@@ -1,0 +1,277 @@
+.dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-xl);
+  background: rgb(0 0 0 / 40%); /* Backdrop overlay */
+  z-index: var(--z-dialog);
+}
+
+.dialog,
+.settings-dialog {
+  background: var(--color-workspace-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elevation-dialog);
+}
+
+.dialog {
+  display: grid;
+  width: min(100%, calc(var(--space-3xl) * 13));
+  gap: var(--space-xl);
+  padding: var(--space-xl);
+}
+
+.dialog h2,
+.settings-dialog h2 {
+  margin: 0;
+  color: var(--color-text-main);
+  font-size: var(--font-size-heading);
+  line-height: var(--line-height-tight);
+}
+
+.field {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.field span {
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-small, 12px);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.field input,
+.field textarea {
+  width: 100%;
+  min-height: var(--density-tab-bar-height);
+  padding: 0 var(--space-md);
+  color: var(--color-text-main);
+  background: var(--color-app-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-body, 13px);
+  outline: none;
+}
+
+.field textarea {
+  min-height: calc(var(--space-3xl) * 3);
+  padding: var(--space-md);
+  resize: none;
+}
+
+.project-chip-editor {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+}
+
+.large-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  background-color: var(--color-accent-soft);
+  color: var(--color-accent);
+  border-radius: var(--radius-md);
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-title, 16px);
+  font-weight: 700;
+}
+
+.field-label {
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-small, 12px);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.swatch-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
+
+.swatch {
+  width: var(--density-control-height);
+  height: var(--density-control-height);
+  padding: 0;
+  background: var(--color-accent-soft);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.swatch.active {
+  border-color: var(--color-text-main);
+  outline: 2px solid var(--color-focus);
+}
+
+.swatch.muted {
+  background: var(--color-sidebar-bg-active);
+}
+
+.swatch.warm {
+  background: var(--color-warning);
+}
+
+.dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-md);
+}
+
+.error-text {
+  margin: 0;
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-small, 12px);
+  color: var(--color-danger);
+}
+
+.settings-dialog {
+  display: grid;
+  width: min(100%, calc(var(--space-3xl) * 25));
+  min-height: min(70vh, calc(var(--space-3xl) * 11));
+  max-height: calc(100% - var(--space-2xl));
+  grid-template-columns: calc(var(--space-3xl) * 5) 1fr;
+  overflow: hidden;
+}
+
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-xl);
+  background: var(--color-sidebar-bg);
+  border-right: 1px solid var(--color-border);
+  border-top-left-radius: var(--radius-lg);
+  border-bottom-left-radius: var(--radius-lg);
+}
+
+.settings-section {
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-caption, 11px);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+
+.settings-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: 0 var(--space-md);
+  text-align: left;
+  min-height: var(--density-control-height);
+  color: var(--color-text-main);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-md);
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-body, 13px);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--easing-standard);
+}
+
+.settings-tab:hover,
+.settings-tab.active {
+  background: var(--color-sidebar-bg-active);
+}
+
+.settings-panel {
+  display: grid;
+  align-content: start;
+  gap: var(--space-xl);
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-xl);
+}
+
+.settings-list {
+  padding: var(--space-md);
+  background: var(--color-app-bg);
+  border-radius: var(--radius-lg);
+}
+
+.settings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-md) 0;
+  border-bottom: 1px solid var(--color-border);
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-body, 13px);
+}
+
+.settings-row:last-child {
+  border-bottom: 0;
+}
+
+.settings-row div {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.settings-row strong {
+  font-weight: 600;
+  color: var(--color-text-main);
+}
+
+.settings-row span {
+  font-size: var(--font-size-small, 12px);
+  color: var(--color-text-muted);
+}
+
+.settings-row > span {
+  font-weight: 500;
+  color: var(--color-text-main);
+}
+
+.shortcuts-row {
+  align-items: start;
+}
+
+.shortcut-list {
+  display: grid;
+  gap: var(--space-xs);
+  justify-items: end;
+}
+
+.shortcut-list span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--color-text-main);
+}
+
+.shortcut-list kbd {
+  min-height: var(--density-control-height);
+  padding: 0 var(--space-sm);
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-text-main);
+  background: var(--color-workspace-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-body);
+}
+
+.icon-button:focus-visible,
+.settings-tab:focus-visible,
+.swatch:focus-visible,
+.button:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
