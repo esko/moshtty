@@ -28,8 +28,8 @@ func TestPaneLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("attach: %v", err)
 	}
-	if attached.Key != info.Key {
-		t.Fatalf("attach key mismatch")
+	if attached.Key == "" || attached.Key == info.Key {
+		t.Fatalf("attach should return a fresh key, got original=%q attached=%q", info.Key, attached.Key)
 	}
 
 	if err := manager.Resize(info.FlowID, 100, 40); err != nil {
