@@ -34,6 +34,8 @@ interface AppState {
   paneFlows: Record<string, { flowId: number; key: string }>
   setPaneFlow: (paneId: string, flowId: number, key: string) => void
   bindPaneFlow: (paneId: string, flowId: number, key: string) => Promise<void>
+  markPaneLost: (paneId: string) => Promise<void>
+  restartLostPane: (paneId: string) => Promise<void>
   hydrate: () => Promise<void>
   saveWorkspace: () => Promise<void>
   resetWorkspace: () => Promise<void>
@@ -101,6 +103,65 @@ export const useAppStore = create<AppState>((set, get) => ({
             entry.id === paneId ? { ...entry, remoteFlowId: flowId } : entry
           )
         })
+      }
+    })
+    await get().saveWorkspace()
+  },
+  markPaneLost: async (paneId) => {
+    const snapshot = get().snapshot
+    if (!snapshot) {
+      return
+    }
+
+    const pane = snapshot.state.panes.find((entry) => entry.id === paneId)
+    if (!pane || pane.status === 'lost') {
+      return
+    }
+
+    set((state) => {
+      const remainingFlows = { ...state.paneFlows }
+      const hadFlow = paneId in remainingFlows
+      delete remainingFlows[paneId]
+      return {
+        paneFlows: hadFlow ? remainingFlows : state.paneFlows,
+        snapshot: {
+          ...snapshot,
+          state: withUpdatedTimestamp({
+            ...snapshot.state,
+            panes: snapshot.state.panes.map((entry) =>
+              entry.id === paneId ? { ...entry, status: 'lost' } : entry
+            )
+          })
+        }
+      }
+    })
+    await get().saveWorkspace()
+  },
+  restartLostPane: async (paneId) => {
+    const snapshot = get().snapshot
+    if (!snapshot) {
+      return
+    }
+
+    const pane = snapshot.state.panes.find((entry) => entry.id === paneId)
+    if (!pane || pane.status !== 'lost') {
+      return
+    }
+
+    set((state) => {
+      const remainingFlows = { ...state.paneFlows }
+      delete remainingFlows[paneId]
+      return {
+        paneFlows: remainingFlows,
+        snapshot: {
+          ...snapshot,
+          state: withUpdatedTimestamp({
+            ...snapshot.state,
+            panes: snapshot.state.panes.map((entry) =>
+              entry.id === paneId ? { ...entry, status: 'active', remoteFlowId: undefined } : entry
+            )
+          })
+        }
       }
     })
     await get().saveWorkspace()

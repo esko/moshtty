@@ -244,7 +244,7 @@ Status: In progress
 Objective:
 
 - Prove the real first-use path against a macOS remote.
-- 2026-05-26 update: reload reattach now preserves the same remote pane and renders new shell output after reconnect; split/app-layout and lost-pane cases still need the remaining acceptance pass.
+- 2026-05-26 update: reload reattach now preserves the same remote pane and renders new shell output after reconnect; companion restart now marks stale panes lost and can restart them without deleting layout. Split/app-layout still needs the remaining acceptance pass.
 
 Deliverables:
 

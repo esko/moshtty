@@ -34,6 +34,8 @@ export function TerminalPane({
   const [error, setError] = useState<string | null>(null)
   const setPaneFlow = useAppStore((state) => state.setPaneFlow)
   const bindPaneFlow = useAppStore((state) => state.bindPaneFlow)
+  const markPaneLost = useAppStore((state) => state.markPaneLost)
+  const restartLostPane = useAppStore((state) => state.restartLostPane)
   const disposablesRef = useRef<{ dispose: () => void }[]>([])
   const lost = pane.status === 'lost'
   const title = pane.title ?? 'Terminal'
@@ -44,6 +46,7 @@ export function TerminalPane({
 
     async function bootstrap(): Promise<void> {
       try {
+        setError(null)
         const { init } = await import('ghostty-web')
         await init(WASM_PATH)
 
@@ -148,6 +151,9 @@ export function TerminalPane({
         }
       } catch (err) {
         if (!disposed) {
+          if (pane.remoteFlowId !== undefined) {
+            void markPaneLost(pane.id)
+          }
           setError(err instanceof Error ? err.message : 'Failed to load terminal')
         }
       }
@@ -167,10 +173,12 @@ export function TerminalPane({
   }, [
     bindPaneFlow,
     connectionManager,
+    markPaneLost,
     pane.cols,
     pane.id,
     pane.remoteFlowId,
     pane.rows,
+    restartLostPane,
     setPaneFlow,
     terminalMode,
     transport
@@ -188,6 +196,16 @@ export function TerminalPane({
           <span className={`pane-status ${lost ? 'lost' : 'active'}`}>
             {lost ? 'Pane lost' : 'Active'}
           </span>
+          {lost ? (
+            <button
+              className="button secondary pane-restart"
+              type="button"
+              data-action-id="restart-pane"
+              onClick={() => void restartLostPane(pane.id)}
+            >
+              Restart pane
+            </button>
+          ) : null}
           {onSplit ? (
             <>
               <button

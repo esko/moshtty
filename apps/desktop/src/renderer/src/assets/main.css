@@ -306,6 +306,11 @@
   gap: var(--space-xs);
 }
 
+.pane-restart {
+  min-height: var(--density-control-height);
+  padding-inline: var(--space-sm);
+}
+
 .dashboard {
   display: grid;
   width: min(65%, calc(var(--space-3xl) * 18));
