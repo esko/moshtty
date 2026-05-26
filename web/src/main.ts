@@ -47,7 +47,10 @@ const profileEnvInput = requiredElement<HTMLTextAreaElement>("#profileEnv");
 const profileError = requiredElement<HTMLElement>("#profileError");
 const spaceDialog = requiredElement<HTMLDialogElement>("#spaceDialog");
 const spaceTitleInput = requiredElement<HTMLInputElement>("#spaceTitle");
+const movePaneDialog = requiredElement<HTMLDialogElement>("#movePaneDialog");
 const shortcutsDialog = requiredElement<HTMLDialogElement>("#shortcutsDialog");
+
+const appDialogs = [renameDialog, profileDialog, spaceDialog, movePaneDialog, shortcutsDialog];
 
 let settings = loadSettings();
 applyAppAppearance(settings);
@@ -672,7 +675,13 @@ function handleActionShortcut(event: KeyboardEvent): boolean {
 function shouldHandleAppShortcut(event: KeyboardEvent): boolean {
   if (event.defaultPrevented || isSettingsRoute() || !currentWorkspace) return false;
   if (isPaletteOpen()) return false;
-  if (document.querySelector("dialog[open]")) return false;
+
+  // Checking the `open` property on known dialogs is significantly faster
+  // than `document.querySelector("dialog[open]")` which parses DOM on every keystroke.
+  for (const dialog of appDialogs) {
+    if (dialog.open) return false;
+  }
+
   const target = event.target;
   return !(target instanceof Element && isEditableShortcutTarget(target) && !terminalRoot.contains(target));
 }
