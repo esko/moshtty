@@ -47,6 +47,8 @@ interface AppState {
   splitPane: (axis: SplitAxis) => Promise<void>
   closeActivePane: () => Promise<void>
   closeActiveTab: () => Promise<void>
+  setActiveTab: (tabId: string) => Promise<void>
+  closeTab: (tabId: string) => Promise<void>
 }
 
 function getMoshttyApi(): Window['moshtty'] {
@@ -624,6 +626,79 @@ export const useAppStore = create<AppState>((set, get) => ({
       tabs: snapshot.state.tabs.filter((t) => t.id !== closingId),
       panes: snapshot.state.panes.filter((pane) => !paneIds.includes(pane.id)),
       layouts: snapshot.state.layouts.filter((layout) => layout.tabId !== closingId)
+    })
+
+    set({ snapshot: { ...snapshot, state: nextState } })
+    await get().saveWorkspace()
+  },
+
+  setActiveTab: async (tabId: string) => {
+    const snapshot = get().snapshot
+    if (!snapshot || !snapshot.state.activeProjectId) {
+      return
+    }
+
+    const tab = snapshot.state.tabs.find((entry) => entry.id === tabId)
+    if (!tab) {
+      return
+    }
+
+    const nextState = withUpdatedTimestamp({
+      ...snapshot.state,
+      activeTabId: tab.id,
+      activePaneId: tab.activePaneId,
+      projects: snapshot.state.projects.map((project) =>
+        project.id === snapshot.state.activeProjectId
+          ? { ...project, activeTabId: tab.id }
+          : project
+      )
+    })
+
+    set({ snapshot: { ...snapshot, state: nextState } })
+    await get().saveWorkspace()
+  },
+
+  closeTab: async (tabId: string) => {
+    const snapshot = get().snapshot
+    if (!snapshot || !snapshot.state.activeProjectId) {
+      return
+    }
+
+    const activeProject = snapshot.state.projects.find(
+      (project) => project.id === snapshot.state.activeProjectId
+    )
+    if (!activeProject || activeProject.tabIds.length <= 1) {
+      return
+    }
+
+    const tab = snapshot.state.tabs.find((t) => t.id === tabId)
+    if (!tab) {
+      return
+    }
+    const paneIds = tab.paneIds ?? []
+
+    let nextTabId = snapshot.state.activeTabId
+    if (tabId === snapshot.state.activeTabId) {
+      nextTabId = activeProject.tabIds.find((id) => id !== tabId) ?? null
+    }
+    const nextTab = snapshot.state.tabs.find((t) => t.id === nextTabId)
+
+    const nextState = withUpdatedTimestamp({
+      ...snapshot.state,
+      activeTabId: nextTabId,
+      activePaneId: nextTab?.activePaneId ?? null,
+      projects: snapshot.state.projects.map((project) =>
+        project.id === activeProject.id
+          ? {
+              ...project,
+              tabIds: project.tabIds.filter((id) => id !== tabId),
+              activeTabId: project.activeTabId === tabId ? nextTabId : project.activeTabId
+            }
+          : project
+      ),
+      tabs: snapshot.state.tabs.filter((t) => t.id !== tabId),
+      panes: snapshot.state.panes.filter((pane) => !paneIds.includes(pane.id)),
+      layouts: snapshot.state.layouts.filter((layout) => layout.tabId !== tabId)
     })
 
     set({ snapshot: { ...snapshot, state: nextState } })

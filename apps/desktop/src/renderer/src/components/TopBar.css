@@ -1,0 +1,208 @@
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--density-topbar-height, 40px);
+  background-color: var(--color-app-bg);
+  border-bottom: 1px solid var(--color-border);
+  padding: 0 var(--space-sm, 8px);
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.top-bar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm, 8px);
+  -webkit-app-region: no-drag;
+}
+
+.sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--density-icon-button-size, 28px);
+  height: var(--density-icon-button-size, 28px);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--easing-standard),
+    color var(--duration-fast) var(--easing-standard);
+}
+
+.sidebar-toggle:hover {
+  background-color: var(--color-sidebar-bg-active);
+  color: var(--color-text-main);
+}
+
+.brand-badge {
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-caption, 11px);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: var(--space-2xs, 2px) var(--space-xs, 4px);
+  background-color: var(--color-border-strong);
+  color: var(--color-text-muted);
+  border-radius: var(--radius-sm, 4px);
+}
+
+.tab-strip-wrapper {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  max-width: 600px;
+  margin: 0 var(--space-lg, 16px);
+  -webkit-app-region: no-drag;
+}
+
+.tab-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs, 2px);
+  overflow-x: auto;
+  scrollbar-width: none; /* Hide scrollbar Firefox */
+  flex: 1;
+}
+
+.tab-strip::-webkit-scrollbar {
+  display: none; /* Hide scrollbar Chrome/Safari */
+}
+
+.tab-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 28px;
+  min-width: 60px;
+  max-width: 150px;
+  background-color: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md, 6px);
+  padding: 0 var(--space-xs, 4px) 0 var(--space-sm, 8px);
+  gap: var(--space-xs, 4px);
+  transition:
+    background-color var(--duration-fast) var(--easing-standard),
+    border-color var(--duration-fast) var(--easing-standard);
+}
+
+.tab-wrapper:hover {
+  background-color: var(--color-sidebar-bg-active);
+}
+
+.tab-wrapper.active {
+  background-color: var(--color-workspace-bg);
+  border-color: var(--color-border);
+}
+
+.tab-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  background: transparent;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+  outline: none;
+}
+
+.tab-title {
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-small, 12px);
+  font-weight: 500;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color var(--duration-fast) var(--easing-standard);
+}
+
+.tab-wrapper.active .tab-title {
+  color: var(--color-text-main);
+  font-weight: 600;
+}
+
+.tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-subtle);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--duration-fast) var(--easing-standard),
+    background-color var(--duration-fast) var(--easing-standard),
+    color var(--duration-fast) var(--easing-standard);
+}
+
+.tab-wrapper:hover .tab-close,
+.tab-wrapper.active .tab-close {
+  opacity: 1;
+}
+
+.tab-close:hover {
+  background-color: var(--color-border-strong);
+  color: var(--color-text-main);
+}
+
+.new-tab-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  margin-left: var(--space-xs, 4px);
+  transition:
+    background-color var(--duration-fast) var(--easing-standard),
+    color var(--duration-fast) var(--easing-standard);
+}
+
+.new-tab-btn:hover {
+  background-color: var(--color-sidebar-bg-active);
+  color: var(--color-text-main);
+}
+
+.top-bar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md, 12px);
+  -webkit-app-region: no-drag;
+}
+
+.connection-status {
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-caption, 11px);
+  font-weight: 600;
+  padding: var(--space-2xs, 2px) var(--space-sm, 8px);
+  border-radius: var(--radius-pill, 9999px);
+  text-transform: capitalize;
+}
+
+.connection-status.connected {
+  background-color: var(--color-success);
+  color: var(--color-accent-on, #fff);
+}
+
+.connection-status.connecting {
+  background-color: var(--color-warning);
+  color: var(--color-accent-on, #fff);
+}
+
+.connection-status.offline {
+  background-color: var(--color-border-strong);
+  color: var(--color-text-muted);
+}
