@@ -12,7 +12,14 @@ const mockApi = {
   setPassphrase: vi.fn(),
   storeToken: vi.fn(),
   loadToken: vi.fn(),
-  deleteToken: vi.fn()
+  deleteToken: vi.fn(),
+  window: {
+    minimize: vi.fn(),
+    maximize: vi.fn(),
+    close: vi.fn(),
+    isMaximized: vi.fn(),
+    onStateChange: vi.fn(() => vi.fn())
+  }
 }
 
 beforeEach(() => {

@@ -117,6 +117,7 @@ function createWindow(): BrowserWindow {
     minWidth: 1024,
     minHeight: 720,
     show: true,
+    frame: false,
     autoHideMenuBar: true,
     title: 'Moshtty',
     backgroundColor: '#f9f9fb',
@@ -131,6 +132,14 @@ function createWindow(): BrowserWindow {
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
     mainWindow.focus()
+  })
+
+  mainWindow.on('maximize', () => {
+    mainWindow.webContents.send('moshtty:window:state-change', true)
+  })
+
+  mainWindow.on('unmaximize', () => {
+    mainWindow.webContents.send('moshtty:window:state-change', false)
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -169,6 +178,28 @@ function registerIpcHandlers(): void {
   ipcMain.handle(MOSHTTY_IPC_CHANNELS.secretDeleteToken, async (_event, label: string) =>
     secretStore.deleteToken(label)
   )
+  ipcMain.handle(MOSHTTY_IPC_CHANNELS.windowMinimize, async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    window?.minimize()
+  })
+  ipcMain.handle(MOSHTTY_IPC_CHANNELS.windowMaximize, async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (window) {
+      if (window.isMaximized()) {
+        window.unmaximize()
+      } else {
+        window.maximize()
+      }
+    }
+  })
+  ipcMain.handle(MOSHTTY_IPC_CHANNELS.windowClose, async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    window?.close()
+  })
+  ipcMain.handle(MOSHTTY_IPC_CHANNELS.windowIsMaximized, async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    return window ? window.isMaximized() : false
+  })
 }
 
 app.whenReady().then(async () => {

@@ -1,0 +1,41 @@
+.window-controls {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  -webkit-app-region: no-drag;
+}
+
+.control-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: var(--density-topbar-height, 40px);
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  outline: none;
+  transition:
+    background-color var(--duration-fast) var(--easing-standard),
+    color var(--duration-fast) var(--easing-standard);
+}
+
+.control-btn:hover {
+  background-color: var(--color-sidebar-bg-active);
+  color: var(--color-text-main);
+}
+
+.control-btn.close:hover {
+  background-color: var(--color-danger);
+  color: var(--color-accent-on, #fff);
+}
+
+.control-btn:active {
+  opacity: 0.7;
+}
+
+.control-btn:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}

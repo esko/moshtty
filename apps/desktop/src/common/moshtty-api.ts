@@ -24,6 +24,13 @@ export interface MoshttyApi {
   storeToken(label: string, token: string): Promise<{ mode: SecretStorageMode }>
   loadToken(label: string): Promise<string | null>
   deleteToken(label: string): Promise<void>
+  window: {
+    minimize(): Promise<void>
+    maximize(): Promise<void>
+    close(): Promise<void>
+    isMaximized(): Promise<boolean>
+    onStateChange(callback: (isMaximized: boolean) => void): () => void
+  }
 }
 
 export const MOSHTTY_IPC_CHANNELS = {
@@ -35,5 +42,9 @@ export const MOSHTTY_IPC_CHANNELS = {
   secretSetPassphrase: 'moshtty:secret:set-passphrase',
   secretStoreToken: 'moshtty:secret:store-token',
   secretLoadToken: 'moshtty:secret:load-token',
-  secretDeleteToken: 'moshtty:secret:delete-token'
+  secretDeleteToken: 'moshtty:secret:delete-token',
+  windowMinimize: 'moshtty:window:minimize',
+  windowMaximize: 'moshtty:window:maximize',
+  windowClose: 'moshtty:window:close',
+  windowIsMaximized: 'moshtty:window:is-maximized'
 } as const
