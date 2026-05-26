@@ -21,11 +21,11 @@ export type ColorScale = {
 
 export const lightColors: ColorScale = {
   appBg: '#f9f9fb',
-  sidebarBg: '#f0f0f4',
+  sidebarBg: '#f5f5f7',
   sidebarBgActive: '#e2e2e8',
   workspaceBg: '#ffffff',
   terminalBg: '#1e1e24',
-  border: '#e0e0e6',
+  border: '#e5e5e8',
   borderStrong: '#c8c8d0',
   textMain: '#202024',
   textMuted: '#64646c',
@@ -41,15 +41,15 @@ export const lightColors: ColorScale = {
 }
 
 export const darkColors: ColorScale = {
-  appBg: '#121214',
-  sidebarBg: '#1a1a1e',
+  appBg: '#18181b',
+  sidebarBg: '#141416',
   sidebarBgActive: '#2a2a30',
-  workspaceBg: '#1e1e22',
-  terminalBg: '#121214',
-  border: '#2e2e34',
-  borderStrong: '#3a3a44',
-  textMain: '#f0f0f4',
-  textMuted: '#9a9ab0',
+  workspaceBg: '#1c1c1f',
+  terminalBg: '#18181b',
+  border: '#2a2a2e',
+  borderStrong: '#333338',
+  textMain: '#e4e4e7',
+  textMuted: '#71717a',
   textSubtle: '#6c6c78',
   textTerminal: '#e2e2e8',
   accent: '#818cf8',
@@ -132,7 +132,9 @@ export const density = {
   brandHeight: 48,
   controlHeight: 28,
   iconButtonSize: 28,
-  touchTarget: 44
+  touchTarget: 44,
+  topbarHeight: 40,
+  sidebarWidth: 220
 } as const
 
 export const zIndex = {

@@ -85,6 +85,8 @@ terminal/code surfaces.
 | `--density-control-height`   | Buttons, inputs.                        | 28px    |
 | `--density-icon-button-size` | Icon button square.                     | 28px    |
 | `--density-touch-target`     | Minimum tap target on `pointer:coarse`. | 44px    |
+| `--density-topbar-height`    | Unified top bar height.                 | 40px    |
+| `--density-sidebar-width`    | Slim project sidebar width.             | 220px   |
 
 ### Motion
 
