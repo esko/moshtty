@@ -359,6 +359,39 @@ Agent brief:
 
 - `docs/agents/2026-05-27-8c-moshtty-ui-followup.md`
 
+## M8d UI Corrections
+
+Status: In progress
+
+Note: M8c slices (8c.1–8c.7) landed on the diff level but the 2026-05-27 live audit (`docs/visual-qa/8b/live-audit/m8c/`) revealed real spec drift: tab project chips are illegible, Ghostty canvas underfills the pane (CSS-only fix in 8c.2 was overridden by inline canvas styles), overflow icon should be a hamburger, info pill carries redundant title + status text, pane pills should be glass, sidebar bootstrap/import buttons belong in the project dialog, project dialog should feel like preferences.
+
+Objective:
+
+- Land five small slices that close the parity gap to OpenCode for the live shell view (top bar, pane chrome, sidebar, project dialog), then validate with live agent-browser audit before marking M8c + M8d Ready for review.
+
+Deliverables:
+
+- 8d.0 Glass-surface tokens (`tokens.{ts,css}`, design-system doc) — coordinator only.
+- 8d.1 Top bar: hamburger + tab status roundel (`TopBar.{tsx,css}`).
+- 8d.2 Terminal pane: `FitAddon` wiring + glass pills + status roundel (`TerminalPane.tsx`, pane block of `main.css`).
+- 8d.3 Sidebar: drop header bootstrap/import buttons, grow project-row action icons (`Sidebar.{tsx,css}`).
+- 8d.4 Project dialog as preferences view with bootstrap + import sections (`Dialogs.{tsx,css}`, `dialogs.ts`).
+- 8d.5 Live visual QA + audit notes under `docs/visual-qa/8b/live-audit/m8d/`.
+
+Acceptance:
+
+- All five slices land as separate atomic conventional commits.
+- Terminal canvas fills the pane (no dead band at the bottom, no horizontal overflow) — confirmed by inspecting `<canvas>.getBoundingClientRect()` vs `.terminal-container.getBoundingClientRect()` live.
+- Pane chrome pills read as glass over the terminal canvas; status indicator is a single colored roundel using the functional color tokens.
+- Tab strip shows a status roundel per tab (worst-pane-status: lost > connecting > connected) and no project chip.
+- Sidebar has no Bootstrap / Import header buttons; project rows have larger edit/delete actions inside the hover pill.
+- Project dialog has Project / Remote server / Profile import sections and a working Install/Update button that opens the existing bootstrap dialog.
+- Live agent-browser screenshots saved under `docs/visual-qa/8b/live-audit/m8d/` with a short audit note vs OpenCode refs.
+
+Agent brief:
+
+- `docs/agents/2026-05-27-8d-moshtty-ui-corrections.md`
+
 ## M9b Command Palette
 
 Status: Ready for review
