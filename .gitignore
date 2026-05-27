@@ -1,2 +1,20 @@
 node_modules/
 agent/.cache/
+
+# Go build outputs in bin/
+bin/
+
+# Electron build and test artifacts
+apps/desktop/dist/
+apps/desktop/dist-electron/
+apps/desktop/coverage/
+apps/desktop/test-results/
+
+# Compiled moshtty-remote macOS binary (cross-compiled artifact)
+moshtty-remote-macos
+
+# Scratch / temporary work
+scratch/
+
+# IDE/editor
+.commandcode/
