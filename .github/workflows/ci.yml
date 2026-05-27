@@ -35,11 +35,8 @@ jobs:
       - run: pnpm --filter @moshtty/desktop build
 
   visual:
-    # TODO: wire xvfb / headless Electron once the M5 visual fixtures land.
-    # Left as continue-on-error until then so the rest of CI is meaningful.
     name: Playwright Electron (visual + a11y)
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -52,15 +49,22 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - run: pnpm --filter @moshtty/desktop exec playwright install --with-deps chromium
+      - name: Build Electron app (Playwright loads out/main/index.js)
+        run: pnpm --filter @moshtty/desktop build
 
-      - run: pnpm --filter @moshtty/desktop test:visual
+      - name: Setup virtual display (Xvfb)
+        uses: coactions/setup-xvfb@v1
+
+      - name: Run visual regression tests
+        run: pnpm --filter @moshtty/desktop test:visual
 
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: failure()
         with:
-          name: playwright-report
-          path: apps/desktop/playwright-report
+          name: playwright-visual-failure
+          path: |
+            apps/desktop/playwright-report/
+            apps/desktop/test-results/
           retention-days: 7
 
   go:

@@ -23,10 +23,17 @@ export type MoshttyFixtures = {
   loadFixture: (id: string) => Promise<void>
 }
 
+const electronLaunchArgs = [
+  '--no-sandbox',
+  ...(process.env.CI ? ['--disable-dev-shm-usage'] : []),
+  APP_ROOT
+]
+
 export const test = base.extend<MoshttyFixtures>({
   electronApp: async ({}, use) => {
     const app = await electron.launch({
-      args: ['--no-sandbox', APP_ROOT],
+      args: electronLaunchArgs,
+      cwd: APP_ROOT,
       env: { ...process.env, NODE_ENV: 'test', MOSHTTY_E2E: '1' }
     })
     await use(app)
