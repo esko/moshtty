@@ -4,6 +4,9 @@ agent/.cache/
 # Go build outputs in bin/
 bin/
 
+# Cross-compiled GitHub release assets (scripts/build-release-binaries.sh)
+dist/release/
+
 # Electron build and test artifacts
 apps/desktop/dist/
 apps/desktop/dist-electron/

@@ -12,6 +12,7 @@ import (
 
 	"github.com/moshtty/moshtty/internal/config"
 	"github.com/moshtty/moshtty/internal/ctlsocket"
+	"github.com/moshtty/moshtty/internal/version"
 )
 
 func main() {
@@ -23,6 +24,7 @@ func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintf(os.Stderr, "Usage: moshttyctl [--socket PATH] <command> [args...]\n")
 		fmt.Fprintf(os.Stderr, "\nCommands:\n")
+		fmt.Fprintf(os.Stderr, "  version                  Print companion release version\n")
 		fmt.Fprintf(os.Stderr, "  list                     List remote panes\n")
 		fmt.Fprintf(os.Stderr, "  pane close <flow-id>     Close a remote pane\n")
 		fmt.Fprintf(os.Stderr, "  cleanup list             List orphan panes\n")
@@ -36,6 +38,11 @@ func main() {
 	if len(args) == 0 {
 		fmt.Fprintf(os.Stderr, "moshttyctl: missing command\n")
 		os.Exit(2)
+	}
+
+	if args[0] == "version" || args[0] == "-v" || args[0] == "--version" {
+		fmt.Println(version.Version)
+		return
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

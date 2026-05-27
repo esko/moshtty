@@ -4,6 +4,7 @@ const { app } = electron
 import fs from 'fs'
 import { join, resolve } from 'path'
 import type { SshBootstrapConfig, SshBootstrapResult } from '../common/ssh.schema'
+import { companionBinaryDownloadUrl } from './companion-version'
 
 // Helper to run an SSH command and return stdout/stderr
 function runSshCommand(
@@ -122,7 +123,7 @@ export async function downloadBinary(
   goarch: string,
   destPath: string
 ): Promise<void> {
-  const url = `https://github.com/moshtty/moshtty/releases/latest/download/${component}-${goos}-${goarch}`
+  const url = companionBinaryDownloadUrl(component, goos, goarch)
   const response = await fetch(url)
   if (!response.ok) {
     throw new Error(

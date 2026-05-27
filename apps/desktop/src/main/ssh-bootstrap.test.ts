@@ -1,5 +1,6 @@
 import { describe, expect, test, vi, beforeEach } from 'vitest'
 import { sshBootstrap, downloadBinary } from './ssh-bootstrap'
+import { companionBinaryDownloadUrl } from './companion-version'
 import child_process from 'child_process'
 import { Writable } from 'stream'
 import fs from 'fs'
@@ -359,7 +360,7 @@ describe('sshBootstrap', () => {
     await downloadBinary('moshtty-remote', 'linux', 'amd64', destPath)
 
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://github.com/moshtty/moshtty/releases/latest/download/moshtty-remote-linux-amd64'
+      companionBinaryDownloadUrl('moshtty-remote', 'linux', 'amd64')
     )
     expect(fs.readFileSync(destPath, 'utf8')).toBe('downloaded binary data')
 
@@ -432,11 +433,11 @@ describe('sshBootstrap', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2)
     expect(mockFetch).toHaveBeenNthCalledWith(
       1,
-      'https://github.com/moshtty/moshtty/releases/latest/download/moshtty-remote-linux-amd64'
+      companionBinaryDownloadUrl('moshtty-remote', 'linux', 'amd64')
     )
     expect(mockFetch).toHaveBeenNthCalledWith(
       2,
-      'https://github.com/moshtty/moshtty/releases/latest/download/moshttyctl-linux-amd64'
+      companionBinaryDownloadUrl('moshttyctl', 'linux', 'amd64')
     )
 
     vi.unstubAllGlobals()

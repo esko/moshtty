@@ -1,0 +1,43 @@
+name: Release companions
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish companion binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: Verify tag matches version/companion
+        run: |
+          VERSION="$(tr -d '[:space:]' < version/companion)"
+          TAG="${GITHUB_REF_NAME#v}"
+          if [ "${TAG}" != "${VERSION}" ]; then
+            echo "tag v${TAG} does not match version/companion (${VERSION})"
+            exit 1
+          fi
+
+      - name: Build release binaries
+        run: bash scripts/build-release-binaries.sh
+
+      - name: Create GitHub release with assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="$(tr -d '[:space:]' < version/companion)"
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${VERSION}" \
+            --notes "Companion binaries (moshtty-remote, moshttyctl) for Moshtty desktop SSH bootstrap. Platforms: darwin/linux × amd64/arm64." \
+            "dist/release/${VERSION}/"*

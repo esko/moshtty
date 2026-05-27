@@ -13,6 +13,7 @@ import (
 	"github.com/moshtty/moshtty/internal/config"
 	"github.com/moshtty/moshtty/internal/profile"
 	"github.com/moshtty/moshtty/internal/remote"
+	"github.com/moshtty/moshtty/internal/version"
 )
 
 const usage = `moshtty-remote companion
@@ -22,6 +23,7 @@ Usage:
   moshtty-remote install [--binary PATH] [--force]
   moshtty-remote profile [--host HOST]
   moshtty-remote health [--endpoint HOST:PORT]
+  moshtty-remote version
 
 User-local paths:
   Config/state: ~/Library/Application Support/Moshtty (macOS)
@@ -46,6 +48,8 @@ func main() {
 		profileCommand(os.Args[2:])
 	case "health":
 		healthCommand(os.Args[2:])
+	case "version", "-v", "--version":
+		fmt.Println(version.Version)
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 	default:
