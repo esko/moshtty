@@ -2,6 +2,12 @@ import React, { useState } from 'react'
 import { useAppStore } from '../store'
 import { XIcon, GearIcon, KeyboardIcon } from '../design/icons'
 import { parseMoshttyProfileText } from '../../../common/profile.schema'
+import {
+  TERMINAL_COLOR_SCHEMES,
+  loadTerminalColorSchemeKey,
+  saveTerminalColorSchemeKey,
+  type TerminalColorSchemeKey
+} from '../design/terminalThemes'
 import { getShortcutActions, APP_ACTIONS, formatShortcut } from '../keymap'
 import type { AppDialog } from '../dialogs'
 import './Dialogs.css'
@@ -331,7 +337,39 @@ interface SettingsDialogProps {
   actionTitle: (actionId: import('../keymap').AppActionId) => string
 }
 
+type AppThemeKey = 'light' | 'dark' | 'system'
+type CursorStyleKey = 'block' | 'bar' | 'underline'
+
+const APP_THEME_KEY = 'moshtty:appTheme'
+const FONT_SIZE_KEY = 'moshtty:fontSize'
+const CURSOR_STYLE_KEY = 'moshtty:cursorStyle'
+
+const readStorage = (key: string, fallback: string): string => {
+  try {
+    return localStorage.getItem(key) ?? fallback
+  } catch {
+    return fallback
+  }
+}
+
+const writeStorage = (key: string, value: string): void => {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    /* localStorage may be unavailable in fixtures */
+  }
+}
+
 const SettingsDialog: React.FC<SettingsDialogProps> = ({ terminalMode, onClose, actionTitle }) => {
+  const [section, setSection] = useState<'general' | 'shortcuts'>('general')
+  const [colorScheme, setColorScheme] = useState<TerminalColorSchemeKey>(loadTerminalColorSchemeKey)
+  const [appTheme, setAppTheme] = useState<AppThemeKey>(
+    () => readStorage(APP_THEME_KEY, 'system') as AppThemeKey
+  )
+  const [fontSize, setFontSize] = useState(() => readStorage(FONT_SIZE_KEY, '14'))
+  const [cursorStyle, setCursorStyle] = useState<CursorStyleKey>(
+    () => readStorage(CURSOR_STYLE_KEY, 'block') as CursorStyleKey
+  )
   const shortcutActions = getShortcutActions()
   const mouseOnlyActions = APP_ACTIONS.filter((action) => action.mouseOnly)
 
@@ -343,89 +381,159 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({ terminalMode, onClose, 
         aria-modal="true"
         aria-labelledby="settings-title"
       >
+        <button
+          className="settings-close icon-button"
+          type="button"
+          aria-label="Close settings"
+          data-action-id="close-dialog"
+          title={actionTitle('close-dialog')}
+          onClick={onClose}
+        >
+          <XIcon size={16} />
+        </button>
         <aside className="settings-nav" aria-label="Settings sections">
           <span className="settings-section">Desktop</span>
           <button
-            className="settings-tab active"
+            className={`settings-tab ${section === 'general' ? 'active' : ''}`}
             type="button"
             data-action-id="show-general-settings"
+            onClick={(): void => setSection('general')}
           >
             <GearIcon size={16} />
             General
           </button>
-          <button className="settings-tab" type="button" data-action-id="show-shortcuts-settings">
+          <button
+            className={`settings-tab ${section === 'shortcuts' ? 'active' : ''}`}
+            type="button"
+            data-action-id="show-shortcuts-settings"
+            onClick={(): void => setSection('shortcuts')}
+          >
             <KeyboardIcon size={16} />
             Shortcuts
           </button>
         </aside>
         <div className="settings-panel">
           <header className="dialog-header">
-            <h2 id="settings-title">Terminal settings</h2>
-            <button
-              className="icon-button"
-              type="button"
-              aria-label="Close settings"
-              data-action-id="close-dialog"
-              title={actionTitle('close-dialog')}
-              onClick={onClose}
-            >
-              <XIcon size={16} />
-            </button>
+            <h2 id="settings-title">{section === 'general' ? 'General' : 'Shortcuts'}</h2>
           </header>
           <div className="settings-list">
-            <div className="settings-row">
-              <div>
-                <strong>App theme</strong>
-                <span>Light, dark, or system</span>
-              </div>
-              <span>System</span>
-            </div>
-            <div className="settings-row">
-              <div>
-                <strong>Terminal palette</strong>
-                <span>Current mode: {terminalMode}</span>
-              </div>
-              <span>Follow app</span>
-            </div>
-            <div className="settings-row">
-              <div>
-                <strong>Font size</strong>
-                <span>Compact terminal density</span>
-              </div>
-              <span>14</span>
-            </div>
-            <div className="settings-row">
-              <div>
-                <strong>Cursor</strong>
-                <span>Block cursor</span>
-              </div>
-              <span>Block</span>
-            </div>
-            <div className="settings-row shortcuts-row">
-              <div>
-                <strong>Keyboard shortcuts</strong>
-                <span>Registered app actions</span>
-              </div>
-              <div className="shortcut-list">
-                {shortcutActions.map((action) => (
-                  <span key={action.id}>
-                    {action.label}
-                    <kbd>{formatShortcut(action.shortcut)}</kbd>
-                  </span>
-                ))}
-              </div>
-            </div>
-            <div className="settings-row shortcuts-row">
-              <div>
-                <strong>Pointer-only actions</strong>
-                <span>Documented exceptions</span>
-              </div>
-              <div className="shortcut-list">
-                {mouseOnlyActions.map((action) => (
-                  <span key={action.id}>{action.label}</span>
-                ))}
-              </div>
-            </div>
+            {section === 'general' ? (
+              <>
+                <div className="settings-row">
+                  <div>
+                    <strong>App theme</strong>
+                    <span>Light, dark, or system</span>
+                  </div>
+                  <select
+                    className="settings-select"
+                    aria-label="App theme"
+                    value={appTheme}
+                    onChange={(e): void => {
+                      const next = e.target.value as AppThemeKey
+                      setAppTheme(next)
+                      writeStorage(APP_THEME_KEY, next)
+                      document.documentElement.setAttribute('data-theme', next)
+                    }}
+                  >
+                    <option value="system">System</option>
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                  </select>
+                </div>
+                <div className="settings-row">
+                  <div>
+                    <strong>Terminal theme</strong>
+                    <span>Color scheme for terminal panes (app mode: {terminalMode})</span>
+                  </div>
+                  <select
+                    className="settings-select"
+                    value={colorScheme}
+                    aria-label="Terminal color scheme"
+                    onChange={(e): void => {
+                      const key = e.target.value as TerminalColorSchemeKey
+                      setColorScheme(key)
+                      saveTerminalColorSchemeKey(key)
+                    }}
+                  >
+                    <option value="auto">Auto (follows app theme)</option>
+                    {Object.entries(TERMINAL_COLOR_SCHEMES).map(([key, scheme]) => (
+                      <option key={key} value={key}>
+                        {scheme.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="settings-row">
+                  <div>
+                    <strong>Font size</strong>
+                    <span>{fontSize}px terminal text</span>
+                  </div>
+                  <select
+                    className="settings-select"
+                    aria-label="Font size"
+                    value={fontSize}
+                    onChange={(e): void => {
+                      const next = e.target.value
+                      setFontSize(next)
+                      writeStorage(FONT_SIZE_KEY, next)
+                    }}
+                  >
+                    <option value="12">12</option>
+                    <option value="13">13</option>
+                    <option value="14">14</option>
+                    <option value="16">16</option>
+                  </select>
+                </div>
+                <div className="settings-row">
+                  <div>
+                    <strong>Cursor</strong>
+                    <span>{cursorStyle} cursor</span>
+                  </div>
+                  <select
+                    className="settings-select"
+                    aria-label="Cursor style"
+                    value={cursorStyle}
+                    onChange={(e): void => {
+                      const next = e.target.value as CursorStyleKey
+                      setCursorStyle(next)
+                      writeStorage(CURSOR_STYLE_KEY, next)
+                    }}
+                  >
+                    <option value="block">Block</option>
+                    <option value="bar">Bar</option>
+                    <option value="underline">Underline</option>
+                  </select>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="settings-row shortcuts-row">
+                  <div>
+                    <strong>Keyboard shortcuts</strong>
+                    <span>Registered app actions</span>
+                  </div>
+                  <div className="shortcut-list">
+                    {shortcutActions.map((action) => (
+                      <span key={action.id}>
+                        {action.label}
+                        <kbd>{formatShortcut(action.shortcut)}</kbd>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="settings-row shortcuts-row">
+                  <div>
+                    <strong>Pointer-only actions</strong>
+                    <span>Documented exceptions</span>
+                  </div>
+                  <div className="shortcut-list">
+                    {mouseOnlyActions.map((action) => (
+                      <span key={action.id}>{action.label}</span>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </section>

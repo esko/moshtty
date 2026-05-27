@@ -5,7 +5,7 @@
   align-items: center;
   justify-content: center;
   padding: var(--space-xl);
-  background: rgb(0 0 0 / 40%); /* Backdrop overlay */
+  background: rgb(0 0 0 / 25%); /* Backdrop overlay */
   z-index: var(--z-dialog);
 }
 
@@ -136,12 +136,20 @@
 }
 
 .settings-dialog {
+  position: relative;
   display: grid;
   width: min(100%, calc(var(--space-3xl) * 25));
   min-height: min(70vh, calc(var(--space-3xl) * 11));
   max-height: calc(100% - var(--space-2xl));
   grid-template-columns: calc(var(--space-3xl) * 5) 1fr;
   overflow: hidden;
+}
+
+.settings-close {
+  position: absolute;
+  top: var(--space-md);
+  right: var(--space-md);
+  z-index: var(--z-rail);
 }
 
 .settings-nav {
@@ -196,10 +204,13 @@
   padding: var(--space-xl);
 }
 
+.settings-panel .dialog-header {
+  border-bottom: none;
+}
+
 .settings-list {
-  padding: var(--space-md);
-  background: var(--color-app-bg);
-  border-radius: var(--radius-lg);
+  display: grid;
+  gap: 0;
 }
 
 .settings-row {
@@ -235,6 +246,19 @@
 .settings-row > span {
   font-weight: 500;
   color: var(--color-text-main);
+}
+
+.settings-select {
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-body, 13px);
+  color: var(--color-text-main);
+  background: var(--color-workspace-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-sm);
+  height: var(--density-control-height);
+  cursor: pointer;
+  appearance: auto;
 }
 
 .shortcuts-row {
