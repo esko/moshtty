@@ -1,0 +1,37 @@
+name: Update visual snapshots
+
+# Regenerate Playwright baselines on ubuntu-latest + Xvfb (same as CI visual job).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    name: Refresh linux screenshots
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --filter @moshtty/desktop build
+
+      - name: Update snapshots (Xvfb)
+        uses: coactions/setup-xvfb@v1
+        with:
+          run: pnpm --filter @moshtty/desktop test:visual:update
+
+      - name: Commit updated snapshots
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "test(visual): refresh Playwright baselines on ubuntu"
+          file_pattern: "apps/desktop/tests/visual/__screenshots__/**"
