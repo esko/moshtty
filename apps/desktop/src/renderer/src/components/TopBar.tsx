@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react'
+import { projectDisplayInitial } from '../../../common/state'
 import { useAppStore } from '../store'
-import { HamburgerIcon, PlusIcon, XIcon } from '../design/icons'
+import { MoreIcon, PlusIcon, SidebarLeftIcon, XIcon } from '../design/icons'
 import { WindowControls } from './WindowControls'
 import './TopBar.css'
 
@@ -65,66 +66,81 @@ export const TopBar: React.FC<TopBarProps> = ({ state, liveStatus, remoteStatus,
             toggleProjectRail().catch(console.error)
           }}
         >
-          <HamburgerIcon size={16} />
+          <SidebarLeftIcon size={16} />
         </button>
-        <span className="brand-badge">BETA</span>
-      </div>
-
-      <div className="tab-strip-wrapper">
-        <div className="tab-strip" role="tablist" aria-label="Tabs">
-          {tabs.map((tab) => {
-            const isActive = tab.id === activeTabId
-            const isEditing = editingTabId === tab.id
-            return (
-              <div
-                key={tab.id}
-                className={`tab-wrapper ${isActive ? 'active' : ''}`}
-                role="presentation"
-              >
-                {isEditing ? (
-                  <input
-                    ref={tabInputRef}
-                    className="tab-rename-input"
-                    value={editingTitle}
-                    onChange={(e): void => setEditingTitle(e.target.value)}
-                    onBlur={(): void => commitTabRename(tab.id)}
-                    onKeyDown={(e): void => handleTabRenameKeyDown(e, tab.id)}
-                    aria-label="Tab title"
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    className="tab-btn"
-                    role="tab"
-                    aria-selected={isActive}
-                    onClick={(): void => {
-                      setActiveTab(tab.id).catch(console.error)
-                    }}
-                    onDoubleClick={(): void => startTabRename(tab.id, tab.title)}
-                  >
-                    <span className="tab-title">{tab.title}</span>
-                  </button>
-                )}
-                {tabs.length > 1 && (
-                  <button
-                    type="button"
-                    className="tab-close"
-                    aria-label={`Close ${tab.title} tab`}
-                    onClick={(e): void => {
-                      e.stopPropagation()
-                      closeTab(tab.id).catch(console.error)
-                    }}
-                  >
-                    <XIcon size={12} />
-                  </button>
-                )}
-              </div>
-            )
-          })}
+        <button
+          className="overflow-menu-btn"
+          type="button"
+          aria-label="Open menu"
+          title="Menu"
+          data-action-id="open-overflow-menu"
+          onClick={() => {
+            /* TODO(M8c follow-up): wire contextual menu */
+          }}
+        >
+          <MoreIcon size={16} />
+        </button>
+        <div className="tab-strip-wrapper">
+          <div className="tab-strip" role="tablist" aria-label="Tabs">
+            {tabs.map((tab) => {
+              const isActive = tab.id === activeTabId
+              const isEditing = editingTabId === tab.id
+              const tabProject =
+                state?.projects.find((p) => p.tabIds.includes(tab.id)) ?? activeProject
+              return (
+                <div
+                  key={tab.id}
+                  className={`tab-wrapper ${isActive ? 'active' : ''}`}
+                  role="presentation"
+                >
+                  <span className="tab-chip" style={{ backgroundColor: tabProject?.color }}>
+                    {tabProject ? projectDisplayInitial(tabProject) : 'M'}
+                  </span>
+                  {isEditing ? (
+                    <input
+                      ref={tabInputRef}
+                      className="tab-rename-input"
+                      value={editingTitle}
+                      onChange={(e): void => setEditingTitle(e.target.value)}
+                      onBlur={(): void => commitTabRename(tab.id)}
+                      onKeyDown={(e): void => handleTabRenameKeyDown(e, tab.id)}
+                      aria-label="Tab title"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className="tab-btn"
+                      role="tab"
+                      aria-selected={isActive}
+                      onClick={(): void => {
+                        setActiveTab(tab.id).catch(console.error)
+                      }}
+                      onDoubleClick={(): void => startTabRename(tab.id, tab.title)}
+                    >
+                      <span className="tab-title">{tab.title}</span>
+                    </button>
+                  )}
+                  {tabs.length > 1 && (
+                    <button
+                      type="button"
+                      className="tab-close"
+                      aria-label={`Close ${tab.title} tab`}
+                      onClick={(e): void => {
+                        e.stopPropagation()
+                        closeTab(tab.id).catch(console.error)
+                      }}
+                    >
+                      <XIcon size={12} />
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          <button className="new-tab-btn" type="button" aria-label="New tab" onClick={handleNewTab}>
+            <PlusIcon size={16} />
+          </button>
         </div>
-        <button className="new-tab-btn" type="button" aria-label="New tab" onClick={handleNewTab}>
-          <PlusIcon size={16} />
-        </button>
       </div>
 
       <div className="top-bar-right">

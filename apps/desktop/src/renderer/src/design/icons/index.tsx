@@ -27,6 +27,35 @@ export const HamburgerIcon: React.FC<IconProps> = ({
   </svg>
 )
 
+export const SidebarLeftIcon: React.FC<IconProps> = ({
+  size = 18,
+  color = 'currentColor',
+  ...props
+}) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke={color}
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <line x1="9" y1="4" x2="9" y2="20" />
+  </svg>
+)
+
+export const MoreIcon: React.FC<IconProps> = ({ size = 18, color = 'currentColor', ...props }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={color} {...props}>
+    <circle cx="5" cy="12" r="1.5" />
+    <circle cx="12" cy="12" r="1.5" />
+    <circle cx="19" cy="12" r="1.5" />
+  </svg>
+)
+
 export const GridIcon: React.FC<IconProps> = ({ size = 18, color = 'currentColor', ...props }) => (
   <svg
     width={size}
