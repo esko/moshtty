@@ -1,9 +1,9 @@
 import { test, expect } from './playwright.setup'
 
 test.describe('Dashboard', () => {
-  test('renders the brand and sidebar', async ({ page }) => {
+  test('renders the sidebar', async ({ page }) => {
     await expect(page.locator('.sidebar')).toBeVisible()
-    await expect(page.locator('.brand-badge')).toContainText('BETA')
+    await expect(page.locator('.brand-badge')).toHaveCount(0)
     await expect(page.locator('.sidebar-title')).toContainText('Projects')
   })
 

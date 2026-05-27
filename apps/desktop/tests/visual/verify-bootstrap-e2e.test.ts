@@ -10,9 +10,16 @@ test('E2E target SSH bootstrap verification against macmini', async ({ page }) =
   await page.waitForLoadState('domcontentloaded')
   console.log('App loaded. URL:', page.url())
 
-  // 2. Click the "Bootstrap remote" button in the Sidebar
-  console.log('Opening Bootstrap Remote dialog...')
-  const bootstrapBtn = page.locator('button[aria-label="Bootstrap remote"]')
+  // 2. Open Bootstrap Remote dialog via the project edit modal
+  //    (8d.3 removed the sidebar header bootstrap button; the project dialog
+  //    Install/Update button is now the only entry point to BootstrapDialog.)
+  console.log('Opening project edit dialog to reach Bootstrap...')
+  const renameBtn = page.locator('button[aria-label^="Rename "]').first()
+  await renameBtn.waitFor({ state: 'visible' })
+  await renameBtn.click()
+
+  console.log('Clicking Install/Update to open BootstrapDialog...')
+  const bootstrapBtn = page.locator('button[data-action-id="open-bootstrap-dialog"]')
   await bootstrapBtn.waitFor({ state: 'visible' })
   await bootstrapBtn.click()
 

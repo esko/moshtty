@@ -353,7 +353,7 @@ Acceptance:
 - All seven sub-slices land as separate atomic conventional commits.
 - `pnpm verify:full` passes after 8c.6.
 - Live agent-browser captures for `topbar-icons-order`, `tab-close-always-visible`, `pane-hover-pills`, `pane-light-no-gutter`, `project-edit-modal` all exist under `docs/visual-qa/8b/live-audit/`.
-- M8b row moves from `In progress` to `Done` once 8c.6 ships and the design-checkup rubric in `docs/moshtty-design-checkup.md` is re-scored.
+- M8b row moves from `In progress` to `Done` once 8c.6 ships and the design-checkup rubric in `docs/moshtty-design-checkup.md` is re-scored. 8c.6 baselines landed 2026-05-27 against the M8d-corrected look; the design-checkup re-score and the pre-existing offline-pill contrast token fix remain before `Done`.
 
 Agent brief:
 
