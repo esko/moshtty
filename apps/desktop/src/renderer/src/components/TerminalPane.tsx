@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Terminal, type ITerminalOptions } from 'ghostty-web'
+import { Terminal, FitAddon, type ITerminalOptions } from 'ghostty-web'
 import type { MoshttyPane, SplitAxis } from '../../../common/state'
 import { XIcon } from '../design/icons'
 import type { MoshttyTransport } from '../transport/moshtty-transport'
@@ -82,6 +82,8 @@ export function TerminalPane({
         }
 
         const term = new Terminal(options)
+        const fitAddon = new FitAddon()
+        term.loadAddon(fitAddon)
         if (disposed) {
           term.dispose()
           return
@@ -91,6 +93,8 @@ export function TerminalPane({
 
         if (containerRef.current) {
           term.open(containerRef.current)
+          fitAddon.fit()
+          fitAddon.observeResize()
           setReady(true)
         }
 
@@ -191,11 +195,13 @@ export function TerminalPane({
       aria-label={`${title} pane`}
     >
       <div className="pane-chrome" aria-hidden="false">
-        <div className={`pane-pill pane-pill-info ${lost ? 'lost' : ''}`}>
-          <span className="pane-pill-title">{title}</span>
-          <span className={`pane-pill-status ${lost ? 'lost' : ''}`}>
-            {lost ? 'Pane lost' : 'Active'}
-          </span>
+        <div className="pane-pill pane-pill-info">
+          <span
+            className="pane-status-dot"
+            data-status={lost ? 'lost' : ready ? 'connected' : 'connecting'}
+            aria-label={lost ? 'Pane lost' : ready ? 'Pane active' : 'Pane connecting'}
+            role="img"
+          />
         </div>
         <div className="pane-pill pane-pill-actions">
           {lost ? (
