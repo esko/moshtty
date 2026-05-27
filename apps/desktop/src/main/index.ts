@@ -111,12 +111,17 @@ function resolvePreloadPath(): string {
   return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0]
 }
 
+/** Matches Playwright visual baselines (see tests/visual/__screenshots__). */
+const E2E_WINDOW_SIZE = { width: 1280, height: 816 }
+
 function createWindow(): BrowserWindow {
+  const e2e = process.env.MOSHTTY_E2E === '1'
   const mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 860,
-    minWidth: 1024,
-    minHeight: 720,
+    width: E2E_WINDOW_SIZE.width,
+    height: e2e ? E2E_WINDOW_SIZE.height : 860,
+    minWidth: e2e ? E2E_WINDOW_SIZE.width : 1024,
+    minHeight: e2e ? E2E_WINDOW_SIZE.height : 720,
+    resizable: !e2e,
     show: true,
     frame: false,
     autoHideMenuBar: true,
