@@ -1,5 +1,6 @@
-import React, { useState } from 'react'
+import React, { useCallback, useState } from 'react'
 import { useAppStore } from '../store'
+import type { MoshttyRemote } from '../../../common/state'
 import { XIcon, GearIcon, KeyboardIcon } from '../design/icons'
 import { parseMoshttyProfileText } from '../../../common/profile.schema'
 import {
@@ -20,6 +21,8 @@ interface DialogsProps {
   closeDialog: () => void
   actionTitle: (actionId: import('../keymap').AppActionId) => string
   terminalMode: string
+  liveStatus?: MoshttyRemote['status'] | null
+  openDialog?: (dialog: AppDialog) => void
 }
 
 export const Dialogs: React.FC<DialogsProps> = ({
@@ -28,21 +31,52 @@ export const Dialogs: React.FC<DialogsProps> = ({
   visibleDialog,
   closeDialog,
   actionTitle,
-  terminalMode
+  terminalMode,
+  liveStatus = null,
+  openDialog: openDialogProp
 }) => {
   const addProject = useAppStore((state) => state.addProject)
   const renameProject = useAppStore((s) => s.renameProject)
   const importRemoteProfile = useAppStore((state) => state.importRemoteProfile)
+  const [stackedDialog, setStackedDialog] = useState<AppDialog | null>(null)
+  const [trackedVisibleDialog, setTrackedVisibleDialog] = useState<AppDialog | null>(visibleDialog)
+  if (trackedVisibleDialog !== visibleDialog) {
+    setTrackedVisibleDialog(visibleDialog)
+    if (stackedDialog !== null) {
+      setStackedDialog(null)
+    }
+  }
 
-  if (!visibleDialog) {
+  const openDialog = useCallback(
+    (dialog: AppDialog): void => {
+      if (openDialogProp) {
+        openDialogProp(dialog)
+      } else {
+        setStackedDialog(dialog)
+      }
+    },
+    [openDialogProp]
+  )
+
+  const dismissDialog = useCallback((): void => {
+    if (stackedDialog) {
+      setStackedDialog(null)
+    } else {
+      closeDialog()
+    }
+  }, [stackedDialog, closeDialog])
+
+  const activeDialog = stackedDialog ?? visibleDialog
+
+  if (!activeDialog) {
     return null
   }
 
   const saveProjectDialog = (name: string): void => {
-    if (visibleDialog.kind === 'project' && visibleDialog.mode === 'new') {
+    if (activeDialog.kind === 'project' && activeDialog.mode === 'new') {
       addProject(name).catch(console.error)
     }
-    closeDialog()
+    dismissDialog()
   }
 
   const importProfileDialog = async (profileText: string, passphrase: string): Promise<boolean> => {
@@ -62,34 +96,42 @@ export const Dialogs: React.FC<DialogsProps> = ({
       }
     }
     await importRemoteProfile(result.profile)
-    closeDialog()
+    dismissDialog()
     return true
   }
 
-  switch (visibleDialog.kind) {
+  switch (activeDialog.kind) {
     case 'import':
       return (
         <ImportDialog
-          mode={visibleDialog.mode}
+          mode={activeDialog.mode}
           secretMode={secretMode}
-          onClose={closeDialog}
+          onClose={dismissDialog}
           onImport={importProfileDialog}
           actionTitle={actionTitle}
         />
       )
     case 'project': {
-      if (visibleDialog.mode === 'existing') {
-        const project = state?.projects.find((p) => p.id === visibleDialog.projectId)
+      if (activeDialog.mode === 'existing') {
+        const project = state?.projects.find((p) => p.id === activeDialog.projectId)
+        const remote =
+          project?.remoteId != null
+            ? state?.remotes.find((entry) => entry.id === project.remoteId)
+            : undefined
+        const projectLiveStatus = liveStatus ?? remote?.status ?? null
         return (
           <ProjectDialog
             mode="existing"
             projectName={project?.name ?? 'Unknown project'}
-            onClose={closeDialog}
+            liveStatus={projectLiveStatus}
+            hasRemote
+            openDialog={openDialog}
+            onClose={dismissDialog}
             onSave={(name) => {
               if (project) {
                 renameProject(project.id, name).catch(console.error)
               }
-              closeDialog()
+              dismissDialog()
             }}
             actionTitle={actionTitle}
           />
@@ -99,7 +141,10 @@ export const Dialogs: React.FC<DialogsProps> = ({
         <ProjectDialog
           mode="new"
           projectName=""
-          onClose={closeDialog}
+          liveStatus={null}
+          hasRemote={false}
+          openDialog={openDialog}
+          onClose={dismissDialog}
           onSave={saveProjectDialog}
           actionTitle={actionTitle}
         />
@@ -109,13 +154,17 @@ export const Dialogs: React.FC<DialogsProps> = ({
       return (
         <SettingsDialog
           terminalMode={terminalMode}
-          onClose={closeDialog}
+          onClose={dismissDialog}
           actionTitle={actionTitle}
         />
       )
     case 'bootstrap':
       return (
-        <BootstrapDialog secretMode={secretMode} onClose={closeDialog} actionTitle={actionTitle} />
+        <BootstrapDialog
+          secretMode={secretMode}
+          onClose={dismissDialog}
+          actionTitle={actionTitle}
+        />
       )
     default:
       return null
@@ -125,9 +174,30 @@ export const Dialogs: React.FC<DialogsProps> = ({
 /* ==========================================================================
    ProjectDialog Component
    ========================================================================== */
+type BootstrapConnectionStatus = 'connected' | 'connecting' | 'lost'
+
+function bootstrapStatusFor(
+  mode: 'new' | 'existing',
+  liveStatus: MoshttyRemote['status'] | null
+): { status: BootstrapConnectionStatus; label: string } {
+  if (mode === 'new') {
+    return { status: 'lost', label: 'Not configured' }
+  }
+  if (liveStatus === 'connected') {
+    return { status: 'connected', label: 'Connected' }
+  }
+  if (liveStatus === 'connecting') {
+    return { status: 'connecting', label: 'Connecting…' }
+  }
+  return { status: 'lost', label: 'Offline' }
+}
+
 interface ProjectDialogProps {
   mode: 'new' | 'existing'
   projectName: string
+  liveStatus: MoshttyRemote['status'] | null
+  hasRemote: boolean
+  openDialog: (dialog: AppDialog) => void
   onClose: () => void
   onSave: (name: string) => void
   actionTitle: (actionId: import('../keymap').AppActionId) => string
@@ -136,11 +206,15 @@ interface ProjectDialogProps {
 const ProjectDialog: React.FC<ProjectDialogProps> = ({
   mode,
   projectName,
+  liveStatus,
+  hasRemote,
+  openDialog,
   onClose,
   onSave,
   actionTitle
 }) => {
   const [name, setName] = useState(mode === 'new' ? '' : projectName)
+  const { status: remoteStatus, label: remoteStatusLabel } = bootstrapStatusFor(mode, liveStatus)
 
   return (
     <div className="dialog-backdrop">
@@ -163,60 +237,121 @@ const ProjectDialog: React.FC<ProjectDialogProps> = ({
             <XIcon size={16} />
           </button>
         </header>
-        <label className="field">
-          <span>Name</span>
-          <input
-            value={name}
-            placeholder="Remote dev"
-            onChange={(event): void => setName(event.target.value)}
-          />
-        </label>
-        <div className="project-chip-editor">
-          <div className="large-chip">{(projectName || '').charAt(0).toUpperCase() || 'M'}</div>
-          <div>
-            <span className="field-label">Project color</span>
-            <div className="swatch-row" aria-label="Project color choices">
-              <button
-                className="swatch active"
-                type="button"
-                aria-label="Use accent color"
-                data-action-id="choose-project-color"
-              />
-              <button
-                className="swatch muted"
-                type="button"
-                aria-label="Use muted color"
-                data-action-id="choose-project-color"
-              />
-              <button
-                className="swatch warm"
-                type="button"
-                aria-label="Use warning color"
-                data-action-id="choose-project-color"
+        <form
+          className="project-form"
+          onSubmit={(event): void => {
+            event.preventDefault()
+            onSave(name)
+          }}
+        >
+          <section className="project-section">
+            <h3>Project</h3>
+            <div className="settings-row">
+              <div>
+                <strong>Name</strong>
+                <span>Display name in the sidebar and tab bar</span>
+              </div>
+              <input
+                value={name}
+                placeholder="Remote dev"
+                aria-label="Project name"
+                onChange={(event): void => setName(event.target.value)}
               />
             </div>
-          </div>
-        </div>
-        <footer className="dialog-actions">
-          <button
-            className="button secondary"
-            type="button"
-            data-action-id="cancel-dialog"
-            title={actionTitle('cancel-dialog')}
-            onClick={onClose}
-          >
-            Cancel
-          </button>
-          <button
-            className="button primary"
-            type="button"
-            data-action-id="confirm-dialog"
-            title={actionTitle('confirm-dialog')}
-            onClick={(): void => onSave(name)}
-          >
-            Save
-          </button>
-        </footer>
+            <div className="settings-row">
+              <div>
+                <strong>Color</strong>
+                <span>Accent for the project chip</span>
+              </div>
+              <div className="project-chip-editor">
+                <div className="large-chip">{(name || '').charAt(0).toUpperCase() || 'M'}</div>
+                <div className="swatch-row" aria-label="Project color choices">
+                  <button
+                    className="swatch active"
+                    type="button"
+                    aria-label="Use accent color"
+                    data-action-id="choose-project-color"
+                  />
+                  <button
+                    className="swatch muted"
+                    type="button"
+                    aria-label="Use muted color"
+                    data-action-id="choose-project-color"
+                  />
+                  <button
+                    className="swatch warm"
+                    type="button"
+                    aria-label="Use warning color"
+                    data-action-id="choose-project-color"
+                  />
+                </div>
+              </div>
+            </div>
+          </section>
+          <section className="project-section">
+            <h3>Remote server</h3>
+            <div className="settings-row">
+              <div>
+                <strong>Bootstrap status</strong>
+                <span>Connection to the remote companion</span>
+              </div>
+              <span className="project-status-pill" data-status={remoteStatus}>
+                <span className="pane-status-dot" data-status={remoteStatus} aria-hidden="true" />
+                {remoteStatusLabel}
+              </span>
+            </div>
+            <div className="settings-row">
+              <div>
+                <strong>Companion package</strong>
+                <span>Installs moshtty-remote on the target via SSH.</span>
+              </div>
+              <button
+                type="button"
+                className="button primary"
+                data-action-id="open-bootstrap-dialog"
+                onClick={(): void => openDialog({ kind: 'bootstrap' })}
+              >
+                {hasRemote ? 'Update' : 'Install'}
+              </button>
+            </div>
+          </section>
+          <section className="project-section">
+            <h3>Profile import</h3>
+            <div className="settings-row">
+              <div>
+                <strong>Profile import</strong>
+                <span>Paste a Moshtty profile to seed this project.</span>
+              </div>
+              <button
+                type="button"
+                className="button secondary"
+                data-action-id="open-import-dialog"
+                onClick={(): void => openDialog({ kind: 'import', mode: 'empty' })}
+              >
+                Import from profile
+              </button>
+            </div>
+          </section>
+          <footer className="dialog-actions">
+            <button
+              className="button secondary"
+              type="button"
+              data-action-id="cancel-dialog"
+              title={actionTitle('cancel-dialog')}
+              onClick={onClose}
+            >
+              Cancel
+            </button>
+            <button
+              className="button primary"
+              type="submit"
+              data-action-id="confirm-dialog"
+              title={actionTitle('confirm-dialog')}
+            >
+              {mode === 'new' ? 'Create' : 'Save'}
+            </button>
+          </footer>
+        </form>
       </section>
     </div>
   )
