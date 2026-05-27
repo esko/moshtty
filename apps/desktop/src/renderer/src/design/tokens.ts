@@ -31,7 +31,7 @@ export const lightColors: ColorScale = {
   borderStrong: '#c8c8d0',
   textMain: '#202024',
   textMuted: '#64646c',
-  textSubtle: '#9a9aa4',
+  textSubtle: '#6d6d75',
   textTerminal: '#1a1a1f',
   accent: '#4f46e5',
   accentSoft: '#eef2ff',
