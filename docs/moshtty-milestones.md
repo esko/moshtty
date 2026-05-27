@@ -361,7 +361,7 @@ Agent brief:
 
 ## M8d UI Corrections
 
-Status: In progress
+Status: Ready for review
 
 Note: M8c slices (8c.1–8c.7) landed on the diff level but the 2026-05-27 live audit (`docs/visual-qa/8b/live-audit/m8c/`) revealed real spec drift: tab project chips are illegible, Ghostty canvas underfills the pane (CSS-only fix in 8c.2 was overridden by inline canvas styles), overflow icon should be a hamburger, info pill carries redundant title + status text, pane pills should be glass, sidebar bootstrap/import buttons belong in the project dialog, project dialog should feel like preferences.
 
