@@ -154,6 +154,7 @@ function App(): React.JSX.Element {
   const splitPane = useAppStore((state) => state.splitPane)
   const closeActivePane = useAppStore((state) => state.closeActivePane)
   const closeActiveTab = useAppStore((state) => state.closeActiveTab)
+  const updateRemoteCertHashes = useAppStore((state) => state.updateRemoteCertHashes)
 
   const [transport, setTransport] = useState<MoshttyTransport | null>(null)
   const [connectionManager, setConnectionManager] = useState<MoshConnectionManager | null>(null)
@@ -213,15 +214,42 @@ function App(): React.JSX.Element {
         const tx = new MoshttyTransport()
         currentTransport = tx
 
+        const certHashes: string[] = []
+        if (remote.currentCertHash) {
+          certHashes.push(remote.currentCertHash)
+        }
+        if (remote.nextCertHash) {
+          certHashes.push(remote.nextCertHash)
+        }
+
         await tx.connect({
           url: buildRemoteWebTransportUrl(remote.url, token),
           token,
-          certHashes: remote.currentCertHash ? [remote.currentCertHash] : []
+          certHashes
         })
 
         if (!active) {
           void tx.close()
           return
+        }
+
+        const health = await tx.call<{
+          currentCertHash?: string | null
+          nextCertHash?: string | null
+        }>('health')
+
+        if (!active) {
+          void tx.close()
+          return
+        }
+
+        const healthCurrent = health.currentCertHash ?? ''
+        const healthNext = health.nextCertHash ?? ''
+        const remoteCurrent = remote.currentCertHash ?? ''
+        const remoteNext = remote.nextCertHash ?? ''
+
+        if (healthCurrent !== remoteCurrent || healthNext !== remoteNext) {
+          await updateRemoteCertHashes(remote.id, healthCurrent, healthNext)
         }
 
         const manager = new MoshConnectionManager(tx)
@@ -261,7 +289,7 @@ function App(): React.JSX.Element {
         void currentTransport.close()
       }
     }
-  }, [remote, fixture, splitPane])
+  }, [remote, fixture, splitPane, updateRemoteCertHashes])
 
   const shortcutHandlers = useMemo<AppActionHandlerMap>(
     () => ({

@@ -411,3 +411,21 @@ test('renameTab changes the tab title and persists', async () => {
   expect(tab?.title).toBe('Deploy logs')
   expect(mockApi.saveState).toHaveBeenCalled()
 })
+
+test('updateRemoteCertHashes updates the matching remote currentCertHash and nextCertHash and persists', async () => {
+  const sample = createSampleState('2026-05-25T00:00:00.000Z')
+  useAppStore.setState({ hydrated: true, snapshot: { state: sample, source: 'disk' } })
+  mockApi.saveState.mockImplementation(async (state) => ({ state, source: 'disk' }))
+
+  const remoteId = 'remote-placeholder'
+  const currentCertHash = 'NEW_CURRENT_HASH='
+  const nextCertHash = 'NEW_NEXT_HASH='
+
+  await useAppStore.getState().updateRemoteCertHashes(remoteId, currentCertHash, nextCertHash)
+
+  const state = useAppStore.getState().snapshot!.state
+  const remote = state.remotes.find((r) => r.id === remoteId)
+  expect(remote?.currentCertHash).toBe(currentCertHash)
+  expect(remote?.nextCertHash).toBe(nextCertHash)
+  expect(mockApi.saveState).toHaveBeenCalled()
+})

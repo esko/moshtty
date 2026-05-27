@@ -33,6 +33,7 @@ type Options struct {
 }
 
 type Server struct {
+	cfgMu  sync.RWMutex
 	cfg    config.Config
 	token  string
 	panes  *pane.Manager
@@ -44,6 +45,9 @@ type Server struct {
 	sessionMu sync.Mutex
 	session   *sessionState
 	nextAppID atomic.Uint64
+
+	certMu sync.RWMutex
+	cert   *tls.Certificate
 }
 
 func New(opts Options) (*Server, error) {
@@ -51,20 +55,29 @@ func New(opts Options) (*Server, error) {
 		return nil, errors.New("token is required")
 	}
 
-	tlsConf := &tls.Config{
-		Certificates: []tls.Certificate{opts.Cert},
-		NextProtos:   []string{http3.NextProtoH3},
-	}
-
 	s := &Server{
 		cfg:   opts.Config,
 		token: opts.Token,
 		panes: pane.NewManager(),
-		wt: webtransport.Server{
-			H3: &http3.Server{
-				TLSConfig: tlsConf,
-			},
-			CheckOrigin: auth.NewOriginChecker(opts.Config.AllowedOrigins),
+		cert:  &opts.Cert,
+	}
+
+	tlsConf := &tls.Config{
+		GetCertificate: func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			return s.getActiveCertificate(), nil
+		},
+		NextProtos: []string{http3.NextProtoH3},
+	}
+
+	s.wt = webtransport.Server{
+		H3: &http3.Server{
+			TLSConfig: tlsConf,
+		},
+		CheckOrigin: func(r *http.Request) bool {
+			s.cfgMu.RLock()
+			allowed := s.cfg.AllowedOrigins
+			s.cfgMu.RUnlock()
+			return auth.OriginAllowed(r.Header.Get("Origin"), allowed)
 		},
 	}
 
@@ -128,7 +141,10 @@ func (s *Server) handleWebTransport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
-	if err := auth.ValidateOrigin(r.Header.Get("Origin"), s.cfg.AllowedOrigins); err != nil {
+	s.cfgMu.RLock()
+	allowedOrigins := s.cfg.AllowedOrigins
+	s.cfgMu.RUnlock()
+	if err := auth.ValidateOrigin(r.Header.Get("Origin"), allowedOrigins); err != nil {
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
@@ -237,11 +253,19 @@ func (s *Server) Dispatch(req jsonrpc.Request) (any, error) {
 func (s *Server) dispatch(req jsonrpc.Request) (any, error) {
 	switch req.Method {
 	case "health":
+		s.cfgMu.RLock()
+		remoteID := s.cfg.RemoteID
+		bindEndpoint := s.cfg.BindEndpoint()
+		currentCertHash := s.cfg.Cert.CurrentHash
+		nextCertHash := s.cfg.Cert.NextHash
+		s.cfgMu.RUnlock()
 		return map[string]any{
-			"status":         "ok",
-			"remoteId":       s.cfg.RemoteID,
-			"serviceVersion": profile.Version,
-			"bindEndpoint":   s.cfg.BindEndpoint(),
+			"status":          "ok",
+			"remoteId":        remoteID,
+			"serviceVersion":  profile.Version,
+			"bindEndpoint":    bindEndpoint,
+			"currentCertHash": currentCertHash,
+			"nextCertHash":    nextCertHash,
 		}, nil
 	case "pane.list":
 		return map[string]any{"panes": s.panes.List()}, nil
@@ -409,4 +433,26 @@ func (state *sessionState) closePending(err error) {
 	for _, ch := range pending {
 		ch <- appResponse{err: err}
 	}
+}
+
+func (s *Server) UpdateCertificate(cert tls.Certificate) {
+	s.certMu.Lock()
+	defer s.certMu.Unlock()
+	s.cert = &cert
+}
+
+func (s *Server) getActiveCertificate() *tls.Certificate {
+	s.certMu.RLock()
+	defer s.certMu.RUnlock()
+	return s.cert
+}
+
+func (s *Server) GetActiveCertificate() *tls.Certificate {
+	return s.getActiveCertificate()
+}
+
+func (s *Server) UpdateConfig(cfg config.Config) {
+	s.cfgMu.Lock()
+	defer s.cfgMu.Unlock()
+	s.cfg = cfg
 }

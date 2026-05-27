@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/moshtty/moshtty/internal/certs"
@@ -34,6 +35,7 @@ type Runtime struct {
 	healthSrv    *http.Server
 	wtServer     *wtserver.Server
 	socketServer *ctlsocket.Server
+	mu           sync.RWMutex
 }
 
 func PrepareRuntime(paths config.Paths) (Runtime, error) {
@@ -62,6 +64,8 @@ func PrepareRuntime(paths config.Paths) (Runtime, error) {
 }
 
 func (r *Runtime) HealthStatus() HealthStatus {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return HealthStatus{
 		Status:         "ok",
 		RemoteID:       r.Config.RemoteID,
@@ -73,13 +77,18 @@ func (r *Runtime) HealthStatus() HealthStatus {
 }
 
 func (r *Runtime) Run(ctx context.Context) error {
+	r.mu.RLock()
+	bindEndpoint := r.Config.BindEndpoint()
+	cfg := r.Config
+	r.mu.RUnlock()
+
 	tlsCert, err := certs.LoadTLSCertificate(r.Paths.CurrentCertPath())
 	if err != nil {
 		return fmt.Errorf("load webtransport cert: %w", err)
 	}
 
 	wt, err := wtserver.New(wtserver.Options{
-		Config: r.Config,
+		Config: cfg,
 		Token:  r.Token,
 		Cert:   tlsCert,
 	})
@@ -88,12 +97,15 @@ func (r *Runtime) Run(ctx context.Context) error {
 	}
 	r.wtServer = wt
 
+	// Start the certificate rotation background loop
+	go r.certRotationLoop(ctx)
+
 	errCh := make(chan error, 3)
 	go func() {
 		errCh <- r.runHealth()
 	}()
 	go func() {
-		errCh <- wt.ListenAndServe(ctx, r.Config.BindEndpoint())
+		errCh <- wt.ListenAndServe(ctx, bindEndpoint)
 	}()
 
 	if r.SocketPath != "" {
@@ -127,6 +139,10 @@ func (r *Runtime) Run(ctx context.Context) error {
 }
 
 func (r *Runtime) runHealth() error {
+	r.mu.RLock()
+	healthEndpoint := r.Config.HealthEndpoint()
+	r.mu.RUnlock()
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -134,7 +150,7 @@ func (r *Runtime) runHealth() error {
 	})
 
 	r.healthSrv = &http.Server{
-		Addr:              r.Config.HealthEndpoint(),
+		Addr:              healthEndpoint,
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
@@ -144,6 +160,56 @@ func (r *Runtime) runHealth() error {
 		return nil
 	}
 	return err
+}
+
+func (r *Runtime) certRotationLoop(ctx context.Context) {
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			r.checkAndRotateCert()
+		}
+	}
+}
+func (r *Runtime) checkAndRotateCert() {
+	if r.wtServer == nil {
+		return
+	}
+
+	activeCert := r.wtServer.GetActiveCertificate()
+	needsRotation := false
+	if activeCert == nil || activeCert.Leaf == nil {
+		needsRotation = true
+	} else if time.Now().UTC().Add(24 * time.Hour).After(activeCert.Leaf.NotAfter) {
+		needsRotation = true
+	}
+
+	if !needsRotation {
+		return
+	}
+
+	r.mu.Lock()
+	err := ensureCertificates(r.Paths, &r.Config)
+	if err != nil {
+		r.mu.Unlock()
+		fmt.Fprintf(os.Stderr, "cert rotation failed: %v\n", err)
+		return
+	}
+	cfgCopy := r.Config
+	r.mu.Unlock()
+
+	newCert, err := certs.LoadTLSCertificate(r.Paths.CurrentCertPath())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "load rotated cert failed: %v\n", err)
+		return
+	}
+
+	r.wtServer.UpdateCertificate(newCert)
+	r.wtServer.UpdateConfig(cfgCopy)
 }
 
 func CheckHealth(ctx context.Context, endpoint string) (HealthStatus, error) {

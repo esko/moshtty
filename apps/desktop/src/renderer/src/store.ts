@@ -53,6 +53,11 @@ interface AppState {
   closeActiveTab: () => Promise<void>
   setActiveTab: (tabId: string) => Promise<void>
   closeTab: (tabId: string) => Promise<void>
+  updateRemoteCertHashes: (
+    remoteId: string,
+    currentCertHash: string,
+    nextCertHash: string
+  ) => Promise<void>
 }
 
 function getMoshttyApi(): Window['moshtty'] {
@@ -807,6 +812,32 @@ export const useAppStore = create<AppState>((set, get) => ({
       tabs: snapshot.state.tabs.filter((t) => t.id !== tabId),
       panes: snapshot.state.panes.filter((pane) => !paneIds.includes(pane.id)),
       layouts: snapshot.state.layouts.filter((layout) => layout.tabId !== tabId)
+    })
+
+    set({ snapshot: { ...snapshot, state: nextState } })
+    await get().saveWorkspace()
+  },
+
+  updateRemoteCertHashes: async (
+    remoteId: string,
+    currentCertHash: string,
+    nextCertHash: string
+  ) => {
+    const snapshot = get().snapshot
+    if (!snapshot) {
+      return
+    }
+
+    const remote = snapshot.state.remotes.find((r) => r.id === remoteId)
+    if (!remote) {
+      return
+    }
+
+    const nextState = withUpdatedTimestamp({
+      ...snapshot.state,
+      remotes: snapshot.state.remotes.map((r) =>
+        r.id === remoteId ? { ...r, currentCertHash, nextCertHash } : r
+      )
     })
 
     set({ snapshot: { ...snapshot, state: nextState } })

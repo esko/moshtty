@@ -89,3 +89,30 @@ func TestSaveAndHashFile(t *testing.T) {
 		t.Fatalf("expected certificate pem block")
 	}
 }
+
+func TestLoadTLSCertificate(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cert.pem")
+
+	genCert, err := certs.GenerateDefault(time.Now().UTC())
+	if err != nil {
+		t.Fatalf("generate default: %v", err)
+	}
+	if err := certs.SavePEM(path, genCert); err != nil {
+		t.Fatalf("save pem: %v", err)
+	}
+
+	loadedCert, err := certs.LoadTLSCertificate(path)
+	if err != nil {
+		t.Fatalf("load tls certificate: %v", err)
+	}
+
+	if loadedCert.Leaf == nil {
+		t.Fatal("expected Leaf to be populated, but it was nil")
+	}
+
+	// Verify that the loaded leaf matches the generated cert
+	if loadedCert.Leaf.SerialNumber.Cmp(genCert.Cert.SerialNumber) != 0 {
+		t.Errorf("serial number mismatch: got %v, want %v", loadedCert.Leaf.SerialNumber, genCert.Cert.SerialNumber)
+	}
+}

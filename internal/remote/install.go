@@ -8,7 +8,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"text/template"
+	"time"
 
+	"github.com/moshtty/moshtty/internal/certs"
 	"github.com/moshtty/moshtty/internal/config"
 )
 
@@ -180,23 +182,104 @@ func ensureCertificates(paths config.Paths, cfg *config.Config) error {
 		return statErr
 	}
 
-	currentHash, err := configCertHash(currentPath)
+	// Check if current cert is expired or expiring in < 24 hours
+	currentTLSCert, err := certs.LoadTLSCertificate(currentPath)
+	needsRotation := false
 	if err != nil {
-		return err
+		needsRotation = true
+	} else if currentTLSCert.Leaf == nil || time.Now().UTC().Add(24*time.Hour).After(currentTLSCert.Leaf.NotAfter) {
+		needsRotation = true
 	}
-	cfg.Cert.CurrentPath = currentPath
-	cfg.Cert.CurrentHash = currentHash
 
-	if _, err := os.Stat(nextPath); err == nil {
+	if needsRotation {
+		if err := rotateAndPromoteCertificates(paths, cfg); err != nil {
+			return err
+		}
+	} else {
+		currentHash, err := configCertHash(currentPath)
+		if err != nil {
+			return err
+		}
+		cfg.Cert.CurrentPath = currentPath
+		cfg.Cert.CurrentHash = currentHash
+		cfg.Cert.NotAfter = currentTLSCert.Leaf.NotAfter
+
+		if _, err := os.Stat(nextPath); os.IsNotExist(err) {
+			if _, err := generateAndSave(nextPath); err != nil {
+				return err
+			}
+		}
+
 		nextHash, hashErr := configCertHash(nextPath)
 		if hashErr != nil {
 			return hashErr
 		}
-		cfg.Cert.NextPath = nextPath
-		cfg.Cert.NextHash = nextHash
+		nextTLSCert, loadErr := certs.LoadTLSCertificate(nextPath)
+		if loadErr == nil && nextTLSCert.Leaf != nil {
+			cfg.Cert.NextPath = nextPath
+			cfg.Cert.NextHash = nextHash
+			cfg.Cert.NextNotAfter = nextTLSCert.Leaf.NotAfter
+		}
 	}
 
 	return config.Save(paths.ConfigPath(), *cfg)
+}
+
+func rotateAndPromoteCertificates(paths config.Paths, cfg *config.Config) error {
+	nextPath := paths.NextCertPath()
+	currentPath := paths.CurrentCertPath()
+
+	var nextValid bool
+	if nextTLSCert, err := certs.LoadTLSCertificate(nextPath); err == nil {
+		if nextTLSCert.Leaf != nil && time.Now().UTC().Add(24*time.Hour).Before(nextTLSCert.Leaf.NotAfter) {
+			nextValid = true
+		}
+	}
+
+	if nextValid {
+		// Promote next to current
+		if err := os.Rename(nextPath, currentPath); err != nil {
+			return fmt.Errorf("failed to promote next cert: %w", err)
+		}
+	} else {
+		// Generate new current
+		if _, err := generateAndSave(currentPath); err != nil {
+			return fmt.Errorf("failed to generate current cert: %w", err)
+		}
+	}
+
+	// Generate new next
+	if _, err := generateAndSave(nextPath); err != nil {
+		return fmt.Errorf("failed to generate next cert: %w", err)
+	}
+
+	currentHash, err := configCertHash(currentPath)
+	if err != nil {
+		return err
+	}
+	currentTLS, err := certs.LoadTLSCertificate(currentPath)
+	if err != nil {
+		return err
+	}
+
+	nextHash, err := configCertHash(nextPath)
+	if err != nil {
+		return err
+	}
+	nextTLS, err := certs.LoadTLSCertificate(nextPath)
+	if err != nil {
+		return err
+	}
+
+	cfg.Cert.CurrentPath = currentPath
+	cfg.Cert.CurrentHash = currentHash
+	cfg.Cert.NotAfter = currentTLS.Leaf.NotAfter
+
+	cfg.Cert.NextPath = nextPath
+	cfg.Cert.NextHash = nextHash
+	cfg.Cert.NextNotAfter = nextTLS.Leaf.NotAfter
+
+	return nil
 }
 
 func rotateCertificates(paths config.Paths, cfg *config.Config) error {

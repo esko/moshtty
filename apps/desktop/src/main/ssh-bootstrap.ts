@@ -116,6 +116,23 @@ function compileBinary(
   })
 }
 
+export async function downloadBinary(
+  component: 'moshtty-remote' | 'moshttyctl',
+  goos: string,
+  goarch: string,
+  destPath: string
+): Promise<void> {
+  const url = `https://github.com/moshtty/moshtty/releases/latest/download/${component}-${goos}-${goarch}`
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(
+      `Failed to download binary from ${url}: ${response.status} ${response.statusText}`
+    )
+  }
+  const arrayBuffer = await response.arrayBuffer()
+  fs.writeFileSync(destPath, Buffer.from(arrayBuffer))
+}
+
 export async function sshBootstrap(config: SshBootstrapConfig): Promise<SshBootstrapResult> {
   const tempDir = join(app.getPath('userData'), 'ssh-bootstrap-temp')
   if (!fs.existsSync(tempDir)) {
@@ -173,16 +190,14 @@ export async function sshBootstrap(config: SshBootstrapConfig): Promise<SshBoots
         prebuiltCtl = join(resourcesPath, `moshttyctl-${goos}-${goarch}`)
       }
 
-      if (!fs.existsSync(prebuiltRemote)) {
-        throw new Error(`Bundled remote companion binary not found: ${prebuiltRemote}`)
+      if (!fs.existsSync(prebuiltRemote) || !fs.existsSync(prebuiltCtl)) {
+        await downloadBinary('moshtty-remote', goos, goarch, localRemotePath)
+        await downloadBinary('moshttyctl', goos, goarch, localCtlPath)
+      } else {
+        // Copy to target local paths
+        fs.writeFileSync(localRemotePath, child_process.execSync(`cat "${prebuiltRemote}"`))
+        fs.writeFileSync(localCtlPath, child_process.execSync(`cat "${prebuiltCtl}"`))
       }
-      if (!fs.existsSync(prebuiltCtl)) {
-        throw new Error(`Bundled remote CLI binary not found: ${prebuiltCtl}`)
-      }
-
-      // Copy to target local paths
-      fs.writeFileSync(localRemotePath, child_process.execSync(`cat "${prebuiltRemote}"`))
-      fs.writeFileSync(localCtlPath, child_process.execSync(`cat "${prebuiltCtl}"`))
     }
 
     // 2. Upload binaries to remote host

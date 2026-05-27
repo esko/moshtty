@@ -43,9 +43,11 @@ func LoadTLSCertificate(path string) (tls.Certificate, error) {
 		return tls.Certificate{}, fmt.Errorf("load tls certificate: %w", err)
 	}
 
-	if _, err := x509.ParseCertificate(certDER); err != nil {
+	leaf, err := x509.ParseCertificate(certDER)
+	if err != nil {
 		return tls.Certificate{}, fmt.Errorf("parse certificate: %w", err)
 	}
+	cert.Leaf = leaf
 
 	return cert, nil
 }

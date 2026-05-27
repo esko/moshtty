@@ -1,5 +1,5 @@
 import { describe, expect, test, vi, beforeEach } from 'vitest'
-import { sshBootstrap } from './ssh-bootstrap'
+import { sshBootstrap, downloadBinary } from './ssh-bootstrap'
 import child_process from 'child_process'
 import { Writable } from 'stream'
 import fs from 'fs'
@@ -284,7 +284,14 @@ describe('sshBootstrap', () => {
     expect(result.error).toMatch(/Permission denied/)
   })
 
-  test('returns error when go is not available and prebuilt binaries are missing', async () => {
+  test('returns error when go is not available, prebuilt binaries are missing, and download fails', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found'
+    })
+    vi.stubGlobal('fetch', mockFetch)
+
     const mockSpawn = vi.fn().mockImplementation((_, args) => {
       const command = args[args.length - 1]
       const child = {
@@ -333,6 +340,105 @@ describe('sshBootstrap', () => {
     const result = await sshBootstrap(config)
 
     expect(result.success).toBe(false)
-    expect(result.error).toContain('Bundled remote companion binary not found')
+    expect(result.error).toContain('Failed to download binary from')
+    vi.unstubAllGlobals()
+  })
+
+  test('downloadBinary fetches and writes the binary to destPath', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      arrayBuffer: async () => new TextEncoder().encode('downloaded binary data').buffer
+    })
+    vi.stubGlobal('fetch', mockFetch)
+
+    const destPath = '/tmp/moshtty-test-userdata/downloaded-test-bin'
+    if (fs.existsSync(destPath)) {
+      fs.unlinkSync(destPath)
+    }
+
+    await downloadBinary('moshtty-remote', 'linux', 'amd64', destPath)
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://github.com/moshtty/moshtty/releases/latest/download/moshtty-remote-linux-amd64'
+    )
+    expect(fs.readFileSync(destPath, 'utf8')).toBe('downloaded binary data')
+
+    if (fs.existsSync(destPath)) {
+      fs.unlinkSync(destPath)
+    }
+    vi.unstubAllGlobals()
+  })
+
+  test('sshBootstrap falls back to downloading when go is not available and prebuilt binaries are missing', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      arrayBuffer: async () => new TextEncoder().encode('downloaded mock content').buffer
+    })
+    vi.stubGlobal('fetch', mockFetch)
+
+    const mockSpawn = vi.fn().mockImplementation((_, args) => {
+      const command = args[args.length - 1]
+      const child = {
+        stdout: {
+          on: vi.fn().mockImplementation((event, callback) => {
+            if (event === 'data') {
+              if (command.includes('uname')) {
+                process.nextTick(() => callback(Buffer.from('Linux\nx86_64\n')))
+              } else if (command.includes('profile')) {
+                process.nextTick(() =>
+                  callback(Buffer.from('{"remoteId": "linux-dl", "hostLabel": "Linux DL"}'))
+                )
+              } else {
+                process.nextTick(() => callback(Buffer.from('')))
+              }
+            }
+          })
+        },
+        stderr: {
+          on: vi.fn()
+        },
+        stdin: new Writable({
+          write(_chunk, _encoding, callback) {
+            callback()
+          }
+        }),
+        on: vi.fn().mockImplementation((event, callback) => {
+          if (event === 'close') {
+            process.nextTick(() => callback(0))
+          }
+        })
+      }
+      return child
+    })
+
+    vi.mocked(child_process.spawn).mockImplementation(mockSpawn as never)
+    vi.mocked(child_process.execSync).mockImplementation(() => {
+      throw new Error('go not found')
+    })
+
+    const config = {
+      host: '10.0.0.9',
+      port: 22,
+      username: 'esko',
+      authType: 'key' as const,
+      keyPath: '~/.ssh/id_ed25519',
+      destination: '/tmp/moshtty-test-userdata/dest/moshtty-remote'
+    }
+
+    const result = await sshBootstrap(config)
+
+    expect(result.error).toBeUndefined()
+    expect(result.success).toBe(true)
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      1,
+      'https://github.com/moshtty/moshtty/releases/latest/download/moshtty-remote-linux-amd64'
+    )
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      'https://github.com/moshtty/moshtty/releases/latest/download/moshttyctl-linux-amd64'
+    )
+
+    vi.unstubAllGlobals()
   })
 })
