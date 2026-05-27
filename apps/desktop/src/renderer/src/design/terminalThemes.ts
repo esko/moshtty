@@ -49,7 +49,7 @@ export const TERMINAL_COLOR_SCHEMES: Record<
     dark: true,
     background: '#121214',
     foreground: '#e2e2e8',
-    cursor: '#a5b4fc',
+    cursor: '#e2e2e8',
     selectionBackground: '#2a2a30',
     ansi: [
       '#1e1e24',
@@ -75,8 +75,8 @@ export const TERMINAL_COLOR_SCHEMES: Record<
     dark: false,
     background: '#ffffff',
     foreground: '#1a1a2e',
-    cursor: '#4f46e5',
-    selectionBackground: '#e0e7ff',
+    cursor: '#1a1a2e',
+    selectionBackground: '#e5e5e8',
     ansi: [
       '#1e1e2e',
       '#b91c1c',
@@ -248,6 +248,7 @@ export function terminalSchemeToGhosttyTheme(scheme: TerminalColorScheme): {
   background: string
   foreground: string
   cursor: string
+  cursorAccent: string
   selectionBackground: string
   black: string
   red: string
@@ -270,6 +271,7 @@ export function terminalSchemeToGhosttyTheme(scheme: TerminalColorScheme): {
     background: scheme.background,
     foreground: scheme.foreground,
     cursor: scheme.cursor,
+    cursorAccent: scheme.background,
     selectionBackground: scheme.selectionBackground,
     black: scheme.ansi[0],
     red: scheme.ansi[1],

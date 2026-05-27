@@ -1,6 +1,12 @@
 import { test, expect } from './playwright.setup'
 
 test.describe('Dashboard', () => {
+  test('matches sidebar project row hover screenshot', async ({ loadFixture, page }) => {
+    await loadFixture('dashboard')
+    await page.locator('.project-item-row').first().hover()
+    await expect(page.locator('.sidebar')).toHaveScreenshot('sidebar-project-row-hover.png')
+  })
+
   test('renders the sidebar', async ({ page }) => {
     await expect(page.locator('.sidebar')).toBeVisible()
     await expect(page.locator('.brand-badge')).toHaveCount(0)

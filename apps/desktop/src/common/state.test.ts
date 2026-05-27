@@ -147,7 +147,7 @@ describe('Moshtty state helpers', () => {
       nextCertHash: 'next'
     })
     expect(state.projects[0]).toMatchObject({
-      color: '#4f46e5',
+      color: '#64646c',
       tabIds: ['tab-1'],
       activeTabId: null
     })

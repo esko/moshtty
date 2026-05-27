@@ -1,22 +1,19 @@
 import { test, expect } from './playwright.setup'
+
+// Requires live SSH to host `macmini` — not a CI gate.
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-test('E2E target SSH bootstrap verification against macmini', async ({ page }) => {
-  // 1. Wait for Sidebar page to load
-  await page.waitForLoadState('domcontentloaded')
+test('E2E target SSH bootstrap verification against macmini', async ({ loadFixture, page }) => {
+  await loadFixture('dialog-project-edit')
   console.log('App loaded. URL:', page.url())
 
-  // 2. Open Bootstrap Remote dialog via the project edit modal
-  //    (8d.3 removed the sidebar header bootstrap button; the project dialog
-  //    Install/Update button is now the only entry point to BootstrapDialog.)
-  console.log('Opening project edit dialog to reach Bootstrap...')
-  const renameBtn = page.locator('button[aria-label^="Rename "]').first()
-  await renameBtn.waitFor({ state: 'visible' })
-  await renameBtn.click()
+  // Bootstrap is opened from the project preferences dialog (8d.4).
+  console.log('Opening Bootstrap from project dialog...')
+  await expect(page.locator('.project-dialog')).toBeVisible()
 
   console.log('Clicking Install/Update to open BootstrapDialog...')
   const bootstrapBtn = page.locator('button[data-action-id="open-bootstrap-dialog"]')
@@ -38,14 +35,14 @@ test('E2E target SSH bootstrap verification against macmini', async ({ page }) =
   await page.fill('input[placeholder="username"]', 'esko')
   await page.fill('input[placeholder="~/.ssh/id_rsa"]', '/home/esko/.ssh/id_rsa')
 
+  await page.fill('input[placeholder="~/.local/bin/moshtty-remote"]', '~/.local/bin/moshtty-remote')
+
   const passphraseInput = page.locator(
     'input[placeholder="Passphrase to encrypt companion access token"]'
   )
-  if (await passphraseInput.isVisible()) {
+  if ((await passphraseInput.count()) > 0) {
     await passphraseInput.fill('mysecurepassphrase')
   }
-
-  await page.fill('input[placeholder="~/.local/bin/moshtty-remote"]', '~/.local/bin/moshtty-remote')
 
   // Save filled form screenshot
   await page.screenshot({ path: path.join(__dirname, 'bootstrap-2-filled.png') })

@@ -55,7 +55,26 @@ export const BootstrapDialog: React.FC<BootstrapDialogProps> = ({
   const [errorText, setErrorText] = useState('')
   const [currentStep, setCurrentStep] = useState(0)
 
-  const needsPassphrase = secretMode === 'passphrase' || secretMode === 'unavailable'
+  const [fetchedSecretMode, setFetchedSecretMode] = useState<string | null>(null)
+  useEffect(() => {
+    if (secretMode != null) {
+      return
+    }
+    let cancelled = false
+    void window.moshtty.getSecretStorageInfo().then((info) => {
+      if (!cancelled) {
+        setFetchedSecretMode(info.mode)
+      }
+    })
+    return (): void => {
+      cancelled = true
+    }
+  }, [secretMode])
+
+  const resolvedSecretMode = secretMode ?? fetchedSecretMode
+
+  const needsPassphrase =
+    resolvedSecretMode === 'passphrase' || resolvedSecretMode === 'unavailable'
 
   // Handle step updates during running phase
   useEffect(() => {

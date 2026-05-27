@@ -26,7 +26,7 @@ function renderDialogs(
         secretMode={null}
         visibleDialog={visibleDialog}
         closeDialog={closeDialog}
-        openDialog={openDialog}
+        openDialog={openDialog ?? vi.fn()}
         liveStatus={liveStatus}
         actionTitle={actionTitle}
         terminalMode="light"
@@ -68,7 +68,7 @@ describe('Project preferences dialog', () => {
 
     expect(container.querySelectorAll('.project-section')).toHaveLength(3)
     expect(container.textContent).toContain('Remote server')
-    expect(container.textContent).toContain('Profile import')
+    expect(container.textContent).toContain('Paste profile JSON')
     const pill = container.querySelector('.project-status-pill')
     expect(pill?.getAttribute('data-status')).toBe('lost')
     expect(pill?.textContent).toContain('Not configured')
@@ -198,6 +198,7 @@ describe('Project edit dialog', () => {
             projectId: 'project-welcome'
           }}
           closeDialog={closeDialog}
+          openDialog={vi.fn()}
           actionTitle={actionTitle}
           terminalMode="light"
         />
@@ -223,6 +224,7 @@ describe('Project edit dialog', () => {
             projectId: 'project-welcome'
           }}
           closeDialog={closeDialog}
+          openDialog={vi.fn()}
           actionTitle={actionTitle}
           terminalMode="light"
         />

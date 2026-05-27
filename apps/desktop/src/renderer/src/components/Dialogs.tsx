@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react'
+import React, { useState } from 'react'
 import { useAppStore } from '../store'
 import type { MoshttyRemote } from '../../../common/state'
 import { XIcon, GearIcon, KeyboardIcon } from '../design/icons'
@@ -22,7 +22,7 @@ interface DialogsProps {
   actionTitle: (actionId: import('../keymap').AppActionId) => string
   terminalMode: string
   liveStatus?: MoshttyRemote['status'] | null
-  openDialog?: (dialog: AppDialog) => void
+  openDialog: (dialog: AppDialog) => void
 }
 
 export const Dialogs: React.FC<DialogsProps> = ({
@@ -33,40 +33,13 @@ export const Dialogs: React.FC<DialogsProps> = ({
   actionTitle,
   terminalMode,
   liveStatus = null,
-  openDialog: openDialogProp
+  openDialog
 }) => {
   const addProject = useAppStore((state) => state.addProject)
   const renameProject = useAppStore((s) => s.renameProject)
   const importRemoteProfile = useAppStore((state) => state.importRemoteProfile)
-  const [stackedDialog, setStackedDialog] = useState<AppDialog | null>(null)
-  const [trackedVisibleDialog, setTrackedVisibleDialog] = useState<AppDialog | null>(visibleDialog)
-  if (trackedVisibleDialog !== visibleDialog) {
-    setTrackedVisibleDialog(visibleDialog)
-    if (stackedDialog !== null) {
-      setStackedDialog(null)
-    }
-  }
-
-  const openDialog = useCallback(
-    (dialog: AppDialog): void => {
-      if (openDialogProp) {
-        openDialogProp(dialog)
-      } else {
-        setStackedDialog(dialog)
-      }
-    },
-    [openDialogProp]
-  )
-
-  const dismissDialog = useCallback((): void => {
-    if (stackedDialog) {
-      setStackedDialog(null)
-    } else {
-      closeDialog()
-    }
-  }, [stackedDialog, closeDialog])
-
-  const activeDialog = stackedDialog ?? visibleDialog
+  const dismissDialog = closeDialog
+  const activeDialog = visibleDialog
 
   if (!activeDialog) {
     return null
@@ -261,7 +234,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = ({
             <div className="settings-row">
               <div>
                 <strong>Color</strong>
-                <span>Accent for the project chip</span>
+                <span>Chip color in the sidebar</span>
               </div>
               <div className="project-chip-editor">
                 <div className="large-chip">{(name || '').charAt(0).toUpperCase() || 'M'}</div>
@@ -269,7 +242,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = ({
                   <button
                     className="swatch active"
                     type="button"
-                    aria-label="Use accent color"
+                    aria-label="Use default color"
                     data-action-id="choose-project-color"
                   />
                   <button
@@ -319,7 +292,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = ({
             <h3>Profile import</h3>
             <div className="settings-row">
               <div>
-                <strong>Profile import</strong>
+                <strong>Paste profile JSON</strong>
                 <span>Paste a Moshtty profile to seed this project.</span>
               </div>
               <button

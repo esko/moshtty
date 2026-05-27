@@ -183,7 +183,7 @@ function normalizeProject(value: unknown): MoshttyProject | null {
 
   const id = asString(value.id, '')
   const name = asString(value.name, '')
-  const color = asString(value.color, '#4f46e5')
+  const color = asString(value.color, '#64646c')
   if (!id || !name) {
     return null
   }
@@ -368,7 +368,7 @@ export function createSampleState(now: string | Date = new Date()): MoshttyState
       {
         id: 'project-welcome',
         name: 'Welcome',
-        color: '#4f46e5',
+        color: '#64646c',
         remoteId: 'remote-placeholder',
         tabIds: ['tab-welcome'],
         activeTabId: 'tab-welcome'

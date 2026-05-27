@@ -148,8 +148,8 @@
   justify-content: center;
   width: 48px;
   height: 48px;
-  background-color: var(--color-accent-soft);
-  color: var(--color-accent);
+  background-color: var(--color-sidebar-bg-active);
+  color: var(--color-text-main);
   border-radius: var(--radius-md);
   font-family: var(--font-family-ui);
   font-size: var(--font-size-title, 16px);
@@ -167,14 +167,13 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  margin-top: var(--space-sm);
 }
 
 .swatch {
   width: var(--density-control-height);
   height: var(--density-control-height);
   padding: 0;
-  background: var(--color-accent-soft);
+  background: var(--color-sidebar-bg-active);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   cursor: pointer;
@@ -182,7 +181,7 @@
 
 .swatch.active {
   border-color: var(--color-text-main);
-  outline: 2px solid var(--color-focus);
+  outline: 2px solid var(--color-text-main);
 }
 
 .swatch.muted {
@@ -300,7 +299,7 @@
   border-bottom: 0;
 }
 
-.settings-row div {
+.settings-row > div:first-child {
   display: grid;
   gap: var(--space-xs);
 }

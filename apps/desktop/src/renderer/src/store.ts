@@ -286,7 +286,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         {
           id: projectId,
           name: trimmedName,
-          color: '#4f46e5',
+          color: '#64646c',
           remoteId: null,
           tabIds: [tabId],
           activeTabId: tabId

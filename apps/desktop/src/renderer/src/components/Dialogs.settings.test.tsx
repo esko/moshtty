@@ -33,6 +33,7 @@ describe('SettingsDialog', () => {
           secretMode={null}
           visibleDialog={{ kind: 'settings' }}
           closeDialog={(): void => undefined}
+          openDialog={(): void => undefined}
           actionTitle={actionTitle}
           terminalMode="light"
         />

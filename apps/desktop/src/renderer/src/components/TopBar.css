@@ -5,6 +5,7 @@
   height: var(--density-topbar-height, 40px);
   background-color: var(--color-app-bg);
   padding: 0 var(--space-sm, 8px);
+  overflow: hidden;
   user-select: none;
   -webkit-app-region: drag;
 }
@@ -53,7 +54,7 @@
 .tab-strip-scroll {
   flex: 1;
   min-width: 0;
-  overflow-x: auto;
+  overflow: auto hidden;
   scrollbar-width: none;
 }
 

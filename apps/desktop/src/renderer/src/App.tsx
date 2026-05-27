@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   getActiveProject,
   getActiveTab,
@@ -141,6 +141,10 @@ function App(): React.JSX.Element {
   const fixtureId = getFixtureId()
   const fixture = fixtureId ? getFixture(fixtureId) : undefined
   const [activeDialog, setActiveDialog] = useState<AppDialog | null>(null)
+  const [stackState, setStackState] = useState<{
+    anchor: string
+    dialog: AppDialog
+  } | null>(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [paletteSession, setPaletteSession] = useState(0)
   const snapshot = useAppStore((state) => state.snapshot)
@@ -170,12 +174,35 @@ function App(): React.JSX.Element {
     : getRemoteStatusLabel(remote?.status)
   const dashboardMode = !activeTab || fixtureId?.startsWith('dashboard')
   const fixtureDialog = getFixtureDialog(fixtureId)
-  const visibleDialog = fixtureDialog ?? activeDialog
-  const closeDialog = useCallback((): void => setActiveDialog(null), [setActiveDialog])
-  const openDialog = useCallback(
-    (dialog: AppDialog): void => setActiveDialog(dialog),
-    [setActiveDialog]
-  )
+  const rootDialog = fixtureDialog ?? activeDialog
+  const stackAnchor = `${fixtureId ?? ''}:${activeDialog?.kind ?? ''}:${
+    activeDialog?.kind === 'project' ? activeDialog.projectId : ''
+  }`
+  const stackedDialog =
+    stackState !== null && stackState.anchor === stackAnchor ? stackState.dialog : null
+  const visibleDialog = stackedDialog ?? rootDialog
+
+  const closeDialog = (): void => {
+    if (stackedDialog) {
+      setStackState(null)
+      return
+    }
+    setActiveDialog(null)
+  }
+
+  const openDialog = (dialog: AppDialog): void => {
+    const root = fixtureDialog ?? activeDialog
+    if (
+      stackedDialog === null &&
+      root?.kind === 'project' &&
+      (dialog.kind === 'bootstrap' || dialog.kind === 'import')
+    ) {
+      setStackState({ anchor: stackAnchor, dialog })
+      return
+    }
+    setStackState(null)
+    setActiveDialog(dialog)
+  }
 
   useEffect(() => {
     if (!fixture) {
@@ -349,8 +376,10 @@ function App(): React.JSX.Element {
         secretMode={snapshot?.secretInfo?.mode ?? null}
         visibleDialog={visibleDialog}
         closeDialog={closeDialog}
+        openDialog={openDialog}
         actionTitle={actionTitle}
         terminalMode={terminalMode}
+        liveStatus={liveStatus}
       />
     </div>
   )

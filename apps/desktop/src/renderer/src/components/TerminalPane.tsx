@@ -6,6 +6,11 @@ import type { MoshttyTransport } from '../transport/moshtty-transport'
 import type { MoshConnectionManager } from '../mosh-connection-manager'
 import { MoshClient } from '../mosh-client-wrapper'
 import { useAppStore } from '../store'
+import {
+  loadTerminalColorSchemeKey,
+  resolveTerminalColorScheme,
+  terminalSchemeToGhosttyTheme
+} from '../design/terminalThemes'
 
 interface TerminalPaneProps {
   pane: MoshttyPane
@@ -55,20 +60,11 @@ export function TerminalPane({
         const cols = pane.cols || 120
         const rows = pane.rows || 32
 
-        const theme =
+        const scheme = resolveTerminalColorScheme(
+          loadTerminalColorSchemeKey(),
           terminalMode === 'dark'
-            ? {
-                background: '#121214',
-                foreground: '#e2e2e8',
-                cursor: '#a5b4fc',
-                selectionBackground: '#2a2a30'
-              }
-            : {
-                background: '#1e1e24',
-                foreground: '#f0f0f4',
-                cursor: '#4f46e5',
-                selectionBackground: '#2e2e34'
-              }
+        )
+        const theme = terminalSchemeToGhosttyTheme(scheme)
 
         const options: ITerminalOptions = {
           cols,

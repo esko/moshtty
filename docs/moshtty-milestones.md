@@ -292,9 +292,9 @@ Agent brief:
 
 ## M8b UI Polish
 
-Status: In progress
+Status: Done
 
-Note: 2026-05-27 audit (`docs/visual-qa/8b/M8b-design-gap-assessment.md`) found reference-parity gaps. Remaining work is scoped to **M8c UI Followup** below.
+Note: Closed 2026-05-27 after M8c/M8d/M9b and follow-up slice. Design checkup `docs/moshtty-design-checkup-m8b-2026-05-27.md` (all vital signs ≥ 8). Monochrome app chrome tokens, neutral primary buttons, edge-to-edge terminal workspace, tab ARIA fix, dialog stack, bootstrap e2e via project dialog.
 
 Objective:
 
@@ -332,7 +332,7 @@ Agent brief:
 
 ## M8c UI Followup
 
-Status: Planned
+Status: Done
 
 Objective:
 
@@ -353,7 +353,7 @@ Acceptance:
 - All seven sub-slices land as separate atomic conventional commits.
 - `pnpm verify:full` passes after 8c.6.
 - Live agent-browser captures for `topbar-icons-order`, `tab-close-always-visible`, `pane-hover-pills`, `pane-light-no-gutter`, `project-edit-modal` all exist under `docs/visual-qa/8b/live-audit/`.
-- M8b row moves from `In progress` to `Done` once 8c.6 ships and the design-checkup rubric in `docs/moshtty-design-checkup.md` is re-scored. 8c.6 baselines landed 2026-05-27 against the M8d-corrected look; the design-checkup re-score and the pre-existing offline-pill contrast token fix remain before `Done`.
+- M8b row moved to `Done` 2026-05-27 after 8c.6 baselines, M8d corrections, design-checkup re-score (`docs/moshtty-design-checkup-m8b-2026-05-27.md`), and task-10 subtle-contrast tokens.
 
 Agent brief:
 
@@ -361,7 +361,7 @@ Agent brief:
 
 ## M8d UI Corrections
 
-Status: Ready for review
+Status: Done
 
 Note: M8c slices (8c.1–8c.7) landed on the diff level but the 2026-05-27 live audit (`docs/visual-qa/8b/live-audit/m8c/`) revealed real spec drift: tab project chips are illegible, Ghostty canvas underfills the pane (CSS-only fix in 8c.2 was overridden by inline canvas styles), overflow icon should be a hamburger, info pill carries redundant title + status text, pane pills should be glass, sidebar bootstrap/import buttons belong in the project dialog, project dialog should feel like preferences.
 
@@ -394,7 +394,7 @@ Agent brief:
 
 ## M9b Command Palette
 
-Status: Ready for review
+Status: Done
 
 Objective:
 
