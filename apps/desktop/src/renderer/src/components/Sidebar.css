@@ -156,3 +156,79 @@
   outline: 2px solid var(--color-focus);
   outline-offset: -2px;
 }
+
+/* Project row with hover-revealed actions */
+.project-item-row {
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-md, 6px);
+  position: relative;
+}
+
+.project-item-row .project-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.project-item-row.active .project-item {
+  background-color: var(--color-sidebar-bg-active);
+}
+
+.project-item-actions {
+  display: none;
+  gap: var(--space-2xs, 2px);
+  padding-right: var(--space-xs, 4px);
+  flex-shrink: 0;
+}
+
+.project-item-row:hover .project-item-actions {
+  display: flex;
+}
+
+.project-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--easing-standard),
+    color var(--duration-fast) var(--easing-standard);
+}
+
+.project-action-btn:hover {
+  background-color: var(--color-sidebar-bg-active);
+  color: var(--color-text-main);
+}
+
+.project-action-btn.danger:hover {
+  background-color: color-mix(in srgb, var(--color-danger) 10%, transparent);
+  color: var(--color-danger);
+}
+
+/* Inline rename row */
+.project-rename-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm, 8px);
+  flex: 1;
+  padding: 0 var(--space-sm, 8px);
+  height: var(--density-row-height, 32px);
+}
+
+.project-rename-input {
+  flex: 1;
+  background: var(--color-input-bg, var(--color-sidebar-bg-active));
+  border: 1px solid var(--color-focus);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-main);
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-body, 13px);
+  padding: var(--space-2xs) var(--space-xs, 4px);
+  outline: none;
+}

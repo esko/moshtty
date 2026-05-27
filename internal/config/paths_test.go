@@ -43,6 +43,22 @@ func TestPathsResolution(t *testing.T) {
 			name: "application support",
 			got:  paths.ApplicationSupportDir(),
 			want: filepath.Join(home, "Library", "Application Support", "Moshtty"),
+		}, struct {
+			name string
+			got  string
+			want string
+		}{
+			name: "user service dir macos",
+			got:  paths.UserServiceDir(),
+			want: filepath.Join(home, "Library", "LaunchAgents"),
+		}, struct {
+			name string
+			got  string
+			want string
+		}{
+			name: "user service path macos",
+			got:  paths.UserServicePath(),
+			want: filepath.Join(home, "Library", "LaunchAgents", "com.moshtty.remote.plist"),
 		})
 	} else {
 		tests = append(tests, struct {
@@ -53,6 +69,22 @@ func TestPathsResolution(t *testing.T) {
 			name: "application support fallback",
 			got:  paths.ApplicationSupportDir(),
 			want: filepath.Join(home, ".local", "share", "moshtty"),
+		}, struct {
+			name string
+			got  string
+			want string
+		}{
+			name: "user service dir linux",
+			got:  paths.UserServiceDir(),
+			want: filepath.Join(home, ".config", "systemd", "user"),
+		}, struct {
+			name string
+			got  string
+			want string
+		}{
+			name: "user service path linux",
+			got:  paths.UserServicePath(),
+			want: filepath.Join(home, ".config", "systemd", "user", "moshtty-remote.service"),
 		})
 	}
 

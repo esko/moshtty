@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useRef, useState } from 'react'
 import { useAppStore } from '../store'
 import { HamburgerIcon, PlusIcon, XIcon } from '../design/icons'
 import { WindowControls } from './WindowControls'
@@ -12,10 +12,15 @@ interface TopBarProps {
 }
 
 export const TopBar: React.FC<TopBarProps> = ({ state, liveStatus, remoteStatus, remote }) => {
-  const addTab = useAppStore((state) => state.addTab)
-  const setActiveTab = useAppStore((state) => state.setActiveTab)
-  const closeTab = useAppStore((state) => state.closeTab)
-  const toggleProjectRail = useAppStore((state) => state.toggleProjectRail)
+  const addTab = useAppStore((s) => s.addTab)
+  const setActiveTab = useAppStore((s) => s.setActiveTab)
+  const closeTab = useAppStore((s) => s.closeTab)
+  const toggleProjectRail = useAppStore((s) => s.toggleProjectRail)
+  const renameTab = useAppStore((s) => s.renameTab)
+
+  const [editingTabId, setEditingTabId] = useState<string | null>(null)
+  const [editingTitle, setEditingTitle] = useState('')
+  const tabInputRef = useRef<HTMLInputElement>(null)
 
   const activeProjectId = state?.activeProjectId
   const activeProject = state?.projects.find((p) => p.id === activeProjectId)
@@ -26,6 +31,27 @@ export const TopBar: React.FC<TopBarProps> = ({ state, liveStatus, remoteStatus,
 
   const handleNewTab = (): void => {
     addTab('Shell').catch(console.error)
+  }
+
+  const startTabRename = (tabId: string, currentTitle: string): void => {
+    setEditingTabId(tabId)
+    setEditingTitle(currentTitle)
+    setTimeout(() => tabInputRef.current?.focus(), 0)
+  }
+
+  const commitTabRename = (tabId: string): void => {
+    if (editingTitle.trim()) {
+      renameTab(tabId, editingTitle).catch(console.error)
+    }
+    setEditingTabId(null)
+  }
+
+  const handleTabRenameKeyDown = (e: React.KeyboardEvent, tabId: string): void => {
+    if (e.key === 'Enter') {
+      commitTabRename(tabId)
+    } else if (e.key === 'Escape') {
+      setEditingTabId(null)
+    }
   }
 
   return (
@@ -48,23 +74,37 @@ export const TopBar: React.FC<TopBarProps> = ({ state, liveStatus, remoteStatus,
         <div className="tab-strip" role="tablist" aria-label="Tabs">
           {tabs.map((tab) => {
             const isActive = tab.id === activeTabId
+            const isEditing = editingTabId === tab.id
             return (
               <div
                 key={tab.id}
                 className={`tab-wrapper ${isActive ? 'active' : ''}`}
                 role="presentation"
               >
-                <button
-                  type="button"
-                  className="tab-btn"
-                  role="tab"
-                  aria-selected={isActive}
-                  onClick={(): void => {
-                    setActiveTab(tab.id).catch(console.error)
-                  }}
-                >
-                  <span className="tab-title">{tab.title}</span>
-                </button>
+                {isEditing ? (
+                  <input
+                    ref={tabInputRef}
+                    className="tab-rename-input"
+                    value={editingTitle}
+                    onChange={(e): void => setEditingTitle(e.target.value)}
+                    onBlur={(): void => commitTabRename(tab.id)}
+                    onKeyDown={(e): void => handleTabRenameKeyDown(e, tab.id)}
+                    aria-label="Tab title"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    className="tab-btn"
+                    role="tab"
+                    aria-selected={isActive}
+                    onClick={(): void => {
+                      setActiveTab(tab.id).catch(console.error)
+                    }}
+                    onDoubleClick={(): void => startTabRename(tab.id, tab.title)}
+                  >
+                    <span className="tab-title">{tab.title}</span>
+                  </button>
+                )}
                 {tabs.length > 1 && (
                   <button
                     type="button"

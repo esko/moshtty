@@ -203,7 +203,7 @@ export async function sshBootstrap(config: SshBootstrapConfig): Promise<SshBoots
     )
 
     // 3. Register service on remote host
-    await runSshCommand(config, `"${destRemote}" install --binary "${destRemote}"`)
+    await runSshCommand(config, `"${destRemote}" install --binary "${destRemote}" --force`)
 
     if (goos === 'darwin') {
       await runSshCommand(

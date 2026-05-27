@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"syscall"
 
 	"github.com/moshtty/moshtty/internal/config"
@@ -14,7 +15,7 @@ import (
 	"github.com/moshtty/moshtty/internal/remote"
 )
 
-const usage = `moshtty-remote macOS companion
+const usage = `moshtty-remote companion
 
 Usage:
   moshtty-remote run [--config-dir DIR]
@@ -22,9 +23,11 @@ Usage:
   moshtty-remote profile [--host HOST]
   moshtty-remote health [--endpoint HOST:PORT]
 
-User-local paths on macOS:
-  Config/state: ~/Library/Application Support/Moshtty
-  LaunchAgent:  ~/Library/LaunchAgents/com.moshtty.remote.plist
+User-local paths:
+  Config/state: ~/Library/Application Support/Moshtty (macOS)
+                ~/.local/share/moshtty (Linux)
+  Service:      ~/Library/LaunchAgents/com.moshtty.remote.plist (macOS)
+                ~/.config/systemd/user/moshtty-remote.service (Linux)
   Binaries:     ~/.local/bin (recommended install location)
 `
 
@@ -116,7 +119,11 @@ func installCommand(args []string) {
 	fmt.Printf("  token:  %s\n", result.TokenPath)
 	fmt.Printf("  agent:  %s\n", result.LaunchAgentPath)
 	fmt.Printf("  bin:    %s (recommended copy target)\n", result.UserBinDir)
-	fmt.Printf("\nLoad the agent with:\n  launchctl load -w %q\n", result.LaunchAgentPath)
+	if runtime.GOOS == "darwin" {
+		fmt.Printf("\nLoad the agent with:\n  launchctl load -w %q\n", result.LaunchAgentPath)
+	} else {
+		fmt.Printf("\nLoad the agent with:\n  systemctl --user enable --now moshtty-remote\n")
+	}
 }
 
 func profileCommand(args []string) {

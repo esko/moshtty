@@ -43,6 +43,10 @@ interface AppState {
   addTab: (title: string) => Promise<void>
   importRemoteProfile: (profile: ParsedMoshttyProfile) => Promise<void>
   setActiveProject: (projectId: string) => Promise<void>
+  deleteProject: (projectId: string) => Promise<void>
+  renameProject: (projectId: string, name: string) => Promise<void>
+  deleteRemote: (remoteId: string) => Promise<void>
+  renameTab: (tabId: string, title: string) => Promise<void>
   toggleProjectRail: () => Promise<void>
   splitPane: (axis: SplitAxis) => Promise<void>
   closeActivePane: () => Promise<void>
@@ -470,6 +474,110 @@ export const useAppStore = create<AppState>((set, get) => ({
         state: nextState
       }
     })
+    await get().saveWorkspace()
+  },
+
+  deleteProject: async (projectId: string) => {
+    const snapshot = get().snapshot
+    if (!snapshot) {
+      return
+    }
+
+    const project = snapshot.state.projects.find((p) => p.id === projectId)
+    if (!project) {
+      return
+    }
+
+    // Collect all tab/pane IDs belonging to this project
+    const tabIds = project.tabIds
+    const paneIds = snapshot.state.panes
+      .filter((pane) =>
+        snapshot.state.tabs
+          .filter((tab) => tabIds.includes(tab.id))
+          .some((tab) => tab.paneIds.includes(pane.id))
+      )
+      .map((pane) => pane.id)
+
+    const remainingProjects = snapshot.state.projects.filter((p) => p.id !== projectId)
+    const nextActiveProjectId = remainingProjects[0]?.id ?? null
+    const nextProject = remainingProjects[0]
+    const nextActiveTabId = nextProject?.activeTabId ?? null
+    const nextTab = snapshot.state.tabs.find((t) => t.id === nextActiveTabId)
+    const nextActivePaneId = nextTab?.activePaneId ?? null
+
+    const nextState = withUpdatedTimestamp({
+      ...snapshot.state,
+      activeProjectId: nextActiveProjectId,
+      activeTabId: nextActiveTabId,
+      activePaneId: nextActivePaneId,
+      projects: remainingProjects,
+      tabs: snapshot.state.tabs.filter((t) => !tabIds.includes(t.id)),
+      panes: snapshot.state.panes.filter((p) => !paneIds.includes(p.id)),
+      layouts: snapshot.state.layouts.filter((l) => !tabIds.includes(l.tabId))
+    })
+
+    set({ snapshot: { ...snapshot, state: nextState } })
+    await get().saveWorkspace()
+  },
+
+  renameProject: async (projectId: string, name: string) => {
+    const snapshot = get().snapshot
+    if (!snapshot) {
+      return
+    }
+
+    const trimmedName = name.trim()
+    if (!trimmedName) {
+      return
+    }
+
+    const nextState = withUpdatedTimestamp({
+      ...snapshot.state,
+      projects: snapshot.state.projects.map((p) =>
+        p.id === projectId ? { ...p, name: trimmedName } : p
+      )
+    })
+
+    set({ snapshot: { ...snapshot, state: nextState } })
+    await get().saveWorkspace()
+  },
+
+  deleteRemote: async (remoteId: string) => {
+    const snapshot = get().snapshot
+    if (!snapshot) {
+      return
+    }
+
+    const nextState = withUpdatedTimestamp({
+      ...snapshot.state,
+      remotes: snapshot.state.remotes.filter((r) => r.id !== remoteId),
+      // Detach any projects bound to this remote
+      projects: snapshot.state.projects.map((p) =>
+        p.remoteId === remoteId ? { ...p, remoteId: null } : p
+      )
+    })
+
+    set({ snapshot: { ...snapshot, state: nextState } })
+    await get().saveWorkspace()
+  },
+
+  renameTab: async (tabId: string, title: string) => {
+    const snapshot = get().snapshot
+    if (!snapshot) {
+      return
+    }
+
+    const trimmedTitle = title.trim()
+    if (!trimmedTitle) {
+      return
+    }
+
+    const nextState = withUpdatedTimestamp({
+      ...snapshot.state,
+      tabs: snapshot.state.tabs.map((t) => (t.id === tabId ? { ...t, title: trimmedTitle } : t))
+    })
+
+    set({ snapshot: { ...snapshot, state: nextState } })
     await get().saveWorkspace()
   },
 

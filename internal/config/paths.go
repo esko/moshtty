@@ -41,6 +41,20 @@ func (p Paths) LaunchAgentPath() string {
 	return filepath.Join(p.LaunchAgentsDir(), LaunchAgentLabel+".plist")
 }
 
+func (p Paths) UserServiceDir() string {
+	if runtime.GOOS == "darwin" {
+		return filepath.Join(p.Home, "Library", "LaunchAgents")
+	}
+	return filepath.Join(p.Home, ".config", "systemd", "user")
+}
+
+func (p Paths) UserServicePath() string {
+	if runtime.GOOS == "darwin" {
+		return filepath.Join(p.UserServiceDir(), LaunchAgentLabel+".plist")
+	}
+	return filepath.Join(p.UserServiceDir(), "moshtty-remote.service")
+}
+
 func (p Paths) UserBinDir() string {
 	return filepath.Join(p.Home, DefaultUserBinDir)
 }

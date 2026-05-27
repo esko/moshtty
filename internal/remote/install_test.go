@@ -59,6 +59,51 @@ func TestRenderLaunchAgent(t *testing.T) {
 	}
 }
 
+func TestRenderSystemdService(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  remote.LaunchAgentInput
+		wantIn []string
+	}{
+		{
+			name: "standard systemd service",
+			input: remote.LaunchAgentInput{
+				Label:      "com.moshtty.remote",
+				BinaryPath: "/usr/local/bin/moshtty-remote",
+				WorkingDir: "/home/tester/.local/share/moshtty",
+				StdOutPath: "/home/tester/.local/share/moshtty/logs/moshtty-remote.out.log",
+				StdErrPath: "/home/tester/.local/share/moshtty/logs/moshtty-remote.err.log",
+			},
+			wantIn: []string{
+				"[Unit]",
+				"Description=Moshtty Remote Companion",
+				"ExecStart=/usr/local/bin/moshtty-remote run",
+				"WorkingDirectory=/home/tester/.local/share/moshtty",
+				"Restart=always",
+				"StandardOutput=append:/home/tester/.local/share/moshtty/logs/moshtty-remote.out.log",
+				"StandardError=append:/home/tester/.local/share/moshtty/logs/moshtty-remote.err.log",
+				"[Install]",
+				"WantedBy=default.target",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := remote.RenderSystemdService(tt.input)
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			text := string(data)
+			for _, snippet := range tt.wantIn {
+				if !strings.Contains(text, snippet) {
+					t.Fatalf("missing %q in systemd service:\n%s", snippet, text)
+				}
+			}
+		})
+	}
+}
+
 func TestPrepareRuntime(t *testing.T) {
 	paths := config.Paths{Home: t.TempDir()}
 

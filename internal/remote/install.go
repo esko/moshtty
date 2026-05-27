@@ -26,8 +26,8 @@ type InstallResult struct {
 }
 
 func Install(opts InstallOptions) (InstallResult, error) {
-	if runtime.GOOS != "darwin" {
-		return InstallResult{}, fmt.Errorf("install is supported on macOS only")
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		return InstallResult{}, fmt.Errorf("install is supported on macOS and Linux only")
 	}
 	if opts.BinaryPath == "" {
 		return InstallResult{}, fmt.Errorf("binary path is required")
@@ -38,7 +38,7 @@ func Install(opts InstallOptions) (InstallResult, error) {
 		paths.ApplicationSupportDir(),
 		paths.CertsDir(),
 		paths.LogsDir(),
-		paths.LaunchAgentsDir(),
+		paths.UserServiceDir(),
 	}
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -51,29 +51,49 @@ func Install(opts InstallOptions) (InstallResult, error) {
 		return InstallResult{}, err
 	}
 
-	plistPath := paths.LaunchAgentPath()
-	if _, err := os.Stat(plistPath); err == nil && !opts.ForcePlist {
-		return InstallResult{}, fmt.Errorf("launch agent already exists at %s", plistPath)
+	servicePath := paths.UserServicePath()
+	if _, err := os.Stat(servicePath); err == nil && !opts.ForcePlist {
+		if runtime.GOOS == "darwin" {
+			return InstallResult{}, fmt.Errorf("launch agent already exists at %s", servicePath)
+		} else {
+			return InstallResult{}, fmt.Errorf("systemd service already exists at %s", servicePath)
+		}
 	}
 
-	plist, err := RenderLaunchAgent(LaunchAgentInput{
-		Label:      config.LaunchAgentLabel,
-		BinaryPath: opts.BinaryPath,
-		WorkingDir: paths.ApplicationSupportDir(),
-		StdOutPath: paths.StdOutLogPath(),
-		StdErrPath: paths.StdErrLogPath(),
-	})
+	var serviceBytes []byte
+	if runtime.GOOS == "darwin" {
+		serviceBytes, err = RenderLaunchAgent(LaunchAgentInput{
+			Label:      config.LaunchAgentLabel,
+			BinaryPath: opts.BinaryPath,
+			WorkingDir: paths.ApplicationSupportDir(),
+			StdOutPath: paths.StdOutLogPath(),
+			StdErrPath: paths.StdErrLogPath(),
+		})
+	} else {
+		serviceBytes, err = RenderSystemdService(LaunchAgentInput{
+			Label:      config.LaunchAgentLabel,
+			BinaryPath: opts.BinaryPath,
+			WorkingDir: paths.ApplicationSupportDir(),
+			StdOutPath: paths.StdOutLogPath(),
+			StdErrPath: paths.StdErrLogPath(),
+		})
+	}
 	if err != nil {
 		return InstallResult{}, err
 	}
-	if err := os.WriteFile(plistPath, plist, 0o644); err != nil {
-		return InstallResult{}, fmt.Errorf("write launch agent: %w", err)
+
+	if err := os.WriteFile(servicePath, serviceBytes, 0o644); err != nil {
+		if runtime.GOOS == "darwin" {
+			return InstallResult{}, fmt.Errorf("write launch agent: %w", err)
+		} else {
+			return InstallResult{}, fmt.Errorf("write systemd service: %w", err)
+		}
 	}
 
 	return InstallResult{
 		ConfigPath:      paths.ConfigPath(),
 		TokenPath:       paths.TokenPath(),
-		LaunchAgentPath: plistPath,
+		LaunchAgentPath: servicePath,
 		UserBinDir:      paths.UserBinDir(),
 	}, nil
 }
@@ -235,6 +255,31 @@ func RenderLaunchAgent(input LaunchAgentInput) ([]byte, error) {
 	var buf bytes.Buffer
 	if err := launchAgentTemplate.Execute(&buf, input); err != nil {
 		return nil, fmt.Errorf("render launch agent: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
+var systemdServiceTemplate = template.Must(template.New("systemdservice").Parse(`[Unit]
+Description=Moshtty Remote Companion
+After=network.target
+
+[Service]
+Type=simple
+ExecStart={{ .BinaryPath }} run
+WorkingDirectory={{ .WorkingDir }}
+Restart=always
+RestartSec=5
+StandardOutput=append:{{ .StdOutPath }}
+StandardError=append:{{ .StdErrPath }}
+
+[Install]
+WantedBy=default.target
+`))
+
+func RenderSystemdService(input LaunchAgentInput) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := systemdServiceTemplate.Execute(&buf, input); err != nil {
+		return nil, fmt.Errorf("render systemd service: %w", err)
 	}
 	return buf.Bytes(), nil
 }
