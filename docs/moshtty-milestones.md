@@ -31,7 +31,7 @@ Acceptance:
 
 ## M1 Branch And Scaffold
 
-Status: Ready for review
+Status: Done
 
 Objective:
 
@@ -64,7 +64,7 @@ Agent brief:
 
 ## M2 Desktop State Shell
 
-Status: Ready for review
+Status: Verified on target
 
 Objective:
 
@@ -172,7 +172,7 @@ Agent brief:
 
 ## M5 UI And Ghostty Integration
 
-Status: Ready for review
+Status: Verified on target
 
 Objective:
 
@@ -207,7 +207,7 @@ Agent brief:
 
 ## M6 `moshttyctl` CLI
 
-Status: Ready for review
+Status: Verified on target
 
 Objective:
 
@@ -239,7 +239,7 @@ Agent brief:
 
 ## M7 Real Remote Acceptance
 
-Status: Ready for review
+Status: Verified on target
 
 Objective:
 
@@ -262,7 +262,7 @@ Acceptance:
 
 ## M8 UI Refresh
 
-Status: Ready for review
+Status: Verified on target
 
 Objective:
 
