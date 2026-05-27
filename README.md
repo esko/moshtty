@@ -1,137 +1,116 @@
-# Crostini Ghostty Terminal
+# Moshtty
 
-An installable ChromeOS PWA terminal for Crostini Linux. The frontend uses `ghostty-web` with Ghostty's VT parser compiled to WASM. A local Go agent runs inside Crostini, owns the PTY, serves the built PWA, and bridges terminal I/O over a same-origin WebSocket.
+Electron desktop remote terminal. The client owns **projects, tabs, and split panes** locally; a **remote companion** (`moshtty-remote`) keeps shell PTYs durable on the host. Terminal rendering uses [`ghostty-web`](https://github.com/ghostty-org/ghostty-web); pane traffic uses **WebTransport** (JSON-RPC control + Mosh mux over datagrams via [`mosh-go`](https://github.com/unixshells/mosh-go)).
 
-The agent is loopback-only by default and listens on `127.0.0.1:8765`.
+First targets: **ChromeOS / Crostini** for the desktop app, **macOS** for the remote companion.
+
+## Repository layout
+
+| Path                  | Role                                                            |
+| --------------------- | --------------------------------------------------------------- |
+| `apps/desktop/`       | Electron + React renderer (`@moshtty/desktop`)                  |
+| `cmd/moshtty-remote/` | Remote companion (WebTransport server, pane lifecycle)          |
+| `cmd/moshttyctl/`     | Remote CLI (control from inside shells)                         |
+| `internal/`           | Shared Go packages (protocol, mux, config, certs, …)            |
+| `docs/moshtty-*.md`   | PRD, plan, milestones, design system, testing                   |
+| `version/companion`   | Companion release version (binaries + `moshtty-remote version`) |
+
+The previous **Crostini PWA + local Go agent** stack lives on the [`legacy-pwa`](https://github.com/esko/moshtty/tree/legacy-pwa) branch for reference only.
 
 ## Requirements
 
-- ChromeOS with the Linux development environment enabled.
-- Go 1.22 or newer.
-- Bun 1.3 or newer.
+- **Node.js** 22+ and **pnpm** 9+
+- **Go** 1.22+ (module version in `go.mod`)
+- For full UI verification: a display (Playwright Electron, `agent-browser` — see `docs/moshtty-testing.md`)
 
-## Run
-
-```bash
-cd web
-bun install
-bun run build
-
-cd ../agent
-go mod download
-go run . -web-dir ../web/dist
-```
-
-Open `http://127.0.0.1:8765` from ChromeOS Chrome, then install it from the browser install action.
-
-For frontend development:
+## Desktop client
 
 ```bash
-cd agent
-go run . -allow-host 127.0.0.1:5175
+pnpm install
+pnpm dev          # Electron dev (alias: pnpm --filter @moshtty/desktop dev)
 ```
 
-In another shell:
+Other useful commands from the repo root:
 
 ```bash
-cd web
-bun run dev
+pnpm build        # typecheck + electron-vite production build
+pnpm test         # Vitest + go test ./...
+pnpm typecheck
+pnpm lint
+pnpm lint:css
+pnpm verify       # lint + typecheck + test + format:check
+pnpm verify:full  # superset including build, visual tests, go vet
 ```
 
-The Vite dev server proxies `/api` and `/pty` to the Go agent at `127.0.0.1:8765`.
+Agent and contributor workflow: [`AGENTS.md`](AGENTS.md).
 
-For DevTools MCP coverage of the full app shape, open the debug shell:
+## Remote companion
+
+### Install from GitHub Releases
+
+Companion binaries are published per version tag (e.g. [`v0.270526`](https://github.com/esko/moshtty/releases/tag/v0.270526)):
 
 ```text
-http://127.0.0.1:5175/?debug-shell=1
+https://github.com/esko/moshtty/releases/download/v<version>/moshtty-remote-<goos>-<goarch>
+https://github.com/esko/moshtty/releases/download/v<version>/moshttyctl-<goos>-<goarch>
 ```
 
-or, against the built app:
+Supported platforms: `darwin` / `linux` × `amd64` / `arm64`.
 
-```text
-http://127.0.0.1:8765/?debug-shell=1
-```
+Current companion version: **`0.270526`** (see `version/companion`).
 
-The debug shell renders a DOM-visible PWA tab strip for MCP automation. The installed ChromeOS PWA still uses native tabbed app chrome.
-
-## Scripts
-
-From the repository root:
+After download, install the LaunchAgent / user service and print a profile for the desktop app:
 
 ```bash
-bun run build
-bun run test
-bun run test:visual
-bun run agent
+chmod +x moshtty-remote moshttyctl
+./moshtty-remote install --binary ./moshtty-remote
+./moshtty-remote profile
 ```
 
-From `web/`:
+The desktop app can also **SSH-bootstrap** a host: it detects `uname`, downloads the matching release asset, installs the companion, and imports the profile JSON (see M9 in `docs/moshtty-milestones.md`).
+
+### Build locally
 
 ```bash
-bun run dev
-bun run build
-bun run test
-bun run test:visual:glyphs
+go build -o moshtty-remote ./cmd/moshtty-remote
+go build -o moshttyctl ./cmd/moshttyctl
+
+./moshtty-remote run
+./moshtty-remote version
 ```
 
-## Protocol
+Cross-compile all release assets:
 
-The browser creates and manages durable terminal tabs through the spaces API:
+```bash
+./scripts/build-release-binaries.sh
+# → dist/release/<version>/
+```
 
-- `GET /api/profiles` lists launch profiles.
-- `POST /api/profiles`, `PATCH /api/profiles/{profileId}`, and `DELETE /api/profiles/{profileId}` manage non-default profiles.
-- `GET /api/spaces` lists spaces and their terminal tabs.
-- `POST /api/spaces` creates a space.
-- `PATCH /api/spaces/{spaceId}` renames a space.
-- `DELETE /api/spaces/{spaceId}` removes an empty non-default space.
-- `POST /api/spaces/{spaceId}/tabs` creates a terminal tab in a space, optionally with `{ "profileId": "profile-default" }`.
-- `GET /api/tabs/{tabId}` returns the tab layout and pane sessions.
-- `PATCH /api/tabs/{tabId}` renames a tab; an empty title resets automatic naming.
-- `POST /api/tabs/{tabId}/splits` creates a child pane inside a tab.
-- `PATCH /api/tabs/{tabId}/layout` persists split-pane ratios.
-- `POST /api/tabs/{tabId}/restart` restarts all panes in a tab.
-- `PATCH /api/panes/{paneId}` renames a pane.
-- `POST /api/panes/{paneId}/restart` restarts one pane.
-- `DELETE /api/tabs/{tabId}` or `DELETE /api/panes/{paneId}` removes a tab tree or child pane.
+Publishing a new companion version: bump `version/companion`, `internal/version/version.go`, and `apps/desktop/src/main/companion-version.ts`, run the build script, tag `v<version>`, push (see `.github/workflows/release.yml`).
 
-The legacy `/api/terminal-sessions` routes remain as compatibility wrappers.
-
-Profiles are stored by the agent and can define a shell path, working directory, and environment variables. New sessions snapshot those launch fields so existing tabs keep their startup behavior when a profile changes later.
-
-Terminal panes attach to a durable session with:
+## Architecture (short)
 
 ```text
-GET /pty?token=<session-token>&session=<session-id>&restore=1&cols=120&rows=32
+Electron app (projects / tabs / panes / UI state)
+        │  WebTransport
+        ▼
+moshtty-remote (durable pane PTYs, Mosh mux, JSON-RPC)
+        ▲
+moshttyctl (Unix socket — remote shell control)
 ```
 
-Browser to agent:
+- **Control:** JSON-RPC 2.0 on WebTransport streams
+- **Pane I/O:** Mosh protocol on WebTransport datagrams
+- **Default transport port:** UDP `4433` (companion config)
 
-```json
-{"type":"input","data":"echo hello\n"}
-{"type":"resize","cols":120,"rows":32}
-```
+Details: [`docs/moshtty-plan.md`](docs/moshtty-plan.md), [`docs/moshtty-prd.md`](docs/moshtty-prd.md).
 
-Agent to browser:
+## Documentation
 
-- Binary WebSocket frames: raw PTY output bytes.
-- Text JSON frames:
-
-```json
-{"type":"status","shell":"/bin/bash"}
-{"type":"error","message":"failed to start shell","errors":["..."]}
-{"type":"exit","code":0}
-```
-
-## Security Model
-
-- The agent listens on loopback only by default.
-- `/api/session` and `/pty` require the expected `Host` and same-origin `Origin`.
-- `/pty` requires a startup token.
-- The PWA does not use ChromeOS private terminal APIs and cannot start Crostini by itself.
-
-## Notes
-
-- `web/scripts/patch-ghostty-web.ts` applies local renderer/input patches to the pinned `ghostty-web` dependency after install.
-- `web/visual/glyph-gap.html` and `bun run test:visual:glyphs` cover the fractional-DPR glyph gap regression.
-- The PWA opts into ChromeOS tabbed application mode. Use ChromeOS's native tab strip or `Ctrl+T` and `Ctrl+W` for app tabs. Terminal panes and split layouts are managed inside each terminal tab.
-- See `docs/architecture.md`, `docs/sessions.md`, `docs/roadmap.md`, `docs/fonts.md`, and `docs/systemd-user.md` for implementation details.
+| Doc                                                              | Contents                                |
+| ---------------------------------------------------------------- | --------------------------------------- |
+| [`docs/moshtty-prd.md`](docs/moshtty-prd.md)                     | Product scope, status, risks            |
+| [`docs/moshtty-milestones.md`](docs/moshtty-milestones.md)       | Roadmap and acceptance criteria         |
+| [`docs/moshtty-design-system.md`](docs/moshtty-design-system.md) | UI tokens and theme contract            |
+| [`docs/moshtty-testing.md`](docs/moshtty-testing.md)             | Vitest, Playwright, agent-browser QA    |
+| [`AGENTS.md`](AGENTS.md)                                         | Tooling, conventions, multi-agent rules |
