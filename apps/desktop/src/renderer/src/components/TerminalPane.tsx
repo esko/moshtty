@@ -190,15 +190,17 @@ export function TerminalPane({
       data-terminal-theme={terminalMode}
       aria-label={`${title} pane`}
     >
-      <header className="pane-header">
-        <span className="pane-title">{title}</span>
-        <span className="pane-actions">
-          <span className={`pane-status ${lost ? 'lost' : 'active'}`}>
+      <div className="pane-chrome" aria-hidden="false">
+        <div className={`pane-pill pane-pill-info ${lost ? 'lost' : ''}`}>
+          <span className="pane-pill-title">{title}</span>
+          <span className={`pane-pill-status ${lost ? 'lost' : ''}`}>
             {lost ? 'Pane lost' : 'Active'}
           </span>
+        </div>
+        <div className="pane-pill pane-pill-actions">
           {lost ? (
             <button
-              className="button secondary pane-restart"
+              className="pane-pill-button"
               type="button"
               data-action-id="restart-pane"
               onClick={() => void restartLostPane(pane.id)}
@@ -209,7 +211,7 @@ export function TerminalPane({
           {onSplit ? (
             <>
               <button
-                className="icon-button"
+                className="pane-pill-button icon-only"
                 type="button"
                 aria-label="Split pane right"
                 data-action-id="split-pane-right"
@@ -219,7 +221,7 @@ export function TerminalPane({
                 <SVGSplitRight />
               </button>
               <button
-                className="icon-button"
+                className="pane-pill-button icon-only"
                 type="button"
                 aria-label="Split pane down"
                 data-action-id="split-pane-down"
@@ -232,7 +234,7 @@ export function TerminalPane({
           ) : null}
           {onClose ? (
             <button
-              className="icon-button"
+              className="pane-pill-button icon-only"
               type="button"
               aria-label="Close pane"
               data-action-id="close-pane"
@@ -242,8 +244,8 @@ export function TerminalPane({
               <XIcon />
             </button>
           ) : null}
-        </span>
-      </header>
+        </div>
+      </div>
       <div className="terminal-container" ref={containerRef}>
         {error ? (
           <pre className="terminal-error">{`$ cd ${cwd}\n$ Error: ${error}`}</pre>
