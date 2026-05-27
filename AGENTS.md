@@ -294,3 +294,17 @@ A handoff that does not show the output of step 1 and step 2 is incomplete and w
 - **Cursor `Task` tool** (`composer-2.5-fast` and the coordinator's own model): allowed for parallel work that fits inside one OWNERS row.
 
 Model selection guidance is in [`docs/moshtty-model-routing.md`](docs/moshtty-model-routing.md). Whichever harness is used, give the subagent the same docs the coordinator has read, the same task brief, and the same verification, PRD close-out, and atomic conventional commit requirements. If a worker starts drifting, stop it immediately, correct the scope, and reassign — do not let a slice finish on a wrong trajectory.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in the repo's GitHub Issues and are managed using the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Uses the standard five canonical labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Uses a single-context layout with a global `CONTEXT.md` and shared `docs/adr/` at the repo root. See `docs/agents/domain.md`.
