@@ -1,12 +1,50 @@
-import React, { useRef, useState } from 'react'
-import { projectDisplayInitial } from '../../../common/state'
+import React, { useMemo, useRef, useState } from 'react'
+import type { MoshttyPane, MoshttyState, MoshttyTab } from '../../../common/state'
 import { useAppStore } from '../store'
-import { MoreIcon, PlusIcon, SidebarLeftIcon, XIcon } from '../design/icons'
+import { HamburgerIcon, PlusIcon, SidebarLeftIcon, XIcon } from '../design/icons'
 import { WindowControls } from './WindowControls'
 import './TopBar.css'
 
+type TabConnectionStatus = 'connected' | 'connecting' | 'lost'
+
+const TAB_STATUS_RANK: Record<TabConnectionStatus, number> = {
+  connected: 0,
+  connecting: 1,
+  lost: 2
+}
+
+function paneConnectionStatus(pane: MoshttyPane): TabConnectionStatus {
+  const raw = pane.status as string
+  if (raw === 'lost') {
+    return 'lost'
+  }
+  if (raw === 'connecting') {
+    return 'connecting'
+  }
+  return 'connected'
+}
+
+function statusForTab(tab: MoshttyTab, panesById: Map<string, MoshttyPane>): TabConnectionStatus {
+  const paneIds = tab.paneIds ?? []
+  if (paneIds.length === 0) {
+    return 'connected'
+  }
+  let worst: TabConnectionStatus = 'connected'
+  for (const id of paneIds) {
+    const pane = panesById.get(id)
+    if (!pane) {
+      continue
+    }
+    const status = paneConnectionStatus(pane)
+    if (TAB_STATUS_RANK[status] > TAB_STATUS_RANK[worst]) {
+      worst = status
+    }
+  }
+  return worst
+}
+
 interface TopBarProps {
-  state: import('../../../common/state').MoshttyState | null
+  state: MoshttyState | null
   liveStatus: string | null
   remoteStatus: string
   remote: import('../../../common/state').MoshttyRemote | null
@@ -29,6 +67,14 @@ export const TopBar: React.FC<TopBarProps> = ({ state, liveStatus, remoteStatus,
   const tabs = activeProject
     ? (state?.tabs.filter((tab) => activeProject.tabIds.includes(tab.id)) ?? [])
     : []
+
+  const panesById = useMemo(() => {
+    const map = new Map<string, MoshttyPane>()
+    for (const pane of state?.panes ?? []) {
+      map.set(pane.id, pane)
+    }
+    return map
+  }, [state?.panes])
 
   const handleNewTab = (): void => {
     addTab('Shell').catch(console.error)
@@ -78,24 +124,24 @@ export const TopBar: React.FC<TopBarProps> = ({ state, liveStatus, remoteStatus,
             /* TODO(M8c follow-up): wire contextual menu */
           }}
         >
-          <MoreIcon size={16} />
+          <HamburgerIcon size={16} />
         </button>
         <div className="tab-strip-wrapper">
           <div className="tab-strip" role="tablist" aria-label="Tabs">
             {tabs.map((tab) => {
               const isActive = tab.id === activeTabId
               const isEditing = editingTabId === tab.id
-              const tabProject =
-                state?.projects.find((p) => p.tabIds.includes(tab.id)) ?? activeProject
               return (
                 <div
                   key={tab.id}
                   className={`tab-wrapper ${isActive ? 'active' : ''}`}
                   role="presentation"
                 >
-                  <span className="tab-chip" style={{ backgroundColor: tabProject?.color }}>
-                    {tabProject ? projectDisplayInitial(tabProject) : 'M'}
-                  </span>
+                  <span
+                    className="tab-status-dot"
+                    data-status={statusForTab(tab, panesById)}
+                    aria-hidden="true"
+                  />
                   {isEditing ? (
                     <input
                       ref={tabInputRef}

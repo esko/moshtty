@@ -91,18 +91,20 @@
   border-radius: var(--radius-md, 6px);
 }
 
-.tab-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 10px;
-  height: 10px;
-  border-radius: var(--radius-sm, 4px);
-  font-size: var(--font-size-caption, 11px);
-  font-weight: 700;
-  color: var(--color-accent-on, #fff);
-  text-transform: uppercase;
+.tab-status-dot {
   flex-shrink: 0;
+  width: var(--space-sm);
+  height: var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: var(--color-success);
+}
+
+.tab-status-dot[data-status='connecting'] {
+  background: var(--color-warning);
+}
+
+.tab-status-dot[data-status='lost'] {
+  background: var(--color-danger);
 }
 
 .tab-btn {
