@@ -292,7 +292,9 @@ Agent brief:
 
 ## M8b UI Polish
 
-Status: Planned
+Status: In progress
+
+Note: 2026-05-27 audit (`docs/visual-qa/8b/M8b-design-gap-assessment.md`) found reference-parity gaps. Remaining work is scoped to **M8c UI Followup** below.
 
 Objective:
 
@@ -328,9 +330,38 @@ Agent brief:
 
 - `docs/agents/2026-05-27-8b-moshtty-ui-polish.md`
 
-## M9b Command Palette
+## M8c UI Followup
 
 Status: Planned
+
+Objective:
+
+- Close the reference-parity gap left by M8b: top-bar restructure (panel-left icon leftmost, overflow icon to its right, left-aligned tabs with vertical padding and always-visible close), pane chrome → floating hover pills with full-area terminal fill, settings dialog discipline + working theme/font/cursor controls, dashboard + sidebar tone (flat search row, sentence-case "Projects"), light terminal token fix, project edit modal replacing inline rename, and visual QA baseline refresh.
+
+Deliverables:
+
+- 8c.1 Top bar restructure + OpenCode tab strip (`TopBar.tsx`, `TopBar.css`, new icons).
+- 8c.2 Pane chrome → hover pills + full-area terminal (`TerminalPane.tsx`, pane rules in `main.css`).
+- 8c.3 Settings dialog discipline + working controls (`Dialogs.tsx`, `Dialogs.css`).
+- 8c.4 Dashboard + sidebar tone, text only (`Dashboard.*`, `Sidebar.*`).
+- 8c.5 Tokens stop-condition triplet for light `--color-terminal-bg` (coordinator-only).
+- 8c.7 Project edit modal replacing inline rename (`dialogs.ts`, `Dialogs.tsx`, `Sidebar.tsx`).
+- 8c.6 Visual QA + baselines refresh and live-audit screenshots.
+
+Acceptance:
+
+- All seven sub-slices land as separate atomic conventional commits.
+- `pnpm verify:full` passes after 8c.6.
+- Live agent-browser captures for `topbar-icons-order`, `tab-close-always-visible`, `pane-hover-pills`, `pane-light-no-gutter`, `project-edit-modal` all exist under `docs/visual-qa/8b/live-audit/`.
+- M8b row moves from `In progress` to `Done` once 8c.6 ships and the design-checkup rubric in `docs/moshtty-design-checkup.md` is re-scored.
+
+Agent brief:
+
+- `docs/agents/2026-05-27-8c-moshtty-ui-followup.md`
+
+## M9b Command Palette
+
+Status: Ready for review
 
 Objective:
 
