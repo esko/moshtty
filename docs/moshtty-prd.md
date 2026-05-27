@@ -62,30 +62,30 @@ Moshtty replaces the previous Crostini-local PWA/Go-agent architecture. The old 
 | Architecture decisions | Locked                | Captured in `docs/moshtty-plan.md` and summarized below |
 | Implementation branch  | feat/moshtty-scaffold | Branch created from current worktree                    |
 
-| Milestone                     | Status             | Notes                                                                                                                                                    |
-| ----------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M0 Planning docs              | Done               | PRD, plan, milestones, agent briefs, and Moshtty `AGENTS.md` are present                                                                                 |
-| M1 Branch and scaffold        | Done               | New branch layout, pnpm/electron-vite/root Go module. Old runtime quarantined under quarantine/                                                          |
-| M2 Desktop state shell        | Verified on target | Secure `app://moshtty`, typed preload IPC, versioned JSON state, atomic writes, migration, safeStorage + passphrase fallback; verified on Chromebook     |
-| M3 macOS remote companion     | Verified on target | `moshtty-remote` run/install/profile/health, LaunchAgent plist, config/token/certs, profile JSON; verified on macOS remote host                          |
-| M4 WebTransport and Mosh mux  | Verified on target | WebTransport server, JSON-RPC control, mux datagrams, pane lifecycle, renderer transport client; verified E2E against macOS host                         |
-| M5 UI and Ghostty integration | Verified on target | Renderer shell, visual matrix, keymap/settings, live app actions, Ghostty, live Mac shell path, profile import, and reference parity close-out are wired |
-| M6 `moshttyctl` CLI           | Verified on target | Companion Unix socket transport, CLI commands (list, pane close, cleanup), and errors for app-side commands implemented and verified.                    |
-| M7 Real remote acceptance     | Verified on target | Reload reattach, companion-restart lost-pane recovery, and remote `moshttyctl pane split` app-layout control are verified against the Mac companion      |
-| M8 UI Refresh                 | Verified on target | Redesigned app layout, minimal dark/light aesthetic, custom window controls, unified top bar, collapsible projects sidebar, visual tests passing         |
-| Testing plan                  | Done               | See `docs/moshtty-testing.md`                                                                                                                            |
+| Milestone                     | Status | Notes                                                                                                                                                    |
+| ----------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M0 Planning docs              | Done   | PRD, plan, milestones, agent briefs, and Moshtty `AGENTS.md` are present                                                                                 |
+| M1 Branch and scaffold        | Done   | New branch layout, pnpm/electron-vite/root Go module. Old runtime quarantined under quarantine/                                                          |
+| M2 Desktop state shell        | Done   | Secure `app://moshtty`, typed preload IPC, versioned JSON state, atomic writes, migration, safeStorage + passphrase fallback; verified on Chromebook     |
+| M3 macOS remote companion     | Done   | `moshtty-remote` run/install/profile/health, LaunchAgent plist, config/token/certs, profile JSON; verified on macOS remote host                          |
+| M4 WebTransport and Mosh mux  | Done   | WebTransport server, JSON-RPC control, mux datagrams, pane lifecycle, renderer transport client; verified E2E against macOS host                         |
+| M5 UI and Ghostty integration | Done   | Renderer shell, visual matrix, keymap/settings, live app actions, Ghostty, live Mac shell path, profile import, and reference parity close-out are wired |
+| M6 `moshttyctl` CLI           | Done   | Companion Unix socket transport, CLI commands (list, pane close, cleanup), and errors for app-side commands implemented and verified.                    |
+| M7 Real remote acceptance     | Done   | Reload reattach, companion-restart lost-pane recovery, and remote `moshttyctl pane split` app-layout control are verified against the Mac companion      |
+| M8 UI Refresh                 | Done   | Redesigned app layout, minimal dark/light aesthetic, custom window controls, unified top bar, collapsible projects sidebar, visual tests passing         |
+| Testing plan                  | Done   | See `docs/moshtty-testing.md`                                                                                                                            |
 
 ## Task Status
 
-| Task                   | Owner       | Status             | Brief                                                                                                   |
-| ---------------------- | ----------- | ------------------ | ------------------------------------------------------------------------------------------------------- |
-| Scaffold Moshtty repo  | Antigravity | Done               | `docs/agents/2026-05-25-1-moshtty-scaffold.md`                                                          |
-| Desktop state shell    | Agent       | Verified on target | `docs/agents/2026-05-25-2-desktop-state-shell.md` (verified in `followups/m2-safestorage-on-device.md`) |
-| macOS remote companion | Agent (M3)  | Verified on target | `docs/agents/2026-05-25-3-macos-remote-companion.md`                                                    |
-| WebTransport Mosh mux  | Agent (M4)  | Verified on target | `docs/agents/2026-05-25-4-webtransport-mosh-mux.md` (verified in `followups/m4-mosh-adapter.md`)        |
-| Moshtty UI and Ghostty | Codex       | Verified on target | `docs/agents/2026-05-25-5-moshtty-ui-ghostty.md`                                                        |
-| `moshttyctl` CLI       | agy         | Verified on target | `docs/agents/2026-05-25-6-moshttyctl-cli.md`                                                            |
-| Moshtty UI Refresh     | Antigravity | Verified on target | `docs/agents/2026-05-27-8-moshtty-ui-refresh.md` (verified in `followups/m8-ui-refresh.md`)             |
+| Task                   | Owner       | Status | Brief                                                                                                   |
+| ---------------------- | ----------- | ------ | ------------------------------------------------------------------------------------------------------- | --- |
+| Scaffold Moshtty repo  | Antigravity | Done   | `docs/agents/2026-05-25-1-moshtty-scaffold.md`                                                          |
+| Desktop state shell    | Agent       | Done   | `docs/agents/2026-05-25-2-desktop-state-shell.md` (verified in `followups/m2-safestorage-on-device.md`) |
+| macOS remote companion | Agent (M3)  | Done   | `docs/agents/2026-05-25-3-macos-remote-companion.md`                                                    |
+| WebTransport Mosh mux  | Agent (M4)  | Done   | `docs/agents/2026-05-25-4-webtransport-mosh-mux.md` (verified in `followups/m4-mosh-adapter.md`)        |
+| Moshtty UI and Ghostty | Codex       | Done   | `docs/agents/2026-05-25-5-moshtty-ui-ghostty.md`                                                        |
+| `moshttyctl` CLI       | agy         | Done   | `docs/agents/2026-05-25-6-moshttyctl-cli.md`                                                            |
+| Moshtty UI Refresh     | Antigravity | Done   | `docs/agents/2026-05-27-8-moshtty-ui-refresh.md` (verified in `followups/m8-ui-refresh.md`)             |     |
 
 Allowed status values (also defined in `AGENTS.md` -> Status Tiers):
 

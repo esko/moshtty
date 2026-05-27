@@ -64,7 +64,7 @@ Agent brief:
 
 ## M2 Desktop State Shell
 
-Status: Verified on target
+Status: Done
 
 Objective:
 
@@ -98,7 +98,7 @@ Agent brief:
 
 ## M3 macOS Remote Companion
 
-Status: Verified on target
+Status: Done
 
 Objective:
 
@@ -133,7 +133,7 @@ Agent brief:
 
 ## M4 WebTransport And Mosh Mux
 
-Status: Verified on target
+Status: Done
 
 Objective:
 
@@ -172,7 +172,7 @@ Agent brief:
 
 ## M5 UI And Ghostty Integration
 
-Status: Verified on target
+Status: Done
 
 Objective:
 
@@ -207,7 +207,7 @@ Agent brief:
 
 ## M6 `moshttyctl` CLI
 
-Status: Verified on target
+Status: Done
 
 Objective:
 
@@ -239,7 +239,7 @@ Agent brief:
 
 ## M7 Real Remote Acceptance
 
-Status: Verified on target
+Status: Done
 
 Objective:
 
@@ -262,7 +262,7 @@ Acceptance:
 
 ## M8 UI Refresh
 
-Status: Verified on target
+Status: Done
 
 Objective:
 

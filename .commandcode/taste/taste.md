@@ -7,14 +7,15 @@
 - Use `/home/esko/.bun/bin/bun` as the full path to bun binary when needed. Confidence: 0.85
 
 # go
-- Run Go tests from the agent directory with `go test ./...`. Confidence: 0.85
-- Use `gofmt -w` to format Go code before committing. Confidence: 0.80
-- Use `GOCACHE=/tmp/cgt-go-cache go test ./...` when the default Go build cache is on read-only filesystem. Confidence: 0.75
-
+See [go/taste.md](go/taste.md)
 # verification-workflow
-- Run verification sequence before committing: tests → build → visual tests → diff check. Confidence: 0.85
+- Run verification sequence before committing: tests → build → visual tests → diff check. Confidence: 0.90
 - For frontend changes: run `bun run --cwd web test`, then `bun run --cwd web build`, then `bun run test:visual`. Confidence: 0.80
 - Check `git diff --check` for whitespace errors before committing. Confidence: 0.75
+
+# moshtty-desktop-verification
+- For Moshtty desktop changes, run the full verification suite before committing: `pnpm --filter @moshtty/desktop typecheck`, `pnpm --filter @moshtty/desktop lint`, `pnpm --filter @moshtty/desktop lint:css`, `pnpm --filter @moshtty/desktop test`, `pnpm --filter @moshtty/desktop build`, `pnpm --filter @moshtty/desktop test:visual`, and `git diff --check`. Confidence: 0.80
+- After all other checks pass, run Electron QA via CDP port 9333 with `agent-browser`. Confidence: 0.70
 
 # git
 See [git/taste.md](git/taste.md)
@@ -31,10 +32,18 @@ See [git/taste.md](git/taste.md)
 - Use a two-column layout for the main landing page: spaces on the left, recently closed tabs on the right. Confidence: 0.85
 
 # ai-tooling
-- Use `agy` for implementation tasks, running subagents until token exhaustion. Confidence: 0.85
-- Before spawning agy subagents, write detailed implementer briefs as markdown files in `docs/agents/` with Context, Required Behavior, Suggested Implementation Notes, and Validation sections. Confidence: 0.75
-- Run agy subagents sequentially (not in parallel) when they touch overlapping files to avoid merge conflicts. Confidence: 0.65
-- Include reference screenshot paths and design cues from ChromeOS Downloads (`/mnt/chromeos/MyFiles/Downloads/`) in implementer briefs for visual tasks. Confidence: 0.70
+See [ai-tooling/taste.md](ai-tooling/taste.md)
+# slice-discipline
+- Respect the 8-file soft cap and 20-file hard cap from AGENTS.md. Scoping a brief to 6-7 files is preferred to leave headroom. Confidence: 0.70
+- List explicit stop-condition paths in subagent briefs — what NOT to edit (shared docs, other agents' packages, design contract, trust boundary). Confidence: 0.70
+
+# git-safety
+- Never run `git clean -fd` without first running `git status` to review untracked files. Prefer `git checkout -- .` for reverting only tracked file changes. Confidence: 0.85
 
 # workflow
 - Restart the servers after each implementation. Confidence: 0.70
+
+# disaster-recovery
+- Never recreate lost files from memory — recover them from VCS (git reflog, other branches), ask the user to restore from backups, or have the original authoring agent redo the work. Memory recreations are lossy approximations that introduce regressions. Confidence: 0.85
+- Never change dependency versions during restore operations — keep exact versions from lockfile/package.json. Bumping versions introduces unrelated API breakage that compounds the original problem. Confidence: 0.80
+- When relocating files during recovery, verify that imports, test config aliases, and runtime resolution paths still work — a file that compiles in the wrong location can silently break IPC trust boundaries. Confidence: 0.75
