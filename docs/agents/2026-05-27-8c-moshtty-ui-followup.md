@@ -82,11 +82,11 @@ This sub-slice changes the design contract, which is a [Stop Condition](../../AG
    --color-text-terminal: #1a1a1f;
    ```
 
-   (Today these are `#1e1e24` / `#f0f0f4` — a dark terminal in a light shell. The reference is a near-white terminal in light mode.)
+   (Today these are `#1e1e24` / `#f0f0f4` — a dark terminal in a light shell. The reference is a white terminal in light mode.)
 
 2. `tokens.ts`: mirror the same change in the light branch.
 
-3. `docs/moshtty-design-system.md`: update the token table row for `--color-terminal-bg` and `--color-text-terminal`; add a one-line rationale ("light mode uses a near-white terminal canvas to match OpenCode/Antigravity references; dark mode unchanged").
+3. `docs/moshtty-design-system.md`: update the token table row for `--color-terminal-bg` and `--color-text-terminal`; add a one-line rationale ("light mode uses a white terminal canvas to match OpenCode/Antigravity references; dark mode unchanged").
 
 ### Verification
 
