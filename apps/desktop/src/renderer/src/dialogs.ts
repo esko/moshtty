@@ -5,6 +5,14 @@ export type AppDialog =
   | { kind: 'settings' }
   | { kind: 'bootstrap' }
 
+/** Stable suffix for dialog stack anchoring (project new vs existing id). */
+export function dialogStackKey(dialog: AppDialog | null | undefined): string {
+  if (dialog?.kind === 'project') {
+    return dialog.mode === 'existing' ? dialog.projectId : 'new'
+  }
+  return ''
+}
+
 export function getFixtureDialog(fixtureId: string | null): AppDialog | null {
   switch (fixtureId) {
     case 'dialog-import-empty':

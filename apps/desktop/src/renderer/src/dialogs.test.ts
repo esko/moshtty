@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { getFixtureDialog } from './dialogs'
+import { dialogStackKey, getFixtureDialog } from './dialogs'
 
 describe('getFixtureDialog', () => {
   test('maps import fixtures to import dialog modes', () => {
@@ -22,5 +22,14 @@ describe('getFixtureDialog', () => {
   test('ignores non-dialog fixtures', () => {
     expect(getFixtureDialog('dashboard-populated')).toBeNull()
     expect(getFixtureDialog(null)).toBeNull()
+  })
+})
+
+describe('dialogStackKey', () => {
+  test('distinguishes new project from existing project id', () => {
+    expect(dialogStackKey({ kind: 'project', mode: 'new' })).toBe('new')
+    expect(dialogStackKey({ kind: 'project', mode: 'existing', projectId: 'p-1' })).toBe('p-1')
+    expect(dialogStackKey({ kind: 'settings' })).toBe('')
+    expect(dialogStackKey(null)).toBe('')
   })
 })

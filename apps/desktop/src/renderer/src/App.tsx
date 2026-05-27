@@ -9,7 +9,7 @@ import {
   type SplitAxis
 } from '../../common/state'
 import { TerminalPane } from './components/TerminalPane'
-import { getFixtureDialog, type AppDialog } from './dialogs'
+import { dialogStackKey, getFixtureDialog, type AppDialog } from './dialogs'
 import { resolveTerminalThemeMode, useResolvedThemeMode } from './design/theme'
 import { FixtureBanner } from './fixtures/FixtureBanner'
 import { getFixture } from './fixtures/states'
@@ -175,9 +175,7 @@ function App(): React.JSX.Element {
   const dashboardMode = !activeTab || fixtureId?.startsWith('dashboard')
   const fixtureDialog = getFixtureDialog(fixtureId)
   const rootDialog = fixtureDialog ?? activeDialog
-  const stackAnchor = `${fixtureId ?? ''}:${activeDialog?.kind ?? ''}:${
-    activeDialog?.kind === 'project' ? activeDialog.projectId : ''
-  }`
+  const stackAnchor = `${fixtureId ?? ''}:${activeDialog?.kind ?? ''}:${dialogStackKey(activeDialog)}`
   const stackedDialog =
     stackState !== null && stackState.anchor === stackAnchor ? stackState.dialog : null
   const visibleDialog = stackedDialog ?? rootDialog
