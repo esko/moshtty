@@ -8,6 +8,7 @@ import { MOSHTTY_IPC_CHANNELS } from '../common/moshtty-api'
 import type { MoshttyState } from '../common/state'
 import { createSecretStore } from './secret-store'
 import { createMoshttyStateStore } from './state-store'
+import { sshBootstrap } from './ssh-bootstrap'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -178,6 +179,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle(MOSHTTY_IPC_CHANNELS.secretDeleteToken, async (_event, label: string) =>
     secretStore.deleteToken(label)
   )
+  ipcMain.handle(MOSHTTY_IPC_CHANNELS.sshBootstrap, async (_event, config) => sshBootstrap(config))
   ipcMain.handle(MOSHTTY_IPC_CHANNELS.windowMinimize, async (event) => {
     const window = BrowserWindow.fromWebContents(event.sender)
     window?.minimize()

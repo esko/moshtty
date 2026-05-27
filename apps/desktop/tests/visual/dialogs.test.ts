@@ -9,7 +9,8 @@ test.describe('Dialogs', () => {
     'dialog-project-edit',
     'dialog-terminal-settings',
     'dialog-terminal-settings-light',
-    'dialog-terminal-settings-dark'
+    'dialog-terminal-settings-dark',
+    'dialog-bootstrap'
   ]) {
     test(`matches ${fixtureId} screenshot`, async ({ loadFixture, page }) => {
       await loadFixture(fixtureId)

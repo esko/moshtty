@@ -5,6 +5,7 @@ import { parseMoshttyProfileText } from '../../../common/profile.schema'
 import { getShortcutActions, APP_ACTIONS, formatShortcut } from '../keymap'
 import type { AppDialog } from '../dialogs'
 import './Dialogs.css'
+import { BootstrapDialog } from './BootstrapDialog'
 
 interface DialogsProps {
   state: import('../../../common/state').MoshttyState | null
@@ -89,6 +90,10 @@ export const Dialogs: React.FC<DialogsProps> = ({
           onClose={closeDialog}
           actionTitle={actionTitle}
         />
+      )
+    case 'bootstrap':
+      return (
+        <BootstrapDialog secretMode={secretMode} onClose={closeDialog} actionTitle={actionTitle} />
       )
     default:
       return null

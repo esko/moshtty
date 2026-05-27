@@ -4,6 +4,25 @@ import { PlusIcon, FolderPlusIcon, GearIcon, HelpIcon } from '../design/icons'
 import { projectDisplayInitial } from '../../../common/state'
 import './Sidebar.css'
 
+const SshIcon: React.FC<{ size?: number }> = ({ size = 14 }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+    <line x1="8" y1="21" x2="16" y2="21" />
+    <line x1="12" y1="17" x2="12" y2="21" />
+    <polyline points="7 8 10 10 7 12" />
+    <line x1="12" y1="12" x2="16" y2="12" />
+  </svg>
+)
+
 interface SidebarProps {
   state: import('../../../common/state').MoshttyState | null
   openDialog: (dialog: import('../dialogs').AppDialog) => void
@@ -26,6 +45,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ state, openDialog, actionTitle
       <div className="sidebar-header">
         <span className="sidebar-title">Projects</span>
         <div className="sidebar-header-actions">
+          <button
+            className="sidebar-action-btn"
+            type="button"
+            aria-label="Bootstrap remote"
+            title={actionTitle('bootstrap-remote')}
+            onClick={(): void => openDialog({ kind: 'bootstrap' })}
+          >
+            <SshIcon size={14} />
+          </button>
           <button
             className="sidebar-action-btn"
             type="button"

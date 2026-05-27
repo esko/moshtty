@@ -360,6 +360,11 @@ export const FIXTURES: Record<string, FixtureState> = {
     id: 'connection-lost',
     label: 'Connection status (lost)',
     state: lostRemote
+  },
+  'dialog-bootstrap': {
+    id: 'dialog-bootstrap',
+    label: 'Remote SSH Bootstrap dialog',
+    state: base
   }
 }
 

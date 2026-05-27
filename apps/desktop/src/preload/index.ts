@@ -24,6 +24,8 @@ const moshtty: MoshttyApi = {
     ipcRenderer.invoke(MOSHTTY_IPC_CHANNELS.secretLoadToken, label),
   deleteToken: (label): Promise<void> =>
     ipcRenderer.invoke(MOSHTTY_IPC_CHANNELS.secretDeleteToken, label),
+  sshBootstrap: (config): Promise<import('../common/ssh.schema').SshBootstrapResult> =>
+    ipcRenderer.invoke(MOSHTTY_IPC_CHANNELS.sshBootstrap, config),
   window: {
     minimize: (): Promise<void> => ipcRenderer.invoke(MOSHTTY_IPC_CHANNELS.windowMinimize),
     maximize: (): Promise<void> => ipcRenderer.invoke(MOSHTTY_IPC_CHANNELS.windowMaximize),

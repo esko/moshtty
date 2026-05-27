@@ -2,6 +2,7 @@ export type AppDialog =
   | { kind: 'import'; mode: 'empty' | 'valid' | 'invalid' }
   | { kind: 'project'; mode: 'new' | 'existing' }
   | { kind: 'settings' }
+  | { kind: 'bootstrap' }
 
 export function getFixtureDialog(fixtureId: string | null): AppDialog | null {
   switch (fixtureId) {
@@ -20,6 +21,8 @@ export function getFixtureDialog(fixtureId: string | null): AppDialog | null {
     case 'dialog-terminal-settings-light':
     case 'dialog-terminal-settings-dark':
       return { kind: 'settings' }
+    case 'dialog-bootstrap':
+      return { kind: 'bootstrap' }
     default:
       return null
   }

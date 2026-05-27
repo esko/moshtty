@@ -13,6 +13,7 @@ const mockApi = {
   storeToken: vi.fn(),
   loadToken: vi.fn(),
   deleteToken: vi.fn(),
+  sshBootstrap: vi.fn(),
   window: {
     minimize: vi.fn(),
     maximize: vi.fn(),

@@ -22,6 +22,7 @@ export type AppActionId =
   | 'split-pane-down'
   | 'close-pane'
   | 'close-tab'
+  | 'bootstrap-remote'
 
 export interface KeyChord {
   key: string
@@ -59,6 +60,12 @@ export const APP_ACTIONS: readonly AppAction[] = [
     id: 'import-remote',
     label: 'Import remote',
     shortcut: { key: 'i', ctrl: true, shift: true }
+  },
+  {
+    id: 'bootstrap-remote',
+    label: 'Bootstrap remote',
+    mouseOnly: true,
+    mouseOnlyReason: 'Bootstrap dialog requires credentials.'
   },
   {
     id: 'open-settings',
