@@ -17,6 +17,8 @@ export type ColorScale = {
   warning: string
   danger: string
   focus: string
+  glassBg: string
+  glassBorder: string
 }
 
 export const lightColors: ColorScale = {
@@ -37,7 +39,9 @@ export const lightColors: ColorScale = {
   success: '#10b981',
   warning: '#f59e0b',
   danger: '#ef4444',
-  focus: '#4f46e5'
+  focus: '#4f46e5',
+  glassBg: 'rgba(255, 255, 255, 0.72)',
+  glassBorder: 'rgba(0, 0, 0, 0.08)'
 }
 
 export const darkColors: ColorScale = {
@@ -58,7 +62,9 @@ export const darkColors: ColorScale = {
   success: '#34d399',
   warning: '#fbbf24',
   danger: '#f87171',
-  focus: '#a5b4fc'
+  focus: '#a5b4fc',
+  glassBg: 'rgba(24, 24, 28, 0.62)',
+  glassBorder: 'rgba(255, 255, 255, 0.08)'
 }
 
 export const space = {

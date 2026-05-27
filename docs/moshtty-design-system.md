@@ -32,26 +32,28 @@ sizes. Stylelint enforces this.
 
 ### Color
 
-| Token (CSS / TS)            | Use                                                                                                                                               |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--color-app-bg`            | App chrome background.                                                                                                                            |
-| `--color-sidebar-bg`        | Project rail surface.                                                                                                                             |
-| `--color-sidebar-bg-active` | Active/hover rail row.                                                                                                                            |
-| `--color-workspace-bg`      | Workspace canvas.                                                                                                                                 |
-| `--color-terminal-bg`       | Terminal pane background. Light mode uses a white canvas (`#ffffff`) to match the OpenCode and Antigravity references; dark mode stays `#18181b`. |
-| `--color-border`            | Hairline divider.                                                                                                                                 |
-| `--color-border-strong`     | Control borders, inputs.                                                                                                                          |
-| `--color-text-main`         | Primary body text.                                                                                                                                |
-| `--color-text-muted`        | Secondary text, labels.                                                                                                                           |
-| `--color-text-subtle`       | Hints, timestamps, disabled.                                                                                                                      |
-| `--color-text-terminal`     | Text rendered on the terminal background. Light mode is near-black (`#1a1a1f`) on the white canvas; dark mode is `#e2e2e8`.                       |
-| `--color-accent`            | Primary action color.                                                                                                                             |
-| `--color-accent-soft`       | Accent tint, hover/selected.                                                                                                                      |
-| `--color-accent-on`         | Foreground on accent surfaces.                                                                                                                    |
-| `--color-success`           | Connected, healthy.                                                                                                                               |
-| `--color-warning`           | Degraded, intermediate.                                                                                                                           |
-| `--color-danger`            | Error, lost pane.                                                                                                                                 |
-| `--color-focus`             | Focus ring color, contrasts both surfaces.                                                                                                        |
+| Token (CSS / TS)            | Use                                                                                                                                                                                                                    |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--color-app-bg`            | App chrome background.                                                                                                                                                                                                 |
+| `--color-sidebar-bg`        | Project rail surface.                                                                                                                                                                                                  |
+| `--color-sidebar-bg-active` | Active/hover rail row.                                                                                                                                                                                                 |
+| `--color-workspace-bg`      | Workspace canvas.                                                                                                                                                                                                      |
+| `--color-terminal-bg`       | Terminal pane background. Light mode uses a white canvas (`#ffffff`) to match the OpenCode and Antigravity references; dark mode stays `#18181b`.                                                                      |
+| `--color-border`            | Hairline divider.                                                                                                                                                                                                      |
+| `--color-border-strong`     | Control borders, inputs.                                                                                                                                                                                               |
+| `--color-text-main`         | Primary body text.                                                                                                                                                                                                     |
+| `--color-text-muted`        | Secondary text, labels.                                                                                                                                                                                                |
+| `--color-text-subtle`       | Hints, timestamps, disabled.                                                                                                                                                                                           |
+| `--color-text-terminal`     | Text rendered on the terminal background. Light mode is near-black (`#1a1a1f`) on the white canvas; dark mode is `#e2e2e8`.                                                                                            |
+| `--color-accent`            | Primary action color.                                                                                                                                                                                                  |
+| `--color-accent-soft`       | Accent tint, hover/selected.                                                                                                                                                                                           |
+| `--color-accent-on`         | Foreground on accent surfaces.                                                                                                                                                                                         |
+| `--color-success`           | Connected, healthy.                                                                                                                                                                                                    |
+| `--color-warning`           | Degraded, intermediate.                                                                                                                                                                                                |
+| `--color-danger`            | Error, lost pane.                                                                                                                                                                                                      |
+| `--color-focus`             | Focus ring color, contrasts both surfaces.                                                                                                                                                                             |
+| `--color-glass-bg`          | Translucent fill for floating chrome over the terminal canvas (pane pills). Requires a `backdrop-filter` blur on the consumer; pair with a `@media (prefers-reduced-transparency)` fallback to `--color-workspace-bg`. |
+| `--color-glass-border`      | 1 px border for the same glass surfaces; uses a soft neutral that reads against either light or dark canvas.                                                                                                           |
 
 ### Spacing scale (4-pt)
 
