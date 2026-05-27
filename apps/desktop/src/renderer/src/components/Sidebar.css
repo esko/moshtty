@@ -58,10 +58,28 @@
   overflow-y: auto;
 }
 
+.project-item-row {
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-md, 6px);
+  padding-right: var(--space-xs, 4px);
+  transition: background-color var(--duration-fast) var(--easing-standard);
+}
+
+.project-item-row:hover,
+.project-item-row:focus-within {
+  background-color: var(--color-sidebar-bg-active);
+}
+
+.project-item-row.active {
+  background-color: var(--color-sidebar-bg-active);
+}
+
 .project-item {
   display: flex;
   align-items: center;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   height: var(--density-row-height, 32px);
   padding: 0 var(--space-sm, 8px);
   background: transparent;
@@ -70,15 +88,6 @@
   text-align: left;
   cursor: pointer;
   gap: var(--space-sm, 8px);
-  transition: background-color var(--duration-fast) var(--easing-standard);
-}
-
-.project-item:hover {
-  background-color: var(--color-sidebar-bg-active);
-}
-
-.project-item.active {
-  background-color: var(--color-sidebar-bg-active);
 }
 
 .project-chip {
@@ -149,57 +158,40 @@
 
 .footer-link:focus-visible,
 .project-item:focus-visible,
+.project-action-btn:focus-visible,
 .sidebar-action-btn:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: -2px;
-}
-
-/* Project row with hover-revealed actions */
-.project-item-row {
-  display: flex;
-  align-items: center;
-  border-radius: var(--radius-md, 6px);
-  position: relative;
-}
-
-.project-item-row .project-item {
-  flex: 1;
-  min-width: 0;
-}
-
-.project-item-row.active .project-item {
-  background-color: var(--color-sidebar-bg-active);
-}
-
-.project-item-actions {
-  display: none;
-  gap: var(--space-2xs, 2px);
-  padding-right: var(--space-xs, 4px);
-  flex-shrink: 0;
-}
-
-.project-item-row:hover .project-item-actions {
-  display: flex;
 }
 
 .project-action-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  flex-shrink: 0;
+  width: var(--density-icon-button-size, 28px);
+  height: var(--density-icon-button-size, 28px);
   background: transparent;
   border: none;
   border-radius: var(--radius-sm, 4px);
   color: var(--color-text-muted);
   cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
   transition:
+    opacity var(--duration-fast) var(--easing-standard),
     background-color var(--duration-fast) var(--easing-standard),
     color var(--duration-fast) var(--easing-standard);
 }
 
+.project-item-row:hover .project-action-btn,
+.project-item-row:focus-within .project-action-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .project-action-btn:hover {
-  background-color: var(--color-sidebar-bg-active);
+  background-color: color-mix(in srgb, var(--color-text-main) 8%, transparent);
   color: var(--color-text-main);
 }
 

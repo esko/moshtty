@@ -1,34 +1,8 @@
 import React from 'react'
 import { useAppStore } from '../store'
-import {
-  PlusIcon,
-  FolderPlusIcon,
-  GearIcon,
-  HelpIcon,
-  TrashIcon,
-  PencilIcon
-} from '../design/icons'
+import { PlusIcon, GearIcon, HelpIcon, TrashIcon, PencilIcon } from '../design/icons'
 import { projectDisplayInitial } from '../../../common/state'
 import './Sidebar.css'
-
-const SshIcon: React.FC<{ size?: number }> = ({ size = 14 }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-    <line x1="8" y1="21" x2="16" y2="21" />
-    <line x1="12" y1="17" x2="12" y2="21" />
-    <polyline points="7 8 10 10 7 12" />
-    <line x1="12" y1="12" x2="16" y2="12" />
-  </svg>
-)
 
 interface SidebarProps {
   state: import('../../../common/state').MoshttyState | null
@@ -53,24 +27,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ state, openDialog, actionTitle
       <div className="sidebar-header">
         <span className="sidebar-title">Projects</span>
         <div className="sidebar-header-actions">
-          <button
-            className="sidebar-action-btn"
-            type="button"
-            aria-label="Bootstrap remote"
-            title={actionTitle('bootstrap-remote')}
-            onClick={(): void => openDialog({ kind: 'bootstrap' })}
-          >
-            <SshIcon size={14} />
-          </button>
-          <button
-            className="sidebar-action-btn"
-            type="button"
-            aria-label="Import remote"
-            title={actionTitle('import-remote')}
-            onClick={(): void => openDialog({ kind: 'import', mode: 'empty' })}
-          >
-            <FolderPlusIcon size={14} />
-          </button>
           <button
             className="sidebar-action-btn"
             type="button"
@@ -103,32 +59,30 @@ export const Sidebar: React.FC<SidebarProps> = ({ state, openDialog, actionTitle
                 </span>
                 <span className="project-label">{project.name}</span>
               </button>
-              <div className="project-item-actions">
-                <button
-                  type="button"
-                  className="project-action-btn"
-                  aria-label={`Rename ${project.name}`}
-                  title="Rename project"
-                  onClick={(): void =>
-                    openDialog({ kind: 'project', mode: 'existing', projectId: project.id })
+              <button
+                type="button"
+                className="project-action-btn project-edit"
+                aria-label={`Rename ${project.name}`}
+                title="Rename project"
+                onClick={(): void =>
+                  openDialog({ kind: 'project', mode: 'existing', projectId: project.id })
+                }
+              >
+                <PencilIcon size={16} />
+              </button>
+              <button
+                type="button"
+                className="project-action-btn project-delete danger"
+                aria-label={`Delete ${project.name}`}
+                title="Delete project"
+                onClick={(): void => {
+                  if (confirm(`Delete project "${project.name}"?`)) {
+                    deleteProject(project.id).catch(console.error)
                   }
-                >
-                  <PencilIcon size={12} />
-                </button>
-                <button
-                  type="button"
-                  className="project-action-btn danger"
-                  aria-label={`Delete ${project.name}`}
-                  title="Delete project"
-                  onClick={(): void => {
-                    if (confirm(`Delete project "${project.name}"?`)) {
-                      deleteProject(project.id).catch(console.error)
-                    }
-                  }}
-                >
-                  <TrashIcon size={12} />
-                </button>
-              </div>
+                }}
+              >
+                <TrashIcon size={16} />
+              </button>
             </div>
           )
         })}
