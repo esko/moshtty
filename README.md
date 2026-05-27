@@ -20,7 +20,7 @@ The previous **Crostini PWA + local Go agent** stack lives on the [`legacy-pwa`]
 ## Requirements
 
 - **Node.js** 22+ and **pnpm** 9+
-- **Go** 1.22+ (module version in `go.mod`)
+- **Go** 1.26+ (see `go.mod`)
 - For full UI verification: a display (Playwright Electron, `agent-browser` — see `docs/moshtty-testing.md`)
 
 ## Desktop client

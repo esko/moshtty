@@ -17,8 +17,10 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: "1.26"
           cache: true
+
+      - run: go version
 
       - name: Verify tag matches version/companion
         run: |
