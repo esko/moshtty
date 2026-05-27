@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/creack/pty"
@@ -269,7 +270,12 @@ func (m *Manager) startAttachment(ent *entry) (*attachment, error) {
 		srv.Close()
 		return nil, err
 	}
-	rw := newPanePTY(ent.ptmx)
+	rw, err := newPanePTY(ent.ptmx)
+	if err != nil {
+		srv.Close()
+		bridge.close()
+		return nil, err
+	}
 	att := &attachment{
 		key:    srv.KeyBase64(),
 		server: srv,
@@ -315,32 +321,30 @@ type panePTY struct {
 	once   sync.Once
 }
 
-func newPanePTY(file *os.File) *panePTY {
-	return &panePTY{
-		file:   file,
-		closed: make(chan struct{}),
+func newPanePTY(file *os.File) (*panePTY, error) {
+	fd := file.Fd()
+	newFd, err := syscall.Dup(int(fd))
+	if err != nil {
+		return nil, fmt.Errorf("dup pty fd: %w", err)
 	}
+	dupFile := os.NewFile(uintptr(newFd), file.Name())
+	return &panePTY{
+		file:   dupFile,
+		closed: make(chan struct{}),
+	}, nil
 }
 
 func (p *panePTY) Read(buf []byte) (int, error) {
-	for {
+	n, err := p.file.Read(buf)
+	if err != nil {
 		select {
 		case <-p.closed:
 			return 0, os.ErrClosed
 		default:
 		}
-		_ = p.file.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
-		n, err := p.file.Read(buf)
-		if n > 0 {
-			return n, nil
-		}
-		if err != nil {
-			if os.IsTimeout(err) {
-				continue
-			}
-			return 0, err
-		}
+		return n, err
 	}
+	return n, nil
 }
 
 func (p *panePTY) Write(buf []byte) (int, error) {
@@ -353,10 +357,12 @@ func (p *panePTY) Write(buf []byte) (int, error) {
 }
 
 func (p *panePTY) Close() error {
+	var err error
 	p.once.Do(func() {
 		close(p.closed)
+		err = p.file.Close()
 	})
-	return nil
+	return err
 }
 
 func (m *Manager) get(flowID uint32) (*entry, error) {
