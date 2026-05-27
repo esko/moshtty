@@ -289,3 +289,77 @@ Acceptance:
 Agent brief:
 
 - `docs/agents/2026-05-27-8-moshtty-ui-refresh.md`
+
+## M8b UI Polish
+
+Status: Planned
+
+Objective:
+
+- Finish the visual quality gap left after M8: remove Bootstrap-era artefacts, make
+  terminal panes edge-to-edge, add a terminal color theme picker, and align the tab strip
+  with the OpenCode pill-tab reference.
+
+Deliverables:
+
+- BETA badge removed from `TopBar.tsx` and `TopBar.css`.
+- `.button.primary` restyled to near-black/white (no blue fill).
+- Terminal workspace padding removed; pane border and radius removed; split handle becomes
+  a 1 px hairline.
+- `terminalThemes.ts` module with six named color presets (Default Dark/Light, Dracula,
+  Catppuccin Mocha, Solarized Dark/Light) + `auto` mode via localStorage.
+- `TerminalPane.tsx` wired to new theme module.
+- Terminal theme picker `<select>` in the Settings dialog.
+- Tab strip redesigned: inactive tabs bare (no fill), active tab single pill
+  (`background: ~#e8e8e8`, `border-radius: 6px`), 1 px vertical dividers between tabs.
+
+Acceptance:
+
+- No BETA badge.
+- Primary buttons are neutral (near-black/white), not indigo/blue.
+- Terminal panes span edge-to-edge; no rounded card borders.
+- Settings dialog shows theme picker with 7 options (Auto + 6 presets).
+- Tab strip matches `docs/visual-qa/8b/references/opencode-tab-bar.png`.
+- `pnpm verify:full` passes.
+- agent-browser QA screenshots captured for all 7 required states in `docs/visual-qa/8b/`.
+- axe-core passes on top bar and settings dialog.
+
+Agent brief:
+
+- `docs/agents/2026-05-27-8b-moshtty-ui-polish.md`
+
+## M9b Command Palette
+
+Status: Planned
+
+Objective:
+
+- Add a `Ctrl+K` command palette overlay so users can search and invoke any registered
+  app action by keyboard without mousing through menus.
+
+Deliverables:
+
+- `open-command-palette` action in `keymap.ts` (shortcut `Ctrl+K`).
+- `appHandlers.ts` hook extracting the handler map from `App.tsx`.
+- `CommandPalette.tsx` overlay component: search input, filtered action list, keyboard
+  navigation (↑/↓/Enter/Escape), mouse hover, disabled mouseOnly rows with tooltip.
+- `CommandPalette.css` styled to token contract.
+- `App.tsx` wired to render palette on `Ctrl+K`.
+- Focus trap and focus-return on open/close.
+- `role="dialog"` / `role="listbox"` / `role="option"` accessibility.
+
+Acceptance:
+
+- `Ctrl+K` opens the palette from any app state.
+- Typing filters actions in real time (case-insensitive substring).
+- ↑/↓ navigates; Enter invokes + closes; Escape closes without invoking.
+- mouseOnly actions show grayed/disabled; cannot be invoked.
+- Closing returns focus to the previously focused element.
+- Light and dark mode both render correctly.
+- `pnpm verify:full` passes.
+- agent-browser QA screenshots for 5 required palette states in `docs/visual-qa/9b/`.
+- axe-core passes on the open palette.
+
+Agent brief:
+
+- `docs/agents/2026-05-27-9-command-palette.md`
