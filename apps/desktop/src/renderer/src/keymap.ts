@@ -23,6 +23,7 @@ export type AppActionId =
   | 'close-pane'
   | 'close-tab'
   | 'bootstrap-remote'
+  | 'open-command-palette'
 
 export interface KeyChord {
   key: string
@@ -71,6 +72,11 @@ export const APP_ACTIONS: readonly AppAction[] = [
     id: 'open-settings',
     label: 'Settings',
     shortcut: { key: ',', ctrl: true }
+  },
+  {
+    id: 'open-command-palette',
+    label: 'Open command palette',
+    shortcut: { key: 'k', ctrl: true }
   },
   {
     id: 'open-help',
@@ -122,7 +128,7 @@ export const APP_ACTIONS: readonly AppAction[] = [
     id: 'select-project',
     label: 'Select project',
     mouseOnly: true,
-    mouseOnlyReason: 'Project rows are pointer-selected until command palette navigation lands.'
+    mouseOnlyReason: 'Use the project rail to select a project.'
   },
   {
     id: 'show-general-settings',
@@ -157,6 +163,26 @@ export const APP_ACTIONS: readonly AppAction[] = [
     shortcut: { key: 'w', ctrl: true, shift: true }
   }
 ] as const
+
+export const PALETTE_EXCLUDED_ACTION_IDS: ReadonlySet<AppActionId> = new Set([
+  'close-dialog',
+  'cancel-dialog',
+  'confirm-dialog',
+  'open-command-palette'
+])
+
+export function filterPaletteActions(actions: readonly AppAction[], query: string): AppAction[] {
+  const normalizedQuery = query.toLowerCase()
+  return actions.filter(
+    (action) =>
+      !PALETTE_EXCLUDED_ACTION_IDS.has(action.id) &&
+      action.label.toLowerCase().includes(normalizedQuery)
+  )
+}
+
+export function canInvokePaletteAction(action: AppAction | undefined): boolean {
+  return Boolean(action && !action.mouseOnly)
+}
 
 export type AppActionHandlerMap = Partial<Record<AppActionId, () => void>>
 

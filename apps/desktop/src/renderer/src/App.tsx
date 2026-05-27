@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   getActiveProject,
   getActiveTab,
@@ -14,13 +14,9 @@ import { resolveTerminalThemeMode, useResolvedThemeMode } from './design/theme'
 import { FixtureBanner } from './fixtures/FixtureBanner'
 import { getFixture } from './fixtures/states'
 import { loadFixtureFromQuery } from './fixtures/loader'
-import {
-  formatShortcut,
-  getAction,
-  useRegisteredShortcuts,
-  type AppActionId,
-  type AppActionHandlerMap
-} from './keymap'
+import { useAppHandlers } from './appHandlers'
+import { CommandPalette } from './components/CommandPalette'
+import { formatShortcut, getAction, useRegisteredShortcuts, type AppActionId } from './keymap'
 import { useAppStore } from './store'
 import { MoshttyTransport } from './transport/moshtty-transport'
 import { MoshConnectionManager } from './mosh-connection-manager'
@@ -145,15 +141,12 @@ function App(): React.JSX.Element {
   const fixtureId = getFixtureId()
   const fixture = fixtureId ? getFixture(fixtureId) : undefined
   const [activeDialog, setActiveDialog] = useState<AppDialog | null>(null)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [paletteSession, setPaletteSession] = useState(0)
   const snapshot = useAppStore((state) => state.snapshot)
   const hydrate = useAppStore((state) => state.hydrate)
-  const saveWorkspace = useAppStore((state) => state.saveWorkspace)
-  const resetWorkspace = useAppStore((state) => state.resetWorkspace)
-  const addTab = useAppStore((state) => state.addTab)
-  const toggleProjectRail = useAppStore((state) => state.toggleProjectRail)
   const splitPane = useAppStore((state) => state.splitPane)
   const closeActivePane = useAppStore((state) => state.closeActivePane)
-  const closeActiveTab = useAppStore((state) => state.closeActiveTab)
   const updateRemoteCertHashes = useAppStore((state) => state.updateRemoteCertHashes)
 
   const [transport, setTransport] = useState<MoshttyTransport | null>(null)
@@ -291,39 +284,15 @@ function App(): React.JSX.Element {
     }
   }, [remote, fixture, splitPane, updateRemoteCertHashes])
 
-  const shortcutHandlers = useMemo<AppActionHandlerMap>(
-    () => ({
-      'toggle-project-rail': () => void toggleProjectRail(),
-      'show-projects': () => undefined,
-      'new-project': () => openDialog({ kind: 'project', mode: 'new' }),
-      'import-remote': () => openDialog({ kind: 'import', mode: 'empty' }),
-      'open-settings': () => openDialog({ kind: 'settings' }),
-      'open-help': () => undefined,
-      'new-tab': () => void addTab('Shell'),
-      'save-state': () => void saveWorkspace(),
-      'reset-state': () => void resetWorkspace(),
-      'add-project': () => openDialog({ kind: 'project', mode: 'new' }),
-      'close-dialog': closeDialog,
-      'cancel-dialog': closeDialog,
-      'confirm-dialog': () => undefined,
-      'split-pane-right': () => void splitPane('row'),
-      'split-pane-down': () => void splitPane('column'),
-      'close-pane': () => void closeActivePane(),
-      'close-tab': () => void closeActiveTab()
-    }),
-    [
-      addTab,
-      closeDialog,
-      closeActivePane,
-      closeActiveTab,
-      openDialog,
-      resetWorkspace,
-      saveWorkspace,
-      splitPane,
-      toggleProjectRail
-    ]
-  )
-  useRegisteredShortcuts(shortcutHandlers)
+  const appHandlers = useAppHandlers({
+    openDialog,
+    closeDialog,
+    openCommandPalette: () => {
+      setPaletteSession((session) => session + 1)
+      setPaletteOpen(true)
+    }
+  })
+  useRegisteredShortcuts(appHandlers)
 
   return (
     <div
@@ -367,6 +336,13 @@ function App(): React.JSX.Element {
           )}
         </main>
       </div>
+
+      <CommandPalette
+        key={paletteSession}
+        open={paletteOpen}
+        handlers={appHandlers}
+        onClose={() => setPaletteOpen(false)}
+      />
 
       <Dialogs
         state={state}

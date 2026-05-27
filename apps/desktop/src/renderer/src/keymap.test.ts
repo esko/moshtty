@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   APP_ACTIONS,
   formatShortcut,
+  filterPaletteActions,
   getAction,
   getActionForKeyboardEvent,
   getShortcutActions,
-  matchesShortcut
+  matchesShortcut,
+  PALETTE_EXCLUDED_ACTION_IDS
 } from './keymap'
 
 function keyEvent(
@@ -56,6 +58,9 @@ describe('keymap registry', () => {
 
   it('resolves keyboard events to registered actions', () => {
     expect(getActionForKeyboardEvent(keyEvent('s', { ctrlKey: true }))?.id).toBe('save-state')
+    expect(getActionForKeyboardEvent(keyEvent('k', { ctrlKey: true }))?.id).toBe(
+      'open-command-palette'
+    )
     expect(getActionForKeyboardEvent(keyEvent('Escape'))?.id).toBe('close-dialog')
     expect(getActionForKeyboardEvent(keyEvent('x', { ctrlKey: true }))).toBeNull()
   })
@@ -64,5 +69,18 @@ describe('keymap registry', () => {
     const shortcutIds = getShortcutActions().map((action) => action.id)
     expect(shortcutIds).toContain('new-tab')
     expect(shortcutIds).not.toContain('choose-project-color')
+  })
+
+  it('excludes dialog and palette-open actions from palette list', () => {
+    for (const id of PALETTE_EXCLUDED_ACTION_IDS) {
+      expect(filterPaletteActions(APP_ACTIONS, '').some((action) => action.id === id)).toBe(false)
+    }
+  })
+
+  it('filters palette actions by label substring', () => {
+    expect(filterPaletteActions(APP_ACTIONS, 'split').map((action) => action.id)).toEqual([
+      'split-pane-right',
+      'split-pane-down'
+    ])
   })
 })

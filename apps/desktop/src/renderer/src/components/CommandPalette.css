@@ -1,0 +1,109 @@
+.palette-root {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: calc(var(--space-xl) * 3);
+}
+
+.palette-backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: rgb(0 0 0 / 25%);
+  cursor: default;
+}
+
+.palette-panel {
+  position: relative;
+  display: flex;
+  width: min(100%, calc(var(--space-3xl) * 15));
+  max-height: calc(var(--space-3xl) * 10);
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--color-workspace-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--elevation-dialog);
+}
+
+.palette-input {
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-main);
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-body);
+  background: transparent;
+  outline: none;
+}
+
+.palette-input::placeholder {
+  color: var(--color-text-subtle);
+}
+
+.palette-section-label {
+  padding: var(--space-xs) var(--space-md) var(--space-xs);
+  color: var(--color-text-subtle);
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-caption);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.palette-list {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.palette-item {
+  display: flex;
+  height: var(--density-control-height);
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-md);
+  color: var(--color-text-main);
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-small);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--easing-standard);
+}
+
+.palette-item--active {
+  background: var(--color-sidebar-bg-active);
+}
+
+.palette-item--disabled {
+  color: var(--color-text-subtle);
+  cursor: default;
+}
+
+.palette-item-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.palette-item-shortcut {
+  flex-shrink: 0;
+  margin-left: var(--space-sm);
+  color: var(--color-text-subtle);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-caption);
+}
+
+.palette-empty {
+  padding: var(--space-md);
+  color: var(--color-text-subtle);
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-small);
+  font-style: italic;
+}
