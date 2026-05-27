@@ -71,14 +71,15 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26"
+          go-version-file: go.mod
           cache: true
 
       - run: go vet ./...
 
       - uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          # v1.x binaries are built with Go <1.26; go.mod requires 1.26.0
+          version: v2.12.2
           args: --timeout=5m
 
       - run: go test ./...
