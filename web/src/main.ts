@@ -49,6 +49,9 @@ const spaceDialog = requiredElement<HTMLDialogElement>("#spaceDialog");
 const spaceTitleInput = requiredElement<HTMLInputElement>("#spaceTitle");
 const shortcutsDialog = requiredElement<HTMLDialogElement>("#shortcutsDialog");
 
+// Cache all dialogs as a live HTMLCollection for fast checking on hot paths (e.g., keydown)
+const allDialogs = document.getElementsByTagName("dialog");
+
 let settings = loadSettings();
 applyAppAppearance(settings);
 let currentWorkspace: Workspace | null = null;
@@ -672,7 +675,13 @@ function handleActionShortcut(event: KeyboardEvent): boolean {
 function shouldHandleAppShortcut(event: KeyboardEvent): boolean {
   if (event.defaultPrevented || isSettingsRoute() || !currentWorkspace) return false;
   if (isPaletteOpen()) return false;
-  if (document.querySelector("dialog[open]")) return false;
+
+  // Performance optimization: checking properties on a live HTMLCollection
+  // is much faster than `document.querySelector("dialog[open]")`
+  for (let i = 0; i < allDialogs.length; i++) {
+    if (allDialogs[i].open) return false;
+  }
+
   const target = event.target;
   return !(target instanceof Element && isEditableShortcutTarget(target) && !terminalRoot.contains(target));
 }
