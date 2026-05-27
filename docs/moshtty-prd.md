@@ -66,7 +66,7 @@ Moshtty replaces the previous Crostini-local PWA/Go-agent architecture. The old 
 | ----------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | M0 Planning docs              | Done               | PRD, plan, milestones, agent briefs, and Moshtty `AGENTS.md` are present                                                                                 |
 | M1 Branch and scaffold        | Ready for review   | New branch layout, pnpm/electron-vite/root Go module. Old runtime quarantined under quarantine/                                                          |
-| M2 Desktop state shell        | Ready for review   | Secure `app://moshtty`, typed preload IPC, versioned JSON state, atomic writes, migration, safeStorage + passphrase fallback                             |
+| M2 Desktop state shell        | Verified on target | Secure `app://moshtty`, typed preload IPC, versioned JSON state, atomic writes, migration, safeStorage + passphrase fallback; verified on Chromebook     |
 | M3 macOS remote companion     | Verified on target | `moshtty-remote` run/install/profile/health, LaunchAgent plist, config/token/certs, profile JSON; verified on macOS remote host                          |
 | M4 WebTransport and Mosh mux  | Verified on target | WebTransport server, JSON-RPC control, mux datagrams, pane lifecycle, renderer transport client; verified E2E against macOS host                         |
 | M5 UI and Ghostty integration | Ready for review   | Renderer shell, visual matrix, keymap/settings, live app actions, Ghostty, live Mac shell path, profile import, and reference parity close-out are wired |
@@ -77,15 +77,15 @@ Moshtty replaces the previous Crostini-local PWA/Go-agent architecture. The old 
 
 ## Task Status
 
-| Task                   | Owner       | Status             | Brief                                                |
-| ---------------------- | ----------- | ------------------ | ---------------------------------------------------- |
-| Scaffold Moshtty repo  | Antigravity | Ready for review   | `docs/agents/2026-05-25-1-moshtty-scaffold.md`       |
-| Desktop state shell    | Agent       | Ready for review   | `docs/agents/2026-05-25-2-desktop-state-shell.md`    |
-| macOS remote companion | Agent (M3)  | Verified on target | `docs/agents/2026-05-25-3-macos-remote-companion.md` |
-| WebTransport Mosh mux  | Agent (M4)  | Verified on target | `docs/agents/2026-05-25-4-webtransport-mosh-mux.md`  |
-| Moshtty UI and Ghostty | Codex       | Ready for review   | `docs/agents/2026-05-25-5-moshtty-ui-ghostty.md`     |
-| `moshttyctl` CLI       | agy         | Ready for review   | `docs/agents/2026-05-25-6-moshttyctl-cli.md`         |
-| Moshtty UI Refresh     | Antigravity | Ready for review   | `docs/agents/2026-05-27-8-moshtty-ui-refresh.md`     |
+| Task                   | Owner       | Status             | Brief                                                                                                   |
+| ---------------------- | ----------- | ------------------ | ------------------------------------------------------------------------------------------------------- |
+| Scaffold Moshtty repo  | Antigravity | Ready for review   | `docs/agents/2026-05-25-1-moshtty-scaffold.md`                                                          |
+| Desktop state shell    | Agent       | Verified on target | `docs/agents/2026-05-25-2-desktop-state-shell.md` (verified in `followups/m2-safestorage-on-device.md`) |
+| macOS remote companion | Agent (M3)  | Verified on target | `docs/agents/2026-05-25-3-macos-remote-companion.md`                                                    |
+| WebTransport Mosh mux  | Agent (M4)  | Verified on target | `docs/agents/2026-05-25-4-webtransport-mosh-mux.md` (verified in `followups/m4-mosh-adapter.md`)        |
+| Moshtty UI and Ghostty | Codex       | Ready for review   | `docs/agents/2026-05-25-5-moshtty-ui-ghostty.md`                                                        |
+| `moshttyctl` CLI       | agy         | Ready for review   | `docs/agents/2026-05-25-6-moshttyctl-cli.md`                                                            |
+| Moshtty UI Refresh     | Antigravity | Ready for review   | `docs/agents/2026-05-27-8-moshtty-ui-refresh.md`                                                        |
 
 Allowed status values (also defined in `AGENTS.md` -> Status Tiers):
 
@@ -215,3 +215,4 @@ The first full acceptance pass requires:
 - M6 `moshttyctl` CLI (2026-05-25): Companion Unix socket JSON-RPC server and client transport implemented. Fully supported commands include `moshttyctl list` (alias `cleanup list`) and `moshttyctl pane close <flow-id>` (alias `cleanup kill <flow-id>`). Commands for tab layout and splits (`tab`, `pane split/focus/rename`) properly return clear errors requiring active Electron application connection. Verification: `go test ./...` (passed), `go vet ./...` (passed), `git diff --check` (clean). All 12 packages in internal Go modules passed tests, including new ctlsocket and pane manager unit tests.
 - M3 & M4 target verification (2026-05-25): Compiled and deployed `moshtty-remote` to remote host `macmini` (macOS x86_64). Installed and ran companion under launchd LaunchAgent, listening on port 4433. Generated profile JSON, normalized and imported it into the running Electron desktop app (CDP port 9222). Verified successful cert-pinned WebTransport handshake between Electron and remote companion. Verified remote pane creation via WebTransport control stream and verified socket-based CLI controls using `moshttyctl list` and `moshttyctl pane close` from the macOS host. Screenshots captured at `docs/visual-qa/m6-initial.png` and `docs/visual-qa/m6-imported.png`. Verification clean.
 - M8 UI Refresh (2026-05-27): Redesigned the Electron app shell to run as a frameless window with custom WindowControls (minimize, maximize, close) in a unified horizontal TopBar containing horizontal tabs, toggle, and connection status. Replaced the multi-purpose project rail with a collapsible, projects-only Sidebar. Extracted the Dialogs and Dashboard interfaces, shrinking `App.tsx` from ~900 lines to under 200 lines. Resolved color contrast issues on the brand badge, empty-copy warning text, and offline status text to achieve a WCAG AA pass. Verification: `pnpm verify:full` (passed) with all 33 Playwright visual and Axe-core accessibility checks green, Vitest unit tests green, and Go tests/vetting clean.
+- M2 & M4 on-target verification follow-ups (2026-05-27): Verified `safeStorage` availability and passphrase-encrypted fallback token storage E2E on the developer Chromebook using Playwright CDP script (verified successful store/load/delete token round-trip under fallback mode). Deployed and verified E2E mosh connection to launchd remote companion on macOS host `macmini`. Pasted canonical profile JSON, entered decryption passphrase, verified connection established successfully over WebTransport, typed interactive shell inputs, and verified output on-screen. Captured verification screenshots under `docs/visual-qa/m6-connected.png` and `docs/visual-qa/m6-typed.png`.

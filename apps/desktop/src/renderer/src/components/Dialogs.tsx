@@ -234,7 +234,7 @@ const ImportDialog: React.FC<ImportDialogProps> = ({
   const [parseFailed, setParseFailed] = useState(mode === 'invalid')
   const parsedProfile = profileText.trim() ? parseMoshttyProfileText(profileText) : null
   const needsPassphrase =
-    secretMode === 'passphrase' &&
+    (secretMode === 'passphrase' || secretMode === 'unavailable') &&
     parsedProfile?.ok === true &&
     Boolean(parsedProfile.profile.token)
   const invalid = parseFailed
