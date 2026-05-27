@@ -43,7 +43,7 @@ describe('TopBar tab status roundel', () => {
   let root: Root
 
   beforeEach(() => {
-    window.moshtty = windowApiMock as typeof window.moshtty
+    window.moshtty = windowApiMock as unknown as typeof window.moshtty
     useAppStore.setState({
       addTab: vi.fn().mockResolvedValue(undefined),
       setActiveTab: vi.fn().mockResolvedValue(undefined),
