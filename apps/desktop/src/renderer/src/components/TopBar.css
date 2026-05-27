@@ -50,18 +50,53 @@
   height: 100%;
 }
 
+.tab-strip-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tab-strip-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.tab-strip-inner {
+  display: inline-flex;
+  flex-direction: column;
+  min-width: 100%;
+  height: 100%;
+}
+
 .tab-strip {
   display: flex;
   align-items: stretch;
   gap: 0;
   height: 100%;
-  overflow-x: auto;
-  scrollbar-width: none;
-  flex: 1;
 }
 
-.tab-strip::-webkit-scrollbar {
-  display: none;
+.tab-close-strip {
+  display: flex;
+  height: 0;
+  overflow: visible;
+  margin-top: calc(-1 * var(--density-topbar-height, 40px));
+  pointer-events: none;
+}
+
+.tab-close-cell {
+  display: flex;
+  flex: 1 1 80px;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 80px;
+  max-width: 160px;
+  height: var(--density-topbar-height, 40px);
+  padding-right: var(--space-xs, 4px);
+  pointer-events: none;
+}
+
+.tab-close-cell .tab-close {
+  pointer-events: auto;
 }
 
 .tab-wrapper {
@@ -69,11 +104,19 @@
   align-items: center;
   gap: var(--space-xs, 4px);
   position: relative;
+  flex: 1 1 80px;
   padding: var(--space-xs, 4px) var(--space-sm, 8px);
   min-width: 80px;
   max-width: 160px;
+  border: none;
   border-radius: 0;
   background: transparent;
+  font: inherit;
+  text-align: left;
+}
+
+.tab-wrapper--closable {
+  padding-right: calc(var(--space-sm, 8px) + 16px + var(--space-xs, 4px));
 }
 
 .tab-wrapper:not(.active, :last-child)::after {
@@ -107,20 +150,23 @@
   background: var(--color-danger);
 }
 
-.tab-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  background: transparent;
-  border: none;
-  padding: var(--space-xs, 4px) var(--space-xs, 4px);
-  text-align: left;
+.tab-wrapper[role='tab'] {
   cursor: pointer;
-  min-width: 0;
   outline: none;
 }
 
+button.tab-wrapper {
+  -webkit-app-region: no-drag;
+}
+
+.tab-wrapper[role='tab']:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+
 .tab-title {
+  flex: 1;
+  min-width: 0;
   font-family: var(--font-family-ui);
   font-size: var(--font-size-small, 12px);
   font-weight: 500;

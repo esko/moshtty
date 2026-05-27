@@ -127,61 +127,85 @@ export const TopBar: React.FC<TopBarProps> = ({ state, liveStatus, remoteStatus,
           <HamburgerIcon size={16} />
         </button>
         <div className="tab-strip-wrapper">
-          <div className="tab-strip" role="tablist" aria-label="Tabs">
-            {tabs.map((tab) => {
-              const isActive = tab.id === activeTabId
-              const isEditing = editingTabId === tab.id
-              return (
-                <div
-                  key={tab.id}
-                  className={`tab-wrapper ${isActive ? 'active' : ''}`}
-                  role="presentation"
-                >
-                  <span
-                    className="tab-status-dot"
-                    data-status={statusForTab(tab, panesById)}
-                    aria-hidden="true"
-                  />
-                  {isEditing ? (
-                    <input
-                      ref={tabInputRef}
-                      className="tab-rename-input"
-                      value={editingTitle}
-                      onChange={(e): void => setEditingTitle(e.target.value)}
-                      onBlur={(): void => commitTabRename(tab.id)}
-                      onKeyDown={(e): void => handleTabRenameKeyDown(e, tab.id)}
-                      aria-label="Tab title"
-                    />
-                  ) : (
+          <div className="tab-strip-scroll">
+            <div className="tab-strip-inner">
+              <div className="tab-strip" role="tablist" aria-label="Tabs">
+                {tabs.map((tab) => {
+                  const isActive = tab.id === activeTabId
+                  const isEditing = editingTabId === tab.id
+                  const tabClassName = `tab-wrapper ${isActive ? 'active' : ''}${
+                    tabs.length > 1 ? ' tab-wrapper--closable' : ''
+                  }`
+
+                  if (isEditing) {
+                    return (
+                      <div
+                        key={tab.id}
+                        className={tabClassName}
+                        role="tab"
+                        aria-selected={isActive}
+                        tabIndex={isActive ? 0 : -1}
+                      >
+                        <span
+                          className="tab-status-dot"
+                          data-status={statusForTab(tab, panesById)}
+                          aria-hidden="true"
+                        />
+                        <input
+                          ref={tabInputRef}
+                          className="tab-rename-input"
+                          value={editingTitle}
+                          onChange={(e): void => setEditingTitle(e.target.value)}
+                          onBlur={(): void => commitTabRename(tab.id)}
+                          onKeyDown={(e): void => handleTabRenameKeyDown(e, tab.id)}
+                          aria-label="Tab title"
+                        />
+                      </div>
+                    )
+                  }
+
+                  return (
                     <button
+                      key={tab.id}
                       type="button"
-                      className="tab-btn"
+                      className={tabClassName}
                       role="tab"
                       aria-selected={isActive}
+                      tabIndex={isActive ? 0 : -1}
                       onClick={(): void => {
                         setActiveTab(tab.id).catch(console.error)
                       }}
                       onDoubleClick={(): void => startTabRename(tab.id, tab.title)}
                     >
+                      <span
+                        className="tab-status-dot"
+                        data-status={statusForTab(tab, panesById)}
+                        aria-hidden="true"
+                      />
                       <span className="tab-title">{tab.title}</span>
                     </button>
-                  )}
-                  {tabs.length > 1 && (
-                    <button
-                      type="button"
-                      className="tab-close"
-                      aria-label={`Close ${tab.title} tab`}
-                      onClick={(e): void => {
-                        e.stopPropagation()
-                        closeTab(tab.id).catch(console.error)
-                      }}
-                    >
-                      <XIcon size={12} />
-                    </button>
-                  )}
+                  )
+                })}
+              </div>
+              {tabs.length > 1 && (
+                <div className="tab-close-strip">
+                  {tabs.map((tab) => (
+                    <div key={tab.id} className="tab-close-cell">
+                      <button
+                        type="button"
+                        className="tab-close"
+                        aria-label={`Close ${tab.title} tab`}
+                        onClick={(): void => {
+                          closeTab(tab.id).catch(console.error)
+                        }}
+                      >
+                        <XIcon size={12} />
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              )
-            })}
+              )}
+            </div>
           </div>
           <button className="new-tab-btn" type="button" aria-label="New tab" onClick={handleNewTab}>
             <PlusIcon size={16} />
