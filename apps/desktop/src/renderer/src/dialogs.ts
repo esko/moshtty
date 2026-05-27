@@ -1,6 +1,7 @@
 export type AppDialog =
   | { kind: 'import'; mode: 'empty' | 'valid' | 'invalid' }
-  | { kind: 'project'; mode: 'new' | 'existing' }
+  | { kind: 'project'; mode: 'new' }
+  | { kind: 'project'; mode: 'existing'; projectId: string }
   | { kind: 'settings' }
   | { kind: 'bootstrap' }
 
@@ -15,7 +16,7 @@ export function getFixtureDialog(fixtureId: string | null): AppDialog | null {
     case 'dialog-project-edit-new':
       return { kind: 'project', mode: 'new' }
     case 'dialog-project-edit':
-      return { kind: 'project', mode: 'existing' }
+      return { kind: 'project', mode: 'existing', projectId: 'project-welcome' }
     case 'dialog-terminal-settings':
     case 'dialog-terminal-settings-follow-app':
     case 'dialog-terminal-settings-light':

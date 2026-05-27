@@ -10,7 +10,11 @@ describe('getFixtureDialog', () => {
 
   test('maps project and settings fixtures to their dialogs', () => {
     expect(getFixtureDialog('dialog-project-edit-new')).toEqual({ kind: 'project', mode: 'new' })
-    expect(getFixtureDialog('dialog-project-edit')).toEqual({ kind: 'project', mode: 'existing' })
+    expect(getFixtureDialog('dialog-project-edit')).toEqual({
+      kind: 'project',
+      mode: 'existing',
+      projectId: 'project-welcome'
+    })
     expect(getFixtureDialog('dialog-terminal-settings')).toEqual({ kind: 'settings' })
     expect(getFixtureDialog('dialog-terminal-settings-dark')).toEqual({ kind: 'settings' })
   })

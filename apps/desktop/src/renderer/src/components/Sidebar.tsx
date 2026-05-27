@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react'
+import React from 'react'
 import { useAppStore } from '../store'
 import {
   PlusIcon,
@@ -39,11 +39,6 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ state, openDialog, actionTitle }) => {
   const setActiveProject = useAppStore((s) => s.setActiveProject)
   const deleteProject = useAppStore((s) => s.deleteProject)
-  const renameProject = useAppStore((s) => s.renameProject)
-
-  const [editingProjectId, setEditingProjectId] = useState<string | null>(null)
-  const [editingName, setEditingName] = useState('')
-  const renameInputRef = useRef<HTMLInputElement>(null)
 
   const projects = state?.projects ?? []
   const activeProjectId = state?.activeProjectId
@@ -51,28 +46,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ state, openDialog, actionTitle
 
   if (railCollapsed) {
     return null
-  }
-
-  const startRename = (projectId: string, currentName: string): void => {
-    setEditingProjectId(projectId)
-    setEditingName(currentName)
-    // Focus the input on next render
-    setTimeout(() => renameInputRef.current?.focus(), 0)
-  }
-
-  const commitRename = (projectId: string): void => {
-    if (editingName.trim()) {
-      renameProject(projectId, editingName).catch(console.error)
-    }
-    setEditingProjectId(null)
-  }
-
-  const handleRenameKeyDown = (e: React.KeyboardEvent, projectId: string): void => {
-    if (e.key === 'Enter') {
-      commitRename(projectId)
-    } else if (e.key === 'Escape') {
-      setEditingProjectId(null)
-    }
   }
 
   return (
@@ -113,46 +86,32 @@ export const Sidebar: React.FC<SidebarProps> = ({ state, openDialog, actionTitle
       <div className="project-list" role="navigation" aria-label="Projects list">
         {projects.map((project) => {
           const isActive = project.id === activeProjectId
-          const isEditing = editingProjectId === project.id
           return (
             <div key={project.id} className={`project-item-row ${isActive ? 'active' : ''}`}>
-              {isEditing ? (
-                <div className="project-rename-row">
-                  <span className="project-chip" style={{ backgroundColor: project.color }}>
-                    {projectDisplayInitial(project)}
-                  </span>
-                  <input
-                    ref={renameInputRef}
-                    className="project-rename-input"
-                    value={editingName}
-                    onChange={(e): void => setEditingName(e.target.value)}
-                    onBlur={(): void => commitRename(project.id)}
-                    onKeyDown={(e): void => handleRenameKeyDown(e, project.id)}
-                    aria-label="Project name"
-                  />
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  className="project-item"
-                  onClick={(): void => {
-                    setActiveProject(project.id).catch(console.error)
-                  }}
-                  onDoubleClick={(): void => startRename(project.id, project.name)}
-                >
-                  <span className="project-chip" style={{ backgroundColor: project.color }}>
-                    {projectDisplayInitial(project)}
-                  </span>
-                  <span className="project-label">{project.name}</span>
-                </button>
-              )}
+              <button
+                type="button"
+                className="project-item"
+                onClick={(): void => {
+                  setActiveProject(project.id).catch(console.error)
+                }}
+                onDoubleClick={(): void =>
+                  openDialog({ kind: 'project', mode: 'existing', projectId: project.id })
+                }
+              >
+                <span className="project-chip" style={{ backgroundColor: project.color }}>
+                  {projectDisplayInitial(project)}
+                </span>
+                <span className="project-label">{project.name}</span>
+              </button>
               <div className="project-item-actions">
                 <button
                   type="button"
                   className="project-action-btn"
                   aria-label={`Rename ${project.name}`}
                   title="Rename project"
-                  onClick={(): void => startRename(project.id, project.name)}
+                  onClick={(): void =>
+                    openDialog({ kind: 'project', mode: 'existing', projectId: project.id })
+                  }
                 >
                   <PencilIcon size={12} />
                 </button>

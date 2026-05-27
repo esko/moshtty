@@ -31,10 +31,8 @@ export const Dialogs: React.FC<DialogsProps> = ({
   terminalMode
 }) => {
   const addProject = useAppStore((state) => state.addProject)
+  const renameProject = useAppStore((s) => s.renameProject)
   const importRemoteProfile = useAppStore((state) => state.importRemoteProfile)
-
-  const activeProjectId = state?.activeProjectId
-  const activeProject = state?.projects.find((p) => p.id === activeProjectId)
 
   if (!visibleDialog) {
     return null
@@ -79,16 +77,34 @@ export const Dialogs: React.FC<DialogsProps> = ({
           actionTitle={actionTitle}
         />
       )
-    case 'project':
+    case 'project': {
+      if (visibleDialog.mode === 'existing') {
+        const project = state?.projects.find((p) => p.id === visibleDialog.projectId)
+        return (
+          <ProjectDialog
+            mode="existing"
+            projectName={project?.name ?? 'Unknown project'}
+            onClose={closeDialog}
+            onSave={(name) => {
+              if (project) {
+                renameProject(project.id, name).catch(console.error)
+              }
+              closeDialog()
+            }}
+            actionTitle={actionTitle}
+          />
+        )
+      }
       return (
         <ProjectDialog
-          mode={visibleDialog.mode}
-          projectName={activeProject?.name ?? 'Moshtty'}
+          mode="new"
+          projectName=""
           onClose={closeDialog}
           onSave={saveProjectDialog}
           actionTitle={actionTitle}
         />
       )
+    }
     case 'settings':
       return (
         <SettingsDialog
